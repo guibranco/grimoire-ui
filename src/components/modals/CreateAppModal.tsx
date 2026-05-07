@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { api } from '@/src/lib/api';
+import { api } from '@/lib/api';
 import { useQueryClient } from '@tanstack/react-query';
 import { APIKeyRevealModal } from './APIKeyRevealModal';
 import { Loader2, Box } from 'lucide-react';

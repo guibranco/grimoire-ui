@@ -1,8 +1,8 @@
 import React, { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/src/lib/api';
-import { Configuration, Environment } from '@/src/types/api';
-import { useStore } from '@/src/store/useStore';
+import { api } from '@/lib/api';
+import { Configuration, Environment } from '@/types/api';
+import { useStore } from '@/store/useStore';
 import { 
   Plus, 
   Search, 
@@ -27,7 +27,7 @@ import {
   TableHeader, 
   TableRow 
 } from '@/components/ui/table';
-import { ConfirmationModal } from '@/src/components/shared/ConfirmationModal';
+import { ConfirmationModal } from '@/components/shared/ConfirmationModal';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import toast from 'react-hot-toast';

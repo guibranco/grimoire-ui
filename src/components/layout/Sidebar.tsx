@@ -1,8 +1,8 @@
 import React from 'react';
-import { useStore } from '@/src/store/useStore';
+import { useStore } from '@/store/useStore';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '@/src/lib/api';
-import { Application } from '@/src/types/api';
+import { api } from '@/lib/api';
+import { Application } from '@/types/api';
 import { 
   Shield, 
   Plus, 

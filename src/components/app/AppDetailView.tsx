@@ -1,16 +1,16 @@
 import React, { useState } from 'react';
-import { useStore } from '@/src/store/useStore';
+import { useStore } from '@/store/useStore';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '@/src/lib/api';
-import { Application } from '@/src/types/api';
-import { ApplicationHeader } from '@/src/components/layout/ApplicationHeader';
-import { GrimoireTab } from '@/src/components/vault/VaultTab';
-import { ConfigTab } from '@/src/components/config/ConfigTab';
+import { api } from '@/lib/api';
+import { Application } from '@/types/api';
+import { ApplicationHeader } from '@/components/layout/ApplicationHeader';
+import { GrimoireTab } from '@/components/vault/VaultTab';
+import { ConfigTab } from '@/components/config/ConfigTab';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Lock, Settings, Loader2 } from 'lucide-react';
-import { ConfirmationModal } from '@/src/components/shared/ConfirmationModal';
-import { AddEnvModal } from '@/src/components/modals/AddEnvModal';
-import { APIKeyRevealModal } from '@/src/components/modals/APIKeyRevealModal';
+import { ConfirmationModal } from '@/components/shared/ConfirmationModal';
+import { AddEnvModal } from '@/components/modals/AddEnvModal';
+import { APIKeyRevealModal } from '@/components/modals/APIKeyRevealModal';
 import toast from 'react-hot-toast';
 
 export const AppDetailView: React.FC = () => {

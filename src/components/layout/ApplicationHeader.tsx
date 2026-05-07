@@ -1,8 +1,8 @@
 import React from 'react';
-import { useStore } from '@/src/store/useStore';
+import { useStore } from '@/store/useStore';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/src/lib/api';
-import { Application, Environment } from '@/src/types/api';
+import { api } from '@/lib/api';
+import { Application, Environment } from '@/types/api';
 import { 
   ChevronDown, 
   Plus, 

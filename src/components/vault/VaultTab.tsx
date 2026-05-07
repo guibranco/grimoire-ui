@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/src/lib/api';
-import { Secret, SecretStatus, Environment } from '@/src/types/api';
+import { api } from '@/lib/api';
+import { Secret, SecretStatus, Environment } from '@/types/api';
 import { 
   Plus, 
   Search, 
@@ -37,7 +37,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { AddSecretModal } from './AddSecretModal';
 import { EditSecretValueModal } from './EditSecretValueModal';
-import { ConfirmationModal } from '@/src/components/shared/ConfirmationModal';
+import { ConfirmationModal } from '@/components/shared/ConfirmationModal';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import toast from 'react-hot-toast';

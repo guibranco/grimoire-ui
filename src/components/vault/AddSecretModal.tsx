@@ -21,9 +21,9 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { api } from '@/src/lib/api';
+import { api } from '@/lib/api';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
-import { Environment } from '@/src/types/api';
+import { Environment } from '@/types/api';
 import { Badge } from '@/components/ui/badge';
 import { 
   Loader2, 
