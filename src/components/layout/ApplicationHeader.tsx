@@ -70,7 +70,7 @@ export const ApplicationHeader: React.FC<ApplicationHeaderProps> = ({
         <div className="flex items-center bg-zinc-900 border border-zinc-800 px-3 py-1 text-[11px] font-bold uppercase tracking-widest text-zinc-500">
           <span>ENV:</span>
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
+            <DropdownMenuTrigger>
               <button className="flex items-center gap-1.5 text-grimoire ml-2 font-bold cursor-pointer hover:text-grimoire/80 transition-colors">
                 {selectedEnv?.name || 'SELECT'}
                 <ChevronDown className="w-3 h-3" />

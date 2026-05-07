@@ -36,8 +36,6 @@ export const APIKeyRevealModal: React.FC<APIKeyRevealModalProps> = ({ apiKey, on
     <Dialog open={!!apiKey} onOpenChange={(open) => !open && hasCopied && onClose()}>
       <DialogContent 
         className="max-w-md bg-card border-2 border-border p-0 gap-0 shadow-2xl"
-        onEscapeKeyDown={(e) => !hasCopied && e.preventDefault()}
-        onPointerDownOutside={(e) => !hasCopied && e.preventDefault()}
       >
         <div className="p-6">
           <DialogHeader className="mb-6">
