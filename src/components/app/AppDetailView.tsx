@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Application } from '@/types/api';
 import { ApplicationHeader } from '@/components/layout/ApplicationHeader';
-import { GrimoireTab } from '@/components/vault/VaultTab';
+import { GrimoireTab } from '@/components/grimoire/GrimoireTab';
 import { ConfigTab } from '@/components/config/ConfigTab';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Lock, Settings, Loader2 } from 'lucide-react';

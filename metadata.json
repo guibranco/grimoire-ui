@@ -1,6 +1,6 @@
 {
   "name": "Grimoire",
-  "description": "Production-grade self-hosted Vault and Configuration Manager for secrets and application settings.",
+  "description": "Management UI for Grimoire — self-hosted secrets vault and configuration manager",
   "requestFramePermissions": [],
   "majorCapabilities": []
 }

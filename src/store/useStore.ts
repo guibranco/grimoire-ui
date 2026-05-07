@@ -17,13 +17,14 @@ export const useStore = create<AppState>()(
     (set) => ({
       selectedAppSlug: null,
       selectedEnvironmentSlug: null,
-      isAdminAuthenticated: !!localStorage.getItem('grimoire_admin_key'),
+      isAdminAuthenticated: !!(localStorage.getItem('grimoire_api_url') && localStorage.getItem('grimoire_api_key')),
       
       setSelectedAppSlug: (slug) => set({ selectedAppSlug: slug }),
       setSelectedEnvironmentSlug: (slug) => set({ selectedEnvironmentSlug: slug }),
       setAdminAuthenticated: (auth) => set({ isAdminAuthenticated: auth }),
       disconnect: () => {
-        localStorage.removeItem('grimoire_admin_key');
+        localStorage.removeItem('grimoire_api_url');
+        localStorage.removeItem('grimoire_api_key');
         set({ 
           selectedAppSlug: null, 
           selectedEnvironmentSlug: null, 

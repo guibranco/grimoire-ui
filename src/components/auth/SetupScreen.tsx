@@ -1,28 +1,44 @@
 import React, { useState } from 'react';
-import { Shield, Key, ArrowRight, Loader2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import { Key, ArrowRight, Loader2, Globe, Eye, EyeOff } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import toast from 'react-hot-toast';
 
 export const SetupScreen: React.FC = () => {
+  const [url, setUrl] = useState('http://localhost:5000');
   const [key, setKey] = useState('');
+  const [showKey, setShowKey] = useState(false);
   const [loading, setLoading] = useState(false);
+  
+  const [urlError, setUrlError] = useState('');
+  const [keyError, setKeyError] = useState('');
+
   const setAdminAuthenticated = useStore((state) => state.setAdminAuthenticated);
 
   const handleConnect = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!key.trim()) {
-      toast.error('Please enter a Management Admin API Key');
-      return;
+    
+    let hasError = false;
+    if (!url.trim()) {
+      setUrlError('Instance URL is required');
+      hasError = true;
+    } else {
+      setUrlError('');
     }
+
+    if (!key.trim()) {
+      setKeyError('Admin API Key is required');
+      hasError = true;
+    } else {
+      setKeyError('');
+    }
+
+    if (hasError) return;
 
     setLoading(true);
     try {
-      // Simulate/Validate? The requirement says store it in localStorage.
-      // We could try a test call to /applications but the prompt says just store it.
-      localStorage.setItem('grimoire_admin_key', key.trim());
+      const sanitizedUrl = url.trim().endsWith('/') ? url.trim().slice(0, -1) : url.trim();
+      localStorage.setItem('grimoire_api_url', sanitizedUrl);
+      localStorage.setItem('grimoire_api_key', key.trim());
       setAdminAuthenticated(true);
       toast.success('Connected successfully');
     } catch (err) {
@@ -42,27 +58,49 @@ export const SetupScreen: React.FC = () => {
           </div>
           <h2 className="text-lg font-semibold text-zinc-300">Connect to Grimoire</h2>
           <p className="text-xs text-zinc-600 mt-1 uppercase tracking-widest leading-relaxed">
-            Enter your Grimoire admin API key to continue.
+            Enter your Grimoire instance URL and admin API key to continue.
           </p>
         </div>
         
         <form onSubmit={handleConnect} className="p-8 space-y-6">
-          <div className="space-y-2 text-left">
-            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Master API Key</label>
-            <div className="relative">
-              <Key className="absolute left-3 top-3 w-4 h-4 text-zinc-700" />
-              <input
-                type="password"
-                placeholder="grimoire_admin_..."
-                className="w-full h-10 pl-10 bg-zinc-900 border border-zinc-800 text-zinc-200 font-mono text-sm focus:border-grimoire transition-colors rounded-none outline-none"
-                value={key}
-                onChange={(e) => setKey(e.target.value)}
-                autoFocus
-              />
+          <div className="space-y-4">
+            <div className="space-y-2 text-left">
+              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Instance URL</label>
+              <div className="relative">
+                <Globe className="absolute left-3 top-3 w-4 h-4 text-zinc-700" />
+                <input
+                  type="text"
+                  placeholder="http://localhost:5000"
+                  className={`w-full h-10 pl-10 pr-3 bg-zinc-900 border ${urlError ? 'border-destructive' : 'border-zinc-800'} text-zinc-200 font-mono text-sm focus:border-grimoire transition-colors rounded-none outline-none`}
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  autoFocus
+                />
+              </div>
+              {urlError && <p className="text-[10px] text-destructive uppercase font-bold tracking-widest mt-1">{urlError}</p>}
             </div>
-            <p className="text-[9px] text-zinc-700 uppercase tracking-widest font-mono mt-2">
-              SESSION: LOCALHOST_ENCRYPTED
-            </p>
+
+            <div className="space-y-2 text-left">
+              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Admin API Key</label>
+              <div className="relative">
+                <Key className="absolute left-3 top-3 w-4 h-4 text-zinc-700" />
+                <input
+                  type={showKey ? "text" : "password"}
+                  placeholder="grimoire_admin_..."
+                  className={`w-full h-10 pl-10 pr-10 bg-zinc-900 border ${keyError ? 'border-destructive' : 'border-zinc-800'} text-zinc-200 font-mono text-sm focus:border-grimoire transition-colors rounded-none outline-none`}
+                  value={key}
+                  onChange={(e) => setKey(e.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowKey(!showKey)}
+                  className="absolute right-3 top-3 text-zinc-700 hover:text-zinc-500 transition-colors"
+                >
+                  {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              {keyError && <p className="text-[10px] text-destructive uppercase font-bold tracking-widest mt-1">{keyError}</p>}
+            </div>
           </div>
 
           <button 

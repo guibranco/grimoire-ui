@@ -1,20 +1,36 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Grimoire UI
 
-# Run and deploy your AI Studio app
+React + Vite management interface for [Grimoire](https://github.com/guibranco/grimoire-api) — manage applications, environments, encrypted secrets, and configurations from a single developer dashboard.
 
-This contains everything you need to run your app locally.
+## Features
 
-View your app in AI Studio: https://ai.studio/apps/7fbaac2b-bee3-45c6-a880-540d8fb14222
+- **Application Management**: Create and configure workspaces for different services.
+- **Environment Isolation**: Support for multiple stages (Production, Staging, Development).
+- **Secrets Vault**: AES-256 encrypted storage for sensitive credentials.
+- **Configuration Store**: Centralized key-value management for non-sensitive settings.
+- **Admin Setup**: Easy connection to self-hosted Grimoire instances.
+- **Unit Tested**: Robust test suite using Vitest with V8 coverage.
 
-## Run Locally
+## Development
 
-**Prerequisites:**  Node.js
+```bash
+# Install dependencies
+npm install
 
+# Start development server
+npm run dev
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+# Run tests
+npm run test
+
+# Check coverage
+npm run test:coverage
+```
+
+## Setup
+
+When first launching the UI, you will be prompted for:
+1. **Instance URL**: The base URL of your hosted Grimoire API (e.g., `https://grimoire.example.com`).
+2. **Admin API Key**: Your administrative key for managing the cluster.
+
+These credentials are stored securely in your browser's `localStorage`.

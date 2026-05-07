@@ -1,13 +1,20 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:5000/api/management';
-
 export const api = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: localStorage.getItem('grimoire_api_url') || 'http://localhost:5000',
 });
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('grimoire_admin_key');
+  const url = localStorage.getItem('grimoire_api_url');
+  const token = localStorage.getItem('grimoire_api_key');
+  
+  if (url) {
+    config.baseURL = url.endsWith('/') ? url.slice(0, -1) : url;
+    if (!config.baseURL.endsWith('/api/management')) {
+      config.baseURL += '/api/management';
+    }
+  }
+
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -19,8 +26,6 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       // Potentially clear token or trigger setup screen
-      // localStorage.removeItem('grimoire_admin_key');
-      // window.location.reload();
     }
     return Promise.reject(error);
   }
