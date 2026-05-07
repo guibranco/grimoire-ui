@@ -79,7 +79,7 @@ export const CreateAppModal: React.FC<CreateAppModalProps> = ({ open, onOpenChan
                   <Input
                     id="name"
                     placeholder="e.g. Payments Gateway"
-                    className="border-border focus-visible:ring-vault"
+                    className="border-border focus-visible:ring-grimoire"
                     {...register('name')}
                   />
                   {errors.name && <p className="text-[10px] text-destructive uppercase font-bold tracking-widest">{errors.name.message}</p>}
@@ -90,7 +90,7 @@ export const CreateAppModal: React.FC<CreateAppModalProps> = ({ open, onOpenChan
                   <Textarea
                     id="description"
                     placeholder="Briefly describe the purpose of this application..."
-                    className="border-border focus-visible:ring-vault min-h-[100px] resize-none"
+                    className="border-border focus-visible:ring-grimoire min-h-[100px] resize-none"
                     {...register('description')}
                   />
                   {errors.description && <p className="text-[10px] text-destructive uppercase font-bold tracking-widest">{errors.description.message}</p>}

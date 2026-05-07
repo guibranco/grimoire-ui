@@ -49,17 +49,17 @@ export default function App() {
           {selectedAppSlug ? (
             <AppDetailView key={selectedAppSlug} />
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center p-12 text-center">
+            <div className="flex-1 flex flex-col items-center justify-center p-12 text-center text-zinc-400">
               <div className="w-16 h-16 bg-muted/30 border border-border flex items-center justify-center mb-6">
-                <Box className="w-8 h-8 text-muted-foreground" />
+                <Box className="w-8 h-8 text-zinc-600" />
               </div>
-              <h2 className="text-2xl font-bold tracking-tight mb-2">Welcome to VaultManager</h2>
-              <p className="text-muted-foreground max-w-sm mb-8 text-sm">
-                Select an application from the sidebar to manage its secrets and configurations, or create a new one to get started.
+              <h2 className="text-2xl font-bold tracking-tight mb-2 text-zinc-100 italic">Welcome to Grimoire</h2>
+              <p className="text-zinc-500 max-w-sm mb-8 text-sm uppercase tracking-widest font-mono text-[10px]">
+                Select an application from the sidebar or create a new one to get started.
               </p>
               <button 
                 onClick={() => setIsCreateAppOpen(true)}
-                className="px-6 py-2 bg-vault text-background font-bold tracking-tight uppercase hover:bg-vault/90 transition-colors"
+                className="px-8 py-2 bg-grimoire text-black font-bold tracking-tight uppercase hover:bg-grimoire/90 transition-colors text-xs"
               >
                 Create New Application
               </button>

@@ -42,7 +42,7 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import toast from 'react-hot-toast';
 
-export const VaultTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
+export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
   const [search, setSearch] = useState('');
   const [isAddSecretOpen, setIsAddSecretOpen] = useState(false);
   const [expandedSecret, setExpandedSecret] = useState<string | null>(null);
@@ -141,7 +141,7 @@ export const VaultTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
             <Search className="absolute left-2.5 top-1.5 h-3.5 w-3.5 text-zinc-600" />
             <input 
               placeholder="Search..." 
-              className="w-full h-[28px] pl-8 pr-3 bg-zinc-900 border border-border text-xs focus:border-vault transition-colors"
+              className="w-full h-[28px] pl-8 pr-3 bg-zinc-900 border border-border text-xs focus:border-grimoire transition-colors"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -149,7 +149,7 @@ export const VaultTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
         </div>
         <button 
           onClick={() => setIsAddSecretOpen(true)}
-          className="h-[28px] px-3 bg-vault text-black hover:bg-vault/90 font-bold uppercase tracking-tight text-[10px] transition-colors"
+          className="h-[28px] px-3 bg-grimoire text-black hover:bg-grimoire/90 font-bold uppercase tracking-tight text-[10px] transition-colors"
         >
           + Add Secret
         </button>
@@ -159,12 +159,12 @@ export const VaultTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
         {secretsLoading ? (
           <div className="p-12 flex flex-col items-center justify-center gap-4 text-muted-foreground">
             <Loader2 className="w-8 h-8 animate-spin" />
-            <span className="text-[10px] uppercase font-bold tracking-widest">Hydrating Vault...</span>
+            <span className="text-[10px] uppercase font-bold tracking-widest font-mono text-zinc-700">Syncing Grimoire...</span>
           </div>
         ) : filteredSecrets?.length === 0 ? (
           <div className="flex flex-col items-center justify-center p-12 text-center h-full opacity-50">
             <Lock className="w-12 h-12 mb-4 text-muted-foreground" />
-            <h3 className="text-lg font-bold tracking-tight uppercase">Vault is empty</h3>
+            <h3 className="text-lg font-bold tracking-tight uppercase">Grimoire is empty</h3>
             <p className="text-xs text-muted-foreground uppercase tracking-widest mt-1">No secrets defined</p>
           </div>
         ) : (
@@ -191,11 +191,11 @@ export const VaultTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
                         onClick={() => setExpandedSecret(isExpanded ? null : secret.name)}
                       >
                         <TableCell className="text-center px-2">
-                          {isExpanded ? <ChevronUp className="w-3 h-3 text-vault" /> : <ChevronDown className="w-3 h-3 text-zinc-700" />}
+                          {isExpanded ? <ChevronUp className="w-3 h-3 text-grimoire" /> : <ChevronDown className="w-3 h-3 text-zinc-700" />}
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-col">
-                            <span className={cn("font-mono text-sm font-medium transition-colors", isExpanded ? "text-vault" : "text-zinc-200")}>
+                            <span className={cn("font-mono text-sm font-medium transition-colors", isExpanded ? "text-grimoire" : "text-zinc-200")}>
                               {secret.name}
                             </span>
                             <span className="text-[11px] text-zinc-600 truncate max-w-md">{secret.description}</span>
@@ -241,11 +241,11 @@ export const VaultTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
                       {isExpanded && (
                         <TableRow className="bg-[#080809] border-zinc-900 hover:bg-[#080809]">
                           <TableCell colSpan={4} className="p-0">
-                            <div className="p-8 border-l-2 border-vault">
+                            <div className="p-8 border-l-2 border-grimoire">
                               <div className="grid grid-cols-1 xl:grid-cols-2 gap-12">
                                 <div>
                                   <h4 className="text-[10px] uppercase font-bold tracking-[0.25em] text-zinc-600 mb-6 flex items-center gap-2">
-                                    <div className="w-1 h-3 bg-vault" />
+                                    <div className="w-1 h-3 bg-grimoire" />
                                     Secret Metadata
                                   </h4>
                                   <div className="grid grid-cols-2 gap-6 bg-black/20 p-6 border border-zinc-900">
@@ -310,7 +310,7 @@ export const VaultTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
                                               <td className="px-4 font-mono text-[10px] text-zinc-600">v{value?.version || 1}</td>
                                               <td className="text-right pr-4">
                                                 <button 
-                                                  className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 hover:text-vault transition-colors"
+                                                  className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 hover:text-grimoire transition-colors"
                                                   onClick={() => setEditingValue({ secretName: secret.name, envSlug: env.slug })}
                                                 >
                                                   {status === SecretStatus.MISSING ? '+ SET' : 'UPDATE'}

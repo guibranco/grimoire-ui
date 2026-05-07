@@ -48,7 +48,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
       <DialogContent className="max-w-md bg-card border-2 border-border p-0 gap-0 shadow-2xl">
         <div className="p-6">
           <div className="flex items-center gap-4 mb-4">
-            <div className={`w-12 h-12 flex items-center justify-center border-2 ${variant === 'destructive' ? 'border-destructive text-destructive bg-destructive/10' : 'border-vault text-vault bg-vault/10'}`}>
+            <div className={`w-12 h-12 flex items-center justify-center border-2 ${variant === 'destructive' ? 'border-destructive text-destructive bg-destructive/10' : 'border-grimoire text-grimoire bg-grimoire/10'}`}>
               <AlertTriangle className="w-6 h-6" />
             </div>
             <DialogHeader>

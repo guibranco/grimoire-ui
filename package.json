@@ -1,8 +1,9 @@
 {
-  "name": "react-example",
+  "name": "grimoire-ui",
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "description": "Management UI for Grimoire — self-hosted secrets vault and configuration manager",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",

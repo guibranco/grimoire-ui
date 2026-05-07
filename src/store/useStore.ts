@@ -17,13 +17,13 @@ export const useStore = create<AppState>()(
     (set) => ({
       selectedAppSlug: null,
       selectedEnvironmentSlug: null,
-      isAdminAuthenticated: !!localStorage.getItem('vault_admin_key'),
+      isAdminAuthenticated: !!localStorage.getItem('grimoire_admin_key'),
       
       setSelectedAppSlug: (slug) => set({ selectedAppSlug: slug }),
       setSelectedEnvironmentSlug: (slug) => set({ selectedEnvironmentSlug: slug }),
       setAdminAuthenticated: (auth) => set({ isAdminAuthenticated: auth }),
       disconnect: () => {
-        localStorage.removeItem('vault_admin_key');
+        localStorage.removeItem('grimoire_admin_key');
         set({ 
           selectedAppSlug: null, 
           selectedEnvironmentSlug: null, 
@@ -32,7 +32,7 @@ export const useStore = create<AppState>()(
       },
     }),
     {
-      name: 'vault-manager-storage',
+      name: 'grimoire-storage',
       partialize: (state) => ({ 
         selectedAppSlug: state.selectedAppSlug, 
         selectedEnvironmentSlug: state.selectedEnvironmentSlug 

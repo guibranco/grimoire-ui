@@ -77,7 +77,7 @@ export const AddEnvModal: React.FC<AddEnvModalProps> = ({ appSlug, open, onOpenC
                 <Input
                   id="env-name"
                   placeholder="e.g. Production"
-                  className="border-border focus-visible:ring-vault"
+                  className="border-border focus-visible:ring-grimoire"
                   {...register('name')}
                 />
                 {errors.name && <p className="text-[10px] text-destructive uppercase font-bold tracking-widest">{errors.name.message}</p>}
@@ -85,7 +85,7 @@ export const AddEnvModal: React.FC<AddEnvModalProps> = ({ appSlug, open, onOpenC
                 {name && (
                   <div className="mt-2 p-2 bg-muted/30 border border-border">
                     <p className="text-[10px] text-muted-foreground uppercase tracking-widest">Slug Preview:</p>
-                    <p className="text-xs font-mono text-vault">{slugPreview || '???'}</p>
+                    <p className="text-xs font-mono text-grimoire">{slugPreview || '???'}</p>
                   </div>
                 )}
               </div>

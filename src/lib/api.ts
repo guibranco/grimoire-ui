@@ -7,7 +7,7 @@ export const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('vault_admin_key');
+  const token = localStorage.getItem('grimoire_admin_key');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -19,7 +19,7 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       // Potentially clear token or trigger setup screen
-      // localStorage.removeItem('vault_admin_key');
+      // localStorage.removeItem('grimoire_admin_key');
       // window.location.reload();
     }
     return Promise.reject(error);

@@ -157,7 +157,7 @@ export const AddSecretModal: React.FC<AddSecretModalProps> = ({ appSlug, open, o
           <div className="p-6 border-b border-border">
             <DialogHeader className="mb-4">
               <div className="flex items-center gap-4 mb-2">
-                <div className="w-10 h-10 bg-vault/10 border border-vault text-vault flex items-center justify-center">
+                <div className="w-10 h-10 bg-grimoire/10 border border-grimoire text-grimoire flex items-center justify-center">
                   <Lock className="w-5 h-5" />
                 </div>
                 <div>
@@ -175,7 +175,7 @@ export const AddSecretModal: React.FC<AddSecretModalProps> = ({ appSlug, open, o
                 <Input
                   id="s-name"
                   placeholder="DATABASE_PASSWORD"
-                  className="font-mono border-border focus-visible:ring-vault uppercase"
+                  className="font-mono border-border focus-visible:ring-grimoire uppercase"
                   {...register('name')}
                 />
                 {errors.name && <p className="text-[10px] text-destructive font-bold uppercase tracking-widest">{errors.name.message}</p>}
@@ -185,7 +185,7 @@ export const AddSecretModal: React.FC<AddSecretModalProps> = ({ appSlug, open, o
                 <Input
                   id="s-desc"
                   placeholder="The main production database password"
-                  className="border-border focus-visible:ring-vault"
+                  className="border-border focus-visible:ring-grimoire"
                   {...register('description')}
                 />
                 {errors.description && <p className="text-[10px] text-destructive font-bold uppercase tracking-widest">{errors.description.message}</p>}
@@ -219,7 +219,7 @@ export const AddSecretModal: React.FC<AddSecretModalProps> = ({ appSlug, open, o
                           <Switch 
                             checked={isEnabled}
                             onCheckedChange={(checked) => setValue(`values.${index}.isEnabled`, checked)}
-                            className="data-[state=checked]:bg-vault"
+                            className="data-[state=checked]:bg-grimoire"
                           />
                         </div>
                       </div>
@@ -231,7 +231,7 @@ export const AddSecretModal: React.FC<AddSecretModalProps> = ({ appSlug, open, o
                             <Input
                               type={showValues[field.environmentSlug] ? "text" : "password"}
                               placeholder="••••••••••••"
-                              className="font-mono pr-12 border-border focus-visible:ring-vault h-8 text-xs"
+                              className="font-mono pr-12 border-border focus-visible:ring-grimoire h-8 text-xs"
                               {...register(`values.${index}.value`)}
                             />
                             <Button

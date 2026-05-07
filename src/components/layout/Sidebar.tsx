@@ -32,8 +32,8 @@ export const Sidebar: React.FC<{ onCreateApp: () => void }> = ({ onCreateApp }) 
     <aside className="w-[220px] border-r border-border bg-sidebar flex flex-col h-screen fixed left-0 top-0 z-20">
       <div className="p-5 border-b border-border">
         <div className="flex items-center gap-2">
-          <div className="w-5 h-5 bg-vault shrink-0" />
-          <h1 className="text-base font-bold tracking-tight text-foreground uppercase">VaultManager</h1>
+          <div className="w-5 h-5 bg-grimoire shrink-0" />
+          <h1 className="text-base font-bold tracking-tight text-foreground uppercase">Grimoire</h1>
         </div>
         <div className="text-[10px] text-zinc-600 font-mono mt-1 uppercase tracking-widest">v2.4.0-STABLE</div>
       </div>
@@ -57,7 +57,7 @@ export const Sidebar: React.FC<{ onCreateApp: () => void }> = ({ onCreateApp }) 
                   className={cn(
                     "w-full flex items-center gap-3 px-3 py-1.5 text-[13px] font-medium transition-all group relative",
                     selectedAppSlug === app.slug 
-                      ? "bg-zinc-900 border-l-2 border-vault text-vault" 
+                      ? "bg-zinc-900 border-l-2 border-grimoire text-grimoire" 
                       : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"
                   )}
                 >

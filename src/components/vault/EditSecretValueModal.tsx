@@ -100,7 +100,7 @@ export const EditSecretValueModal: React.FC<EditSecretValueModalProps> = ({
           <div className="p-6">
             <DialogHeader className="mb-6">
               <div className="flex items-center gap-3 mb-2">
-                <div className="w-8 h-8 bg-vault/10 border border-vault text-vault flex items-center justify-center">
+                <div className="w-8 h-8 bg-grimoire/10 border border-grimoire text-grimoire flex items-center justify-center">
                   <Lock className="w-4 h-4" />
                 </div>
                 <div>
@@ -119,7 +119,7 @@ export const EditSecretValueModal: React.FC<EditSecretValueModalProps> = ({
                   <button 
                     type="button"
                     onClick={() => setShowValue(!showValue)}
-                    className="text-[10px] uppercase font-bold text-vault flex items-center gap-1"
+                    className="text-[10px] uppercase font-bold text-grimoire flex items-center gap-1"
                   >
                     {showValue ? <><EyeOff className="w-3 h-3" /> Hide</> : <><Eye className="w-3 h-3" /> Reveal</>}
                   </button>
@@ -127,7 +127,7 @@ export const EditSecretValueModal: React.FC<EditSecretValueModalProps> = ({
                 <Input
                   type={showValue ? "text" : "password"}
                   placeholder="Enter new secret value..."
-                  className="font-mono border-border focus-visible:ring-vault"
+                  className="font-mono border-border focus-visible:ring-grimoire"
                   {...register('value')}
                   autoFocus
                 />
@@ -145,7 +145,7 @@ export const EditSecretValueModal: React.FC<EditSecretValueModalProps> = ({
                 <Switch 
                   checked={watch('isEnabled')}
                   onCheckedChange={(checked) => setValue('isEnabled', checked)}
-                  className="data-[state=checked]:bg-vault"
+                  className="data-[state=checked]:bg-grimoire"
                 />
               </div>
 
@@ -182,7 +182,7 @@ export const EditSecretValueModal: React.FC<EditSecretValueModalProps> = ({
               <Button 
                 type="submit" 
                 disabled={loading}
-                className="bg-vault text-background hover:bg-vault/90 uppercase font-bold tracking-widest text-[10px] h-9 min-w-[140px]"
+                className="bg-grimoire text-background hover:bg-grimoire/90 uppercase font-bold tracking-widest text-[10px] h-9 min-w-[140px]"
               >
                 {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Update Value'}
               </Button>

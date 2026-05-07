@@ -71,7 +71,7 @@ export const ApplicationHeader: React.FC<ApplicationHeaderProps> = ({
           <span>ENV:</span>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="flex items-center gap-1.5 text-vault ml-2 font-bold cursor-pointer hover:text-vault/80 transition-colors">
+              <button className="flex items-center gap-1.5 text-grimoire ml-2 font-bold cursor-pointer hover:text-grimoire/80 transition-colors">
                 {selectedEnv?.name || 'SELECT'}
                 <ChevronDown className="w-3 h-3" />
               </button>
@@ -87,7 +87,7 @@ export const ApplicationHeader: React.FC<ApplicationHeaderProps> = ({
                 </DropdownMenuItem>
               ))}
               <DropdownMenuSeparator className="bg-zinc-800 m-0" />
-              <DropdownMenuItem onClick={onAddEnv} className="text-[11px] font-bold uppercase p-2 text-vault hover:bg-vault/5 cursor-pointer">
+              <DropdownMenuItem onClick={onAddEnv} className="text-[11px] font-bold uppercase p-2 text-grimoire hover:bg-grimoire/5 cursor-pointer">
                 + Add Environment
               </DropdownMenuItem>
             </DropdownMenuContent>

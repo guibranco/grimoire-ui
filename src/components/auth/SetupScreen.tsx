@@ -22,7 +22,7 @@ export const SetupScreen: React.FC = () => {
     try {
       // Simulate/Validate? The requirement says store it in localStorage.
       // We could try a test call to /applications but the prompt says just store it.
-      localStorage.setItem('vault_admin_key', key.trim());
+      localStorage.setItem('grimoire_admin_key', key.trim());
       setAdminAuthenticated(true);
       toast.success('Connected successfully');
     } catch (err) {
@@ -37,12 +37,12 @@ export const SetupScreen: React.FC = () => {
       <div className="w-full max-w-md border border-zinc-800 bg-[#080809] shadow-2xl">
         <div className="p-8 border-b border-zinc-800">
           <div className="flex items-center gap-3 mb-6">
-            <div className="w-8 h-8 bg-vault shrink-0" />
-            <span className="text-2xl font-bold tracking-tight uppercase text-zinc-100">VaultManager</span>
+            <div className="w-8 h-8 bg-grimoire shrink-0" />
+            <span className="text-2xl font-bold tracking-tight uppercase text-zinc-100">Grimoire</span>
           </div>
-          <h2 className="text-lg font-semibold text-zinc-300">Authentication Required</h2>
+          <h2 className="text-lg font-semibold text-zinc-300">Connect to Grimoire</h2>
           <p className="text-xs text-zinc-600 mt-1 uppercase tracking-widest leading-relaxed">
-            Enter management credentials to access protected system assets.
+            Enter your Grimoire admin API key to continue.
           </p>
         </div>
         
@@ -53,8 +53,8 @@ export const SetupScreen: React.FC = () => {
               <Key className="absolute left-3 top-3 w-4 h-4 text-zinc-700" />
               <input
                 type="password"
-                placeholder="admin_sk_..."
-                className="w-full h-10 pl-10 bg-zinc-900 border border-zinc-800 text-zinc-200 font-mono text-sm focus:border-vault transition-colors rounded-none outline-none"
+                placeholder="grimoire_admin_..."
+                className="w-full h-10 pl-10 bg-zinc-900 border border-zinc-800 text-zinc-200 font-mono text-sm focus:border-grimoire transition-colors rounded-none outline-none"
                 value={key}
                 onChange={(e) => setKey(e.target.value)}
                 autoFocus
@@ -71,7 +71,7 @@ export const SetupScreen: React.FC = () => {
             disabled={loading}
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
-            Initialize Connection
+            Connect
           </button>
         </form>
         

@@ -41,7 +41,7 @@ export const APIKeyRevealModal: React.FC<APIKeyRevealModalProps> = ({ apiKey, on
       >
         <div className="p-6">
           <DialogHeader className="mb-6">
-            <div className="w-12 h-12 bg-vault/10 border-2 border-vault text-vault flex items-center justify-center mb-4">
+            <div className="w-12 h-12 bg-grimoire/10 border-2 border-grimoire text-grimoire flex items-center justify-center mb-4">
               <Key className="w-6 h-6" />
             </div>
             <DialogTitle className="text-xl font-bold tracking-tight">Application API Key Created</DialogTitle>
@@ -58,7 +58,7 @@ export const APIKeyRevealModal: React.FC<APIKeyRevealModalProps> = ({ apiKey, on
               <Input
                 readOnly
                 value={apiKey || ''}
-                className="font-mono text-sm pr-12 bg-muted/50 border-border focus-visible:ring-vault"
+                className="font-mono text-sm pr-12 bg-muted/50 border-border focus-visible:ring-grimoire"
               />
               <Button
                 size="icon"
@@ -75,7 +75,7 @@ export const APIKeyRevealModal: React.FC<APIKeyRevealModalProps> = ({ apiKey, on
                 id="copied-check" 
                 checked={hasCopied} 
                 onCheckedChange={(checked) => setHasCopied(checked === true)}
-                className="mt-1 border-border data-[state=checked]:bg-vault data-[state=checked]:border-vault"
+                className="mt-1 border-border data-[state=checked]:bg-grimoire data-[state=checked]:border-grimoire"
               />
               <div className="grid gap-1.5 leading-none">
                 <label
