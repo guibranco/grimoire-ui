@@ -1,0 +1,42 @@
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+
+interface AppState {
+  selectedAppSlug: string | null;
+  selectedEnvironmentSlug: string | null;
+  isAdminAuthenticated: boolean;
+  
+  setSelectedAppSlug: (slug: string | null) => void;
+  setSelectedEnvironmentSlug: (slug: string | null) => void;
+  setAdminAuthenticated: (auth: boolean) => void;
+  disconnect: () => void;
+}
+
+export const useStore = create<AppState>()(
+  persist(
+    (set) => ({
+      selectedAppSlug: null,
+      selectedEnvironmentSlug: null,
+      isAdminAuthenticated: !!localStorage.getItem('vault_admin_key'),
+      
+      setSelectedAppSlug: (slug) => set({ selectedAppSlug: slug }),
+      setSelectedEnvironmentSlug: (slug) => set({ selectedEnvironmentSlug: slug }),
+      setAdminAuthenticated: (auth) => set({ isAdminAuthenticated: auth }),
+      disconnect: () => {
+        localStorage.removeItem('vault_admin_key');
+        set({ 
+          selectedAppSlug: null, 
+          selectedEnvironmentSlug: null, 
+          isAdminAuthenticated: false 
+        });
+      },
+    }),
+    {
+      name: 'vault-manager-storage',
+      partialize: (state) => ({ 
+        selectedAppSlug: state.selectedAppSlug, 
+        selectedEnvironmentSlug: state.selectedEnvironmentSlug 
+      }),
+    }
+  )
+);

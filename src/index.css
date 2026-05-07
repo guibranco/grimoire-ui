@@ -1,0 +1,83 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+    --font-heading: "IBM Plex Sans", sans-serif;
+    --font-sans: "IBM Plex Sans", sans-serif;
+    --font-mono: "IBM Plex Mono", monospace;
+    
+    --color-background: #0F0F11;
+    --color-foreground: #E4E4E7;
+    
+    --color-vault: #F59E0B;
+    --color-config: #38BDF8;
+    
+    --color-primary: #E4E4E7;
+    --color-primary-foreground: #0F0F11;
+    
+    --color-border: #1E1E21;
+    --color-input: #121214;
+    --color-ring: #F59E0B;
+
+    --radius-none: 0px;
+    --radius-sm: 0px;
+    --radius-md: 0px;
+    --radius-lg: 0px;
+    
+    --color-sidebar: #080809;
+    --color-sidebar-foreground: #71717A;
+    --color-sidebar-primary: #F59E0B;
+    --color-sidebar-accent: #151518;
+    
+    --color-muted: #18181B;
+    --color-muted-foreground: #71717A;
+}
+
+:root {
+    --background: 15 15 17;
+    --foreground: 228 228 231;
+    --primary: 228 228 231;
+    --primary-foreground: 15 15 17;
+    --muted: 24 24 27;
+    --muted-foreground: 113 113 122;
+    --accent: 24 24 27;
+    --accent-foreground: 228 228 231;
+    --destructive: 239 68 68;
+    --destructive-foreground: 228 228 231;
+    --border: 30 30 33;
+    --input: 18 18 20;
+    --ring: 245 158 11;
+    --radius: 0px;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-none;
+    border-radius: 0px !important;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    background-color: #0F0F11;
+  }
+  code, pre, .font-mono {
+    @apply font-mono;
+  }
+}
+
+/* Scrollbar refinement */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #080809;
+}
+::-webkit-scrollbar-thumb {
+  background: #1E1E21;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #27272A;
+}

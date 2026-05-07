@@ -1,0 +1,6 @@
+{
+  "name": "VaultManager",
+  "description": "Production-grade self-hosted Vault and Configuration Manager for secrets and application settings.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
