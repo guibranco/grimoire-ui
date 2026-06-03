@@ -35,7 +35,7 @@
     "react-hook-form": "^7.77.0",
     "react-hot-toast": "^2.6.0",
     "react-router-dom": "^7.16.0",
-    "shadcn": "^4.8.2",
+    "shadcn": "^4.10.0",
     "tailwind-merge": "^3.6.0",
     "tw-animate-css": "^1.4.0",
     "zod": "^4.4.3",
@@ -52,7 +52,7 @@
     "autoprefixer": "^10.5.0",
     "jsdom": "^29.1.1",
     "tailwindcss": "^4.2.4",
-    "tsx": "^4.22.3",
+    "tsx": "^4.22.4",
     "typescript": "~6.0.3",
     "vite": "^8.0.14",
     "vitest": "^4.1.7"
