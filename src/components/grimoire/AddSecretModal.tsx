@@ -153,7 +153,7 @@ export const AddSecretModal: React.FC<AddSecretModalProps> = ({ appSlug, open, o
 
   return (
     <Dialog open={open} onOpenChange={(val) => !loading && onOpenChange(val)}>
-      <DialogContent className="max-w-3xl bg-card border-2 border-border p-0 gap-0 shadow-2xl flex flex-col max-h-[90vh]">
+      <DialogContent className="sm:max-w-4xl bg-card border-2 border-border p-0 gap-0 shadow-2xl flex flex-col max-h-[90vh]">
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col h-full overflow-hidden">
           <div className="p-6 border-b border-border">
             <DialogHeader className="mb-4">
@@ -273,7 +273,7 @@ export const AddSecretModal: React.FC<AddSecretModalProps> = ({ appSlug, open, o
             )}
           </div>
 
-          <DialogFooter className="bg-muted/30 p-4 border-t border-border mt-0 sm:justify-end gap-2">
+          <DialogFooter className="mx-0 mb-0 bg-muted/30 p-4 border-t border-border mt-0 sm:justify-end gap-2">
             <Button 
                 type="button"
                 variant="ghost" 

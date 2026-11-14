@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Key, ArrowRight, Loader2, Globe, Eye, EyeOff } from 'lucide-react';
 import { useStore } from '@/store/useStore';
+import { UI_VERSION } from '@/lib/api';
 import toast from 'react-hot-toast';
 
 export const SetupScreen: React.FC = () => {
@@ -136,7 +137,7 @@ export const SetupScreen: React.FC = () => {
         <div className="px-8 pb-8 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
-            <span className="text-[9px] font-mono text-zinc-600">STABLE_REL_2.4.0</span>
+            <span className="text-[9px] font-mono text-zinc-600">STABLE_REL_{UI_VERSION}</span>
           </div>
           <span className="text-[9px] font-mono text-zinc-700">SECURE SHELL v2</span>
         </div>

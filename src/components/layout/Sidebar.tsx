@@ -1,7 +1,7 @@
 import React from 'react';
 import { useStore } from '@/store/useStore';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/api';
+import { api, fetchApiVersion, getApiConnectionInfo, UI_VERSION } from '@/lib/api';
 import { Application } from '@/types/api';
 import { 
   Shield, 
@@ -20,6 +20,8 @@ import { Separator } from '@/components/ui/separator';
 export const Sidebar: React.FC<{ onCreateApp: () => void }> = ({ onCreateApp }) => {
   const { selectedAppSlug, setSelectedAppSlug, disconnect } = useStore();
   
+  const connectionInfo = getApiConnectionInfo();
+
   const { data: apps, isLoading } = useQuery({
     queryKey: ['applications'],
     queryFn: async () => {
@@ -28,6 +30,17 @@ export const Sidebar: React.FC<{ onCreateApp: () => void }> = ({ onCreateApp }) 
     },
   });
 
+  const { data: apiVersion, isLoading: apiVersionLoading } = useQuery({
+    queryKey: ['api-version', connectionInfo.rawUrl],
+    queryFn: fetchApiVersion,
+    retry: false,
+    staleTime: 60_000,
+  });
+
+  const formattedApiVersion = apiVersion
+    ? `v${apiVersion.replace(/^v/i, '')}`
+    : 'N/A';
+
   return (
     <aside className="w-[220px] border-r border-border bg-sidebar flex flex-col h-screen fixed left-0 top-0 z-20">
       <div className="p-5 border-b border-border">
@@ -35,7 +48,7 @@ export const Sidebar: React.FC<{ onCreateApp: () => void }> = ({ onCreateApp }) 
           <div className="w-5 h-5 bg-grimoire shrink-0" />
           <h1 className="text-base font-bold tracking-tight text-foreground uppercase">Grimoire</h1>
         </div>
-        <div className="text-[10px] text-zinc-600 font-mono mt-1 uppercase tracking-widest">v2.4.0-STABLE</div>
+        <div className="text-[10px] text-zinc-600 font-mono mt-1 uppercase tracking-widest">v{UI_VERSION}-STABLE</div>
       </div>
 
       <div className="flex-1 overflow-hidden flex flex-col pt-4">
@@ -76,10 +89,21 @@ export const Sidebar: React.FC<{ onCreateApp: () => void }> = ({ onCreateApp }) 
         </ScrollArea>
       </div>
 
-      <div className="p-4 border-t border-zinc-800 bg-black/40">
-        <div className="flex items-center gap-2 text-[9px] font-mono mb-3 text-zinc-500">
-          <div className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_4px_rgba(34,197,94,0.4)]" />
-          CONNECTED: LOCAL_API
+      <div className="p-4 border-t border-zinc-800 bg-black/40 space-y-2.5">
+        <div className="space-y-1">
+          <div
+            className="flex items-center gap-2 text-[9px] font-mono text-zinc-400"
+            title={connectionInfo.rawUrl}
+          >
+            <div className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0 shadow-[0_0_4px_rgba(34,197,94,0.4)]" />
+            <span className="truncate">CONNECTED: {connectionInfo.label}</span>
+          </div>
+          <div className="pl-3.5 flex flex-col gap-0.5 text-[9px] font-mono text-zinc-500">
+            <span>UI: v{UI_VERSION}</span>
+            <span className="truncate" title={apiVersion ? `API ${formattedApiVersion}` : 'API version unavailable'}>
+              API: {apiVersionLoading ? '...' : formattedApiVersion}
+            </span>
+          </div>
         </div>
         <Button 
           variant="ghost" 

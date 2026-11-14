@@ -17,6 +17,7 @@ export const AppDetailView: React.FC = () => {
   const { selectedAppSlug, setSelectedAppSlug } = useStore();
   const [activeTab, setActiveTab] = useState('grimoire');
   const [isAddEnvOpen, setIsAddEnvOpen] = useState(false);
+  const [isRotateKeyOpen, setIsRotateKeyOpen] = useState(false);
   const [isDeleteAppOpen, setIsDeleteAppOpen] = useState(false);
   const [revealKey, setRevealKey] = useState<string | null>(null);
 
@@ -60,7 +61,12 @@ export const AppDetailView: React.FC = () => {
   const handleRotateKey = async () => {
     try {
       const res = await api.post(`/applications/${app.slug}/rotate-key`);
-      setRevealKey(res.data.apiKey);
+      const rotatedKey = res.data?.apiKey ?? res.data?.key;
+      if (!rotatedKey) {
+        toast.error('Rotated API key was not returned by the server');
+        return;
+      }
+      setRevealKey(rotatedKey);
       toast.success('API Key Rotated');
     } catch (err) {
       toast.error('Failed to rotate API key');
@@ -82,7 +88,7 @@ export const AppDetailView: React.FC = () => {
       <ApplicationHeader 
         app={app} 
         onAddEnv={() => setIsAddEnvOpen(true)}
-        onRotateKey={handleRotateKey}
+        onRotateKey={() => setIsRotateKeyOpen(true)}
         onDeleteApp={() => setIsDeleteAppOpen(true)}
       />
 
@@ -127,6 +133,15 @@ export const AppDetailView: React.FC = () => {
       />
 
       <ConfirmationModal 
+        open={isRotateKeyOpen} 
+        onOpenChange={setIsRotateKeyOpen}
+        title="Rotate API Key"
+        description={`Are you sure you want to rotate the API key for ${app.name}? The current key will immediately stop working for any services using it.`}
+        onConfirm={handleRotateKey}
+        confirmText="Rotate Key"
+      />
+
+      <ConfirmationModal 
         open={isDeleteAppOpen} 
         onOpenChange={setIsDeleteAppOpen}
         title="Delete Application"
@@ -138,7 +153,8 @@ export const AppDetailView: React.FC = () => {
 
       <APIKeyRevealModal 
         apiKey={revealKey} 
-        onClose={() => setRevealKey(null)} 
+        onClose={() => setRevealKey(null)}
+        title="Application API Key Rotated"
       />
     </div>
   );
