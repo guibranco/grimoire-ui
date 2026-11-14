@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -17,11 +17,21 @@ import toast from 'react-hot-toast';
 interface APIKeyRevealModalProps {
   apiKey: string | null;
   onClose: () => void;
+  title?: string;
 }
 
-export const APIKeyRevealModal: React.FC<APIKeyRevealModalProps> = ({ apiKey, onClose }) => {
+export const APIKeyRevealModal: React.FC<APIKeyRevealModalProps> = ({
+  apiKey,
+  onClose,
+  title = 'Application API Key Created',
+}) => {
   const [hasCopied, setHasCopied] = useState(false);
   const [copiedToClipboard, setCopiedToClipboard] = useState(false);
+
+  useEffect(() => {
+    setHasCopied(false);
+    setCopiedToClipboard(false);
+  }, [apiKey]);
 
   const copyToClipboard = () => {
     if (apiKey) {
@@ -35,14 +45,14 @@ export const APIKeyRevealModal: React.FC<APIKeyRevealModalProps> = ({ apiKey, on
   return (
     <Dialog open={!!apiKey} onOpenChange={(open) => !open && hasCopied && onClose()}>
       <DialogContent 
-        className="max-w-md bg-card border-2 border-border p-0 gap-0 shadow-2xl"
+        className="sm:max-w-lg bg-card border-2 border-border p-0 gap-0 shadow-2xl"
       >
         <div className="p-6">
           <DialogHeader className="mb-6">
             <div className="w-12 h-12 bg-grimoire/10 border-2 border-grimoire text-grimoire flex items-center justify-center mb-4">
               <Key className="w-6 h-6" />
             </div>
-            <DialogTitle className="text-xl font-bold tracking-tight">Application API Key Created</DialogTitle>
+            <DialogTitle className="text-xl font-bold tracking-tight">{title}</DialogTitle>
             <DialogDescription className="text-muted-foreground mr-2">
               This key is used by your application to fetch secrets and configurations.
               <span className="text-destructive font-bold block mt-2">
@@ -89,7 +99,7 @@ export const APIKeyRevealModal: React.FC<APIKeyRevealModalProps> = ({ apiKey, on
             </div>
           </div>
         </div>
-        <DialogFooter className="bg-muted/30 p-4 border-t border-border mt-0 sm:justify-end">
+        <DialogFooter className="mx-0 mb-0 bg-muted/30 p-4 border-t border-border mt-0 sm:justify-end">
           <Button 
             onClick={onClose}
             disabled={!hasCopied}
