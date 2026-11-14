@@ -111,6 +111,26 @@ export const SetupScreen: React.FC = () => {
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
             Connect
           </button>
+
+          <div className="relative flex items-center justify-center my-4">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-zinc-900"></div>
+            </div>
+            <span className="relative px-3 bg-[#080809] text-[9px] font-mono text-zinc-600 uppercase tracking-widest">or sandbox</span>
+          </div>
+
+          <button 
+            type="button" 
+            onClick={() => {
+              localStorage.setItem('grimoire_api_url', 'mock://');
+              localStorage.setItem('grimoire_api_key', 'mock_admin_key');
+              setAdminAuthenticated(true);
+              toast.success('Connected to Mock Sandbox');
+            }}
+            className="w-full h-11 border border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/50 hover:border-zinc-700 font-bold uppercase tracking-widest text-[11px] flex items-center justify-center gap-2 transition-colors"
+          >
+            Launch Live Demo (Mock API)
+          </button>
         </form>
         
         <div className="px-8 pb-8 flex items-center justify-between">

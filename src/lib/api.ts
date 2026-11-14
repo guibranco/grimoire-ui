@@ -1,14 +1,21 @@
 import axios from 'axios';
+import { mockApiAdapter } from './mockApi';
 
 export const api = axios.create({
   baseURL: localStorage.getItem('grimoire_api_url') || 'http://localhost:5000',
 });
 
+const isTestMode = 
+  (typeof process !== 'undefined' && process.env.NODE_ENV === 'test') ||
+  (typeof window !== 'undefined' && ((window as any).__MOCK_API__ === true));
+
 api.interceptors.request.use((config) => {
   const url = localStorage.getItem('grimoire_api_url');
   const token = localStorage.getItem('grimoire_api_key');
   
-  if (url) {
+  if (url === 'mock://' || isTestMode) {
+    config.adapter = mockApiAdapter;
+  } else if (url) {
     config.baseURL = url.endsWith('/') ? url.slice(0, -1) : url;
     if (!config.baseURL.endsWith('/api/management')) {
       config.baseURL += '/api/management';
@@ -30,3 +37,4 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
