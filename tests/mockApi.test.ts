@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { api } from '../src/lib/api';
+import { api, fetchApiVersion, getApiConnectionInfo, UI_VERSION } from '../src/lib/api';
 import { resetMockDatabase } from '../src/lib/mockApi';
 
 describe('Grimoire Mock API Integration Tests', () => {
@@ -31,6 +31,8 @@ describe('Grimoire Mock API Integration Tests', () => {
       expect(res.status).toBe(201);
       expect(res.data).toHaveProperty('name', 'Billing Microservice');
       expect(res.data).toHaveProperty('slug', 'billing-microservice');
+      expect(res.data).toHaveProperty('apiKey');
+      expect(res.data.apiKey.startsWith('grm_')).toBe(true);
 
       // Verify it was persisted by calling list
       const listRes = await api.get('/applications');
@@ -50,7 +52,9 @@ describe('Grimoire Mock API Integration Tests', () => {
       const res = await api.post('/applications/production-gateway/rotate-key');
       expect(res.status).toBe(200);
       expect(res.data).toHaveProperty('message');
+      expect(res.data).toHaveProperty('apiKey');
       expect(res.data).toHaveProperty('key');
+      expect(res.data.apiKey).toBe(res.data.key);
       expect(res.data.key.startsWith('grm_')).toBe(true);
     });
 
@@ -196,6 +200,29 @@ describe('Grimoire Mock API Integration Tests', () => {
       });
       const found = listRes.data.find((c: any) => c.key === 'COMPRESSION_ENABLED');
       expect(found).toBeUndefined();
+    });
+  });
+
+  describe('Connection & Version Info', () => {
+    it('should return MOCK connection info when connected to mock://', () => {
+      localStorage.setItem('grimoire_api_url', 'mock://');
+      const info = getApiConnectionInfo();
+      expect(info.isMock).toBe(true);
+      expect(info.label).toBe('MOCK');
+    });
+
+    it('should extract host/domain for remote API servers', () => {
+      localStorage.setItem('grimoire_api_url', 'https://vault.example.com:8443/api/management');
+      const info = getApiConnectionInfo();
+      expect(info.isMock).toBe(false);
+      expect(info.label).toBe('vault.example.com:8443');
+    });
+
+    it('should fetch mock API version and expose UI_VERSION', async () => {
+      localStorage.setItem('grimoire_api_url', 'mock://');
+      const apiVersion = await fetchApiVersion();
+      expect(apiVersion).toBe('2.4.0-mock');
+      expect(UI_VERSION).toBeTruthy();
     });
   });
 });
