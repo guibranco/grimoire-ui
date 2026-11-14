@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { clearDetectedApiVersion } from '@/lib/api';
 
 interface AppState {
   selectedAppSlug: string | null;
@@ -25,6 +26,7 @@ export const useStore = create<AppState>()(
       disconnect: () => {
         localStorage.removeItem('grimoire_api_url');
         localStorage.removeItem('grimoire_api_key');
+        clearDetectedApiVersion();
         set({ 
           selectedAppSlug: null, 
           selectedEnvironmentSlug: null, 

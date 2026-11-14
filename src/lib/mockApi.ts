@@ -202,6 +202,11 @@ export function mockApiAdapter(config: AxiosRequestConfig): Promise<AxiosRespons
 
   // --- Router for patterns ---
 
+  // 0. GET /version or /health
+  if ((cleanPath === '/version' || cleanPath === '/health') && method === 'GET') {
+    return makeResponse(200, { status: 'Healthy', version: '2.4.0-mock' }, config);
+  }
+
   // 1. GET /applications
   if (cleanPath === '/applications' && method === 'GET') {
     return makeResponse(200, applications, config);
@@ -225,7 +230,8 @@ export function mockApiAdapter(config: AxiosRequestConfig): Promise<AxiosRespons
     ];
     saveStored('environments', environments);
 
-    return makeResponse(201, newApp, config);
+    const apiKey = `grm_sec_key_${Math.random().toString(36).substring(2, 12)}`;
+    return makeResponse(201, { ...newApp, apiKey }, config);
   }
 
   // 3. GET /applications/:appSlug
@@ -263,9 +269,11 @@ export function mockApiAdapter(config: AxiosRequestConfig): Promise<AxiosRespons
   // 5. POST /applications/:appSlug/rotate-key
   match = cleanPath.match(/^\/applications\/([^\/]+)\/rotate-key$/);
   if (match && method === 'POST') {
+    const newKey = `grm_sec_key_${Math.random().toString(36).substring(2, 12)}`;
     return makeResponse(200, { 
       message: "Security key rotated successfully", 
-      key: `grm_sec_key_${Math.random().toString(36).substring(2, 12)}` 
+      apiKey: newKey,
+      key: newKey
     }, config);
   }
 
