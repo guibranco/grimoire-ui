@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -13,30 +13,20 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
-import { 
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
 import { api, toApiDateTime } from '@/lib/api';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
-import { Environment } from '@/types/api';
+import { Environment, GlobalEnvironment } from '@/types/api';
 import { Badge } from '@/components/ui/badge';
 import { 
   Loader2, 
   Lock, 
-  Plus,
   Eye,
   EyeOff,
-  Calendar as CalendarIcon,
-  X
+  Globe,
 } from 'lucide-react';
-import { format } from 'date-fns';
-import { cn } from '@/lib/utils';
 import toast from 'react-hot-toast';
+import { SecretModalScope } from './EditSecretValueModal';
 
 const schema = z.object({
   name: z.string().min(1, 'Name is required').regex(/^[a-zA-Z0-9_\-]+$/, 'Only alphanumeric, underscores, and hyphens allowed'),
@@ -50,37 +40,72 @@ const schema = z.object({
   })).default([]),
 });
 
-type FormData = {
-  name: string;
-  description: string;
-  values: {
-    environmentSlug: string;
-    value?: string;
-    isEnabled: boolean;
-    expiresAt: string | null;
-    notBefore: string | null;
-  }[];
-};
-
 interface AddSecretModalProps {
-  appSlug: string;
+  appSlug?: string;
+  scope?: SecretModalScope;
+  initialName?: string;
+  initialDescription?: string;
+  customSlugs?: string[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export const AddSecretModal: React.FC<AddSecretModalProps> = ({ appSlug, open, onOpenChange }) => {
+export const AddSecretModal: React.FC<AddSecretModalProps> = ({
+  appSlug,
+  scope,
+  initialName,
+  initialDescription,
+  customSlugs = [],
+  open,
+  onOpenChange,
+}) => {
   const [loading, setLoading] = useState(false);
   const [showValues, setShowValues] = useState<Record<string, boolean>>({});
   const queryClient = useQueryClient();
 
-  const { data: envs } = useQuery({
-    queryKey: ['environments', appSlug],
+  const resolvedScope: SecretModalScope = scope ?? { appSlug: appSlug || '' };
+  const isGlobal = resolvedScope === 'global';
+  const targetAppSlug = isGlobal ? '' : resolvedScope.appSlug;
+
+  const { data: appEnvs } = useQuery({
+    queryKey: ['environments', targetAppSlug],
     queryFn: async () => {
-      const res = await api.get<Environment[]>(`/applications/${appSlug}/environments`);
+      const res = await api.get<Environment[]>(`/applications/${targetAppSlug}/environments`);
       return res.data;
     },
-    enabled: open,
+    enabled: open && !isGlobal && !!targetAppSlug,
   });
+
+  const { data: globalEnvs } = useQuery({
+    queryKey: ['global-environments'],
+    queryFn: async () => {
+      const res = await api.get<GlobalEnvironment[]>('/global/environments');
+      return res.data;
+    },
+    enabled: open && isGlobal,
+  });
+
+  const envs: Environment[] = useMemo(() => {
+    if (!isGlobal) {
+      return Array.isArray(appEnvs) ? appEnvs : [];
+    }
+    const known = Array.isArray(globalEnvs) ? globalEnvs : [];
+    const seen = new Set<string>(['*']);
+    const list: Environment[] = [{ name: 'All environments', slug: '*' }];
+    known.forEach((e) => {
+      if (e.slug && !seen.has(e.slug)) {
+        seen.add(e.slug);
+        list.push({ name: e.name || e.slug, slug: e.slug });
+      }
+    });
+    customSlugs.forEach((slug) => {
+      if (slug && !seen.has(slug)) {
+        seen.add(slug);
+        list.push({ name: slug, slug });
+      }
+    });
+    return list;
+  }, [isGlobal, appEnvs, globalEnvs, customSlugs]);
 
   const { 
     register, 
@@ -93,42 +118,46 @@ export const AddSecretModal: React.FC<AddSecretModalProps> = ({ appSlug, open, o
   } = useForm<any>({
     resolver: zodResolver(schema),
     defaultValues: {
-      name: '',
-      description: '',
+      name: initialName || '',
+      description: initialDescription || '',
       values: [],
     }
   });
 
-  const { fields, append } = useFieldArray({
+  const { fields } = useFieldArray({
     control,
     name: "values"
   });
 
-  React.useEffect(() => {
-    if (envs?.length && fields.length === 0) {
-      const initialValues = envs.map(env => ({
+  useEffect(() => {
+    if (!open) return;
+    reset({
+      name: initialName || '',
+      description: initialDescription || '',
+      values: envs.map((env) => ({
         environmentSlug: env.slug,
         value: '',
         isEnabled: true,
         expiresAt: null,
         notBefore: null,
-      }));
-      setValue('values', initialValues);
-    }
-  }, [envs, fields.length, setValue]);
+      })),
+    });
+  }, [open, initialName, initialDescription, envs, reset]);
 
   const onSubmit = async (data: any) => {
     setLoading(true);
     try {
-      // 1. Create Secret
-      const createRes = await api.post(`/applications/${appSlug}/secrets`, {
+      const createEndpoint = isGlobal
+        ? '/global/secrets'
+        : `/applications/${targetAppSlug}/secrets`;
+
+      const createRes = await api.post(createEndpoint, {
         name: data.name,
         description: data.description
       });
 
       const createdName = createRes.data?.name || data.name;
 
-      // 2. Add Values for each environment that has a value
       const valuesToCreate = (data.values || [])
         .filter((v: any) => v.value && v.value.trim().length > 0)
         .map((v: any) => ({
@@ -140,15 +169,26 @@ export const AddSecretModal: React.FC<AddSecretModalProps> = ({ appSlug, open, o
         }));
       
       if (valuesToCreate.length > 0) {
-        await api.post(`/applications/${appSlug}/secrets/${encodeURIComponent(createdName)}/values`, valuesToCreate);
+        const valuesEndpoint = isGlobal
+          ? `/global/secrets/${encodeURIComponent(createdName)}/values`
+          : `/applications/${targetAppSlug}/secrets/${encodeURIComponent(createdName)}/values`;
+        await api.post(valuesEndpoint, valuesToCreate);
       }
 
-      queryClient.invalidateQueries({ queryKey: ['secrets', appSlug] });
-      queryClient.invalidateQueries({ queryKey: ['secret', appSlug] });
-      queryClient.invalidateQueries({ queryKey: ['secret-versions', appSlug] });
+      if (isGlobal) {
+        queryClient.invalidateQueries({ queryKey: ['global-secrets'] });
+        queryClient.invalidateQueries({ queryKey: ['global-secret'] });
+        queryClient.invalidateQueries({ queryKey: ['global-secret-versions'] });
+        queryClient.invalidateQueries({ queryKey: ['effective-secrets'] });
+      } else {
+        queryClient.invalidateQueries({ queryKey: ['secrets', targetAppSlug] });
+        queryClient.invalidateQueries({ queryKey: ['effective-secrets', targetAppSlug] });
+        queryClient.invalidateQueries({ queryKey: ['secret', targetAppSlug] });
+        queryClient.invalidateQueries({ queryKey: ['secret-versions', targetAppSlug] });
+      }
       reset();
       onOpenChange(false);
-      toast.success('Secret and values created');
+      toast.success(isGlobal ? 'Global secret created' : 'Secret and values created');
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Failed to create secret');
     } finally {
@@ -169,13 +209,17 @@ export const AddSecretModal: React.FC<AddSecretModalProps> = ({ appSlug, open, o
           <div className="p-6 border-b border-border">
             <DialogHeader className="mb-4">
               <div className="flex items-center gap-4 mb-2">
-                <div className="w-10 h-10 bg-grimoire/10 border border-grimoire text-grimoire flex items-center justify-center">
-                  <Lock className="w-5 h-5" />
+                <div className={`w-10 h-10 flex items-center justify-center border ${isGlobal ? 'bg-global/10 border-global text-global' : 'bg-grimoire/10 border-grimoire text-grimoire'}`}>
+                  {isGlobal ? <Globe className="w-5 h-5" /> : <Lock className="w-5 h-5" />}
                 </div>
                 <div>
-                  <DialogTitle className="text-xl font-bold tracking-tight uppercase">Define New Secret</DialogTitle>
+                  <DialogTitle className="text-xl font-bold tracking-tight uppercase">
+                    {isGlobal ? 'Define Global Secret' : initialName ? 'Override Global Secret' : 'Define New Secret'}
+                  </DialogTitle>
                   <DialogDescription className="text-muted-foreground">
-                    Create a secure entry and optionally set initial values across environments.
+                    {isGlobal
+                      ? 'Create a shared secret inherited by all participating applications.'
+                      : 'Create a secure entry and optionally set initial values across environments.'}
                   </DialogDescription>
                 </div>
               </div>
@@ -207,22 +251,31 @@ export const AddSecretModal: React.FC<AddSecretModalProps> = ({ appSlug, open, o
 
           <div className="flex-1 overflow-auto p-6 bg-muted/10">
             <h4 className="text-[10px] uppercase font-bold tracking-[0.2em] text-muted-foreground mb-4">Initial Values Per Environment</h4>
-            {envs?.length === 0 ? (
+            {envs.length === 0 ? (
               <p className="text-xs text-muted-foreground bg-muted/20 p-4 border border-border">
                 No environments defined. You can create the secret now and add values later.
               </p>
             ) : (
               <div className="space-y-4">
                 {fields.map((field: any, index) => {
-                  const env = envs?.find(e => e.slug === field.environmentSlug);
+                  const env = envs.find(e => e.slug === field.environmentSlug);
                   const isEnabled = formValues?.[index]?.isEnabled;
+                  const isWildcard = field.environmentSlug === '*';
                   
                   return (
                     <div key={field.id} className="bg-background border border-border p-4 space-y-4">
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="font-mono text-[10px] border-border bg-muted/30">
-                            {env?.name || field.environmentSlug}
+                          <Badge
+                            variant="outline"
+                            className={
+                              isWildcard
+                                ? 'font-mono text-[10px] border-global/40 bg-global/10 text-global gap-1'
+                                : 'font-mono text-[10px] border-border bg-muted/30'
+                            }
+                          >
+                            {isWildcard && <Globe className="w-3 h-3" />}
+                            {isWildcard ? 'All environments' : (env?.name || field.environmentSlug)}
                           </Badge>
                           {!isEnabled && <Badge variant="outline" className="text-[8px] bg-red-500/10 text-red-500 border-red-500/20 uppercase font-bold tracking-widest">Disabled</Badge>}
                         </div>
@@ -231,7 +284,7 @@ export const AddSecretModal: React.FC<AddSecretModalProps> = ({ appSlug, open, o
                           <Switch 
                             checked={isEnabled}
                             onCheckedChange={(checked) => setValue(`values.${index}.isEnabled`, checked)}
-                            className="data-[state=checked]:bg-grimoire"
+                            className={isGlobal ? 'data-[state=checked]:bg-global' : 'data-[state=checked]:bg-grimoire'}
                           />
                         </div>
                       </div>
@@ -296,9 +349,9 @@ export const AddSecretModal: React.FC<AddSecretModalProps> = ({ appSlug, open, o
               <Button 
                 type="submit" 
                 disabled={loading}
-                className="bg-foreground text-background hover:bg-foreground/90 uppercase font-bold tracking-widest text-[10px] h-9 min-w-[140px]"
+                className={`${isGlobal ? 'bg-global text-black hover:bg-global/90' : 'bg-foreground text-background hover:bg-foreground/90'} uppercase font-bold tracking-widest text-[10px] h-9 min-w-[140px]`}
               >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Create Secret'}
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : (isGlobal ? 'Create Global Secret' : 'Create Secret')}
               </Button>
           </DialogFooter>
         </form>

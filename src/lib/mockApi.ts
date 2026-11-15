@@ -6,12 +6,14 @@ const DEFAULT_APPLICATIONS = [
     name: "Production Gateway",
     slug: "production-gateway",
     description: "Primary configuration container for Edge Proxy, Database connectors, and API gateways.",
+    inheritGlobals: true,
     createdAt: "2026-06-20T10:00:00.000Z"
   },
   {
     name: "Auth Provider Security",
     slug: "auth-provider-security",
     description: "Private vault for OAuth credentials, SAML keys, and JSON Web Token signing secrets.",
+    inheritGlobals: true,
     createdAt: "2026-06-21T12:30:00.000Z"
   }
 ];
@@ -172,12 +174,59 @@ function saveStored<T>(key: string, data: T): void {
   }
 }
 
+const DEFAULT_GLOBAL_CONFIGURATIONS = [
+  {
+    id: "gcfg-1111-4111-8111-111111111111",
+    environmentSlug: "*",
+    key: "LogStream:Url",
+    value: "https://logs.internal.grimoire.dev",
+    description: "Centralized log ingestion endpoint across all environments.",
+    createdAt: "2026-06-20T09:00:00.000Z",
+    updatedAt: "2026-06-20T09:00:00.000Z"
+  },
+  {
+    id: "gcfg-2222-4222-8222-222222222222",
+    environmentSlug: "production",
+    key: "FeatureFlags:NewDashboard",
+    value: "true",
+    description: "Enable redesigned dashboard in production environments.",
+    createdAt: "2026-06-20T09:05:00.000Z",
+    updatedAt: "2026-06-20T09:05:00.000Z"
+  }
+];
+
+const DEFAULT_GLOBAL_SECRETS = [
+  {
+    id: "gsec-1111-4111-8111-111111111111",
+    name: "Sentry--Dsn",
+    description: "Shared error tracking DSN inherited across applications.",
+    createdAt: "2026-06-20T09:10:00.000Z",
+    updatedAt: "2026-06-20T09:10:00.000Z"
+  }
+];
+
+const DEFAULT_GLOBAL_SECRET_VERSIONS: Record<string, any[]> = {
+  "Sentry--Dsn:*": [
+    {
+      id: "gver-1111-4111-8111-111111111111",
+      version: 1,
+      isEnabled: true,
+      expiresAt: null,
+      notBefore: null,
+      createdAt: "2026-06-20T09:10:00.000Z"
+    }
+  ]
+};
+
 // In-Memory Database instances
 let applications = getStored('applications', DEFAULT_APPLICATIONS);
 let environments = getStored('environments', DEFAULT_ENVIRONMENTS);
 let secrets = getStored('secrets', DEFAULT_SECRETS);
 let configurations = getStored('configurations', DEFAULT_CONFIGURATIONS);
 let secretVersions = getStored<Record<string, any[]>>('secret_versions', DEFAULT_SECRET_VERSIONS);
+let globalConfigurations = getStored('global_configurations', DEFAULT_GLOBAL_CONFIGURATIONS);
+let globalSecrets = getStored('global_secrets', DEFAULT_GLOBAL_SECRETS);
+let globalSecretVersions = getStored<Record<string, any[]>>('global_secret_versions', DEFAULT_GLOBAL_SECRET_VERSIONS);
 
 function sanitizeSecretMetadata(secret: any) {
   if (!secret) return secret;
@@ -192,12 +241,18 @@ export function resetMockDatabase() {
   secrets = JSON.parse(JSON.stringify(DEFAULT_SECRETS));
   configurations = JSON.parse(JSON.stringify(DEFAULT_CONFIGURATIONS));
   secretVersions = JSON.parse(JSON.stringify(DEFAULT_SECRET_VERSIONS));
+  globalConfigurations = JSON.parse(JSON.stringify(DEFAULT_GLOBAL_CONFIGURATIONS));
+  globalSecrets = JSON.parse(JSON.stringify(DEFAULT_GLOBAL_SECRETS));
+  globalSecretVersions = JSON.parse(JSON.stringify(DEFAULT_GLOBAL_SECRET_VERSIONS));
   if (isBrowser) {
     localStorage.removeItem('grm_mock_applications');
     localStorage.removeItem('grm_mock_environments');
     localStorage.removeItem('grm_mock_secrets');
     localStorage.removeItem('grm_mock_configurations');
     localStorage.removeItem('grm_mock_secret_versions');
+    localStorage.removeItem('grm_mock_global_configurations');
+    localStorage.removeItem('grm_mock_global_secrets');
+    localStorage.removeItem('grm_mock_global_secret_versions');
   }
 }
 
@@ -265,6 +320,7 @@ export function mockApiAdapter(config: AxiosRequestConfig): Promise<AxiosRespons
       name: body.name || 'New App',
       slug: body.slug || (body.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-'),
       description: body.description || '',
+      inheritGlobals: body.inheritGlobals !== undefined ? Boolean(body.inheritGlobals) : true,
       createdAt: new Date().toISOString()
     };
     applications.push(newApp);
@@ -301,6 +357,7 @@ export function mockApiAdapter(config: AxiosRequestConfig): Promise<AxiosRespons
     }
     if (body.name !== undefined) app.name = body.name;
     if (body.description !== undefined) app.description = body.description;
+    if (body.inheritGlobals !== undefined) app.inheritGlobals = Boolean(body.inheritGlobals);
     saveStored('applications', applications);
     return makeResponse(200, app, config);
   }
@@ -465,6 +522,146 @@ export function mockApiAdapter(config: AxiosRequestConfig): Promise<AxiosRespons
     return makeResponse(200, versions, config);
   }
 
+  // 10c. GET /applications/:appSlug/configurations/effective?environment=
+  match = cleanPath.match(/^\/applications\/([^\/]+)\/configurations\/effective$/);
+  if (match && method === 'GET') {
+    const appSlug = match[1];
+    const app = applications.find(a => a.slug === appSlug);
+    const envSlug = searchParams.get('environment') || config.params?.environment || '';
+    const appConfigs = (configurations[appSlug] || []).filter(c => !envSlug || c.environmentSlug === envSlug);
+    const inherits = app ? app.inheritGlobals !== false : true;
+
+    if (!inherits) {
+      const appOnly = appConfigs.map(c => ({
+        key: c.key,
+        value: c.value,
+        description: c.description,
+        source: 'application',
+        globalEnvironmentSlug: null,
+        overridesGlobal: false,
+      }));
+      return makeResponse(200, appOnly, config);
+    }
+
+    const globalStarMap = new Map<string, any>();
+    const globalEnvMap = new Map<string, any>();
+    globalConfigurations.forEach((gc: any) => {
+      if (gc.environmentSlug === '*') {
+        globalStarMap.set(gc.key, gc);
+      } else if (envSlug && gc.environmentSlug === envSlug) {
+        globalEnvMap.set(gc.key, gc);
+      }
+    });
+
+    const appConfigMap = new Map<string, any>();
+    appConfigs.forEach((c: any) => appConfigMap.set(c.key, c));
+
+    const allKeys = new Set<string>([
+      ...appConfigMap.keys(),
+      ...globalEnvMap.keys(),
+      ...globalStarMap.keys(),
+    ]);
+
+    const effective = Array.from(allKeys).map((key) => {
+      const appItem = appConfigMap.get(key);
+      const envGlobal = globalEnvMap.get(key);
+      const starGlobal = globalStarMap.get(key);
+      const hasGlobal = !!(envGlobal || starGlobal);
+
+      if (appItem) {
+        return {
+          key: appItem.key,
+          value: appItem.value,
+          description: appItem.description,
+          source: 'application',
+          globalEnvironmentSlug: null,
+          overridesGlobal: hasGlobal,
+        };
+      }
+
+      if (envGlobal) {
+        return {
+          key: envGlobal.key,
+          value: envGlobal.value,
+          description: envGlobal.description,
+          source: 'global',
+          globalEnvironmentSlug: envGlobal.environmentSlug,
+          overridesGlobal: false,
+        };
+      }
+
+      return {
+        key: starGlobal.key,
+        value: starGlobal.value,
+        description: starGlobal.description,
+        source: 'global',
+        globalEnvironmentSlug: '*',
+        overridesGlobal: false,
+      };
+    });
+
+    return makeResponse(200, effective, config);
+  }
+
+  // 10d. GET /applications/:appSlug/secrets/effective
+  match = cleanPath.match(/^\/applications\/([^\/]+)\/secrets\/effective$/);
+  if (match && method === 'GET') {
+    const appSlug = match[1];
+    const app = applications.find(a => a.slug === appSlug);
+    const appSecrets = (secrets[appSlug] || []).map(sanitizeSecretMetadata);
+    const inherits = app ? app.inheritGlobals !== false : true;
+
+    if (!inherits) {
+      return makeResponse(
+        200,
+        appSecrets.map((s: any) => ({
+          id: s.id,
+          name: s.name,
+          description: s.description,
+          source: 'application',
+          overridesGlobal: false,
+          createdAt: s.createdAt,
+          updatedAt: s.updatedAt,
+        })),
+        config
+      );
+    }
+
+    const globalMap = new Map<string, any>();
+    globalSecrets.forEach((gs: any) => globalMap.set(gs.name, sanitizeSecretMetadata(gs)));
+
+    const appMap = new Map<string, any>();
+    appSecrets.forEach((s: any) => appMap.set(s.name, s));
+
+    const allNames = new Set<string>([...appMap.keys(), ...globalMap.keys()]);
+    const effective = Array.from(allNames).map((name) => {
+      const appSecret = appMap.get(name);
+      const globalSecret = globalMap.get(name);
+      if (appSecret) {
+        return {
+          id: appSecret.id,
+          name: appSecret.name,
+          description: appSecret.description,
+          source: 'application',
+          overridesGlobal: !!globalSecret,
+          createdAt: appSecret.createdAt,
+          updatedAt: appSecret.updatedAt,
+        };
+      }
+      return {
+        id: globalSecret.id,
+        name: globalSecret.name,
+        description: globalSecret.description,
+        source: 'global',
+        overridesGlobal: false,
+        createdAt: globalSecret.createdAt,
+        updatedAt: globalSecret.updatedAt,
+      };
+    });
+
+    return makeResponse(200, effective, config);
+  }
+
   // 11a. GET /applications/:appSlug/secrets/:secretName
   match = cleanPath.match(/^\/applications\/([^\/]+)\/secrets\/([^\/]+)$/);
   if (match && method === 'GET') {
@@ -584,6 +781,193 @@ export function mockApiAdapter(config: AxiosRequestConfig): Promise<AxiosRespons
     appConfigs.splice(index, 1);
     saveStored('configurations', configurations);
     return makeResponse(200, { message: `Configuration key ${key} deleted successfully` }, config);
+  }
+
+  // 18. GET /global/environments
+  if (cleanPath === '/global/environments' && method === 'GET') {
+    const agg = new Map<string, { slug: string; name: string; applicationCount: number }>();
+    Object.values(environments).forEach((appEnvList: any) => {
+      const seenInApp = new Set<string>();
+      (appEnvList || []).forEach((env: any) => {
+        if (!env?.slug || seenInApp.has(env.slug)) return;
+        seenInApp.add(env.slug);
+        const existing = agg.get(env.slug);
+        if (existing) {
+          existing.applicationCount += 1;
+        } else {
+          agg.set(env.slug, {
+            slug: env.slug,
+            name: env.name || env.slug,
+            applicationCount: 1,
+          });
+        }
+      });
+    });
+    return makeResponse(200, Array.from(agg.values()), config);
+  }
+
+  // 19. GET /global/configurations?environment=
+  if (cleanPath === '/global/configurations' && method === 'GET') {
+    const envFilter = searchParams.get('environment') ?? config.params?.environment;
+    const filtered = envFilter
+      ? globalConfigurations.filter((c: any) => c.environmentSlug === envFilter)
+      : globalConfigurations;
+    return makeResponse(200, filtered, config);
+  }
+
+  // 20. POST /global/configurations
+  if (cleanPath === '/global/configurations' && method === 'POST') {
+    const envSlug = (body.environmentSlug || '*').trim() || '*';
+    const key = body.key || '';
+    const exists = globalConfigurations.some(
+      (c: any) => c.environmentSlug === envSlug && c.key === key
+    );
+    if (exists) {
+      return makeResponse(
+        409,
+        { message: `Global configuration "${key}" already exists in environment "${envSlug}"` },
+        config
+      );
+    }
+    const nowIso = new Date().toISOString();
+    const newConfig = {
+      id: `gcfg-${Date.now()}`,
+      environmentSlug: envSlug,
+      key,
+      value: body.value ?? '',
+      description: body.description || '',
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+    globalConfigurations.push(newConfig);
+    saveStored('global_configurations', globalConfigurations);
+    return makeResponse(201, newConfig, config);
+  }
+
+  // 21. PUT & DELETE /global/configurations/:envSlug/:key
+  match = cleanPath.match(/^\/global\/configurations\/([^\/]+)\/([^\/]+)$/);
+  if (match && method === 'PUT') {
+    const envSlug = decodeURIComponent(match[1]);
+    const key = decodeURIComponent(match[2]);
+    const item = globalConfigurations.find(
+      (c: any) => c.environmentSlug === envSlug && c.key === key
+    );
+    if (!item) {
+      return makeResponse(404, { message: `Global configuration ${key} not found` }, config);
+    }
+    if (body.value !== undefined) item.value = body.value;
+    if (body.description !== undefined) item.description = body.description;
+    item.updatedAt = new Date().toISOString();
+    saveStored('global_configurations', globalConfigurations);
+    return makeResponse(200, item, config);
+  }
+
+  if (match && method === 'DELETE') {
+    const envSlug = decodeURIComponent(match[1]);
+    const key = decodeURIComponent(match[2]);
+    const index = globalConfigurations.findIndex(
+      (c: any) => c.environmentSlug === envSlug && c.key === key
+    );
+    if (index === -1) {
+      return makeResponse(404, { message: `Global configuration ${key} not found` }, config);
+    }
+    globalConfigurations.splice(index, 1);
+    saveStored('global_configurations', globalConfigurations);
+    return makeResponse(204, null, config);
+  }
+
+  // 22. GET & POST /global/secrets
+  if (cleanPath === '/global/secrets' && method === 'GET') {
+    return makeResponse(200, globalSecrets.map(sanitizeSecretMetadata), config);
+  }
+
+  if (cleanPath === '/global/secrets' && method === 'POST') {
+    const name = body.name || '';
+    const nowIso = new Date().toISOString();
+    const existingIndex = globalSecrets.findIndex((s: any) => s.name === name);
+    const item = {
+      id: existingIndex !== -1 ? globalSecrets[existingIndex].id : `gsec-${Date.now()}`,
+      name,
+      description: body.description || '',
+      createdAt: existingIndex !== -1 ? globalSecrets[existingIndex].createdAt : nowIso,
+      updatedAt: nowIso,
+    };
+    if (existingIndex !== -1) {
+      globalSecrets[existingIndex] = item;
+    } else {
+      globalSecrets.push(item);
+    }
+    saveStored('global_secrets', globalSecrets);
+    return makeResponse(201, sanitizeSecretMetadata(item), config);
+  }
+
+  // 23. POST /global/secrets/:name/values
+  match = cleanPath.match(/^\/global\/secrets\/([^\/]+)\/values$/);
+  if (match && method === 'POST') {
+    const secretName = decodeURIComponent(match[1]);
+    const secret = globalSecrets.find((s: any) => s.name === secretName);
+    if (!secret) {
+      return makeResponse(404, { message: `Global secret ${secretName} not found` }, config);
+    }
+    const postedValues = Array.isArray(body) ? body : [body];
+    postedValues.forEach((val: any) => {
+      const envSlug = val.environmentSlug || '*';
+      const historyKey = `${secretName}:${envSlug}`;
+      const existingVersions = globalSecretVersions[historyKey] || [];
+      const nextVersion = existingVersions.length > 0
+        ? Math.max(...existingVersions.map((v: any) => v.version ?? 0)) + 1
+        : 1;
+      const nowIso = new Date().toISOString();
+      const entry = {
+        id: `gver-${Date.now()}-${nextVersion}`,
+        version: nextVersion,
+        isEnabled: val.isEnabled !== undefined ? val.isEnabled : true,
+        expiresAt: val.expiresAt || null,
+        notBefore: val.notBefore || null,
+        createdAt: nowIso,
+      };
+      globalSecretVersions[historyKey] = [entry, ...existingVersions];
+      secret.updatedAt = nowIso;
+    });
+    saveStored('global_secrets', globalSecrets);
+    saveStored('global_secret_versions', globalSecretVersions);
+    return makeResponse(200, sanitizeSecretMetadata(secret), config);
+  }
+
+  // 24. GET /global/secrets/:name/versions/:envSlug
+  match = cleanPath.match(/^\/global\/secrets\/([^\/]+)\/versions\/([^\/]+)$/);
+  if (match && method === 'GET') {
+    const secretName = decodeURIComponent(match[1]);
+    const envSlug = decodeURIComponent(match[2]);
+    const historyKey = `${secretName}:${envSlug}`;
+    return makeResponse(200, globalSecretVersions[historyKey] || [], config);
+  }
+
+  // 25. GET & DELETE /global/secrets/:name
+  match = cleanPath.match(/^\/global\/secrets\/([^\/]+)$/);
+  if (match && method === 'GET') {
+    const secretName = decodeURIComponent(match[1]);
+    const secret = globalSecrets.find((s: any) => s.name === secretName);
+    if (!secret) {
+      return makeResponse(404, { message: `Global secret ${secretName} not found` }, config);
+    }
+    return makeResponse(200, sanitizeSecretMetadata(secret), config);
+  }
+
+  if (match && method === 'DELETE') {
+    const secretName = decodeURIComponent(match[1]);
+    const index = globalSecrets.findIndex((s: any) => s.name === secretName);
+    if (index === -1) {
+      return makeResponse(404, { message: `Global secret ${secretName} not found` }, config);
+    }
+    globalSecrets.splice(index, 1);
+    const prefix = `${secretName}:`;
+    Object.keys(globalSecretVersions).forEach((k) => {
+      if (k.startsWith(prefix)) delete globalSecretVersions[k];
+    });
+    saveStored('global_secrets', globalSecrets);
+    saveStored('global_secret_versions', globalSecretVersions);
+    return makeResponse(204, null, config);
   }
 
   // Fallback for default request

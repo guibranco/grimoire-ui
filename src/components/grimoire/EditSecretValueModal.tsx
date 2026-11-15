@@ -21,7 +21,8 @@ import {
   Lock,
   Eye,
   EyeOff,
-  ChevronRight
+  ChevronRight,
+  Globe
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -32,15 +33,11 @@ const schema = z.object({
   notBefore: z.string().nullable().default(null),
 });
 
-type FormData = {
-  value: string;
-  isEnabled: boolean;
-  expiresAt: string | null;
-  notBefore: string | null;
-};
+export type SecretModalScope = 'global' | { appSlug: string };
 
 interface EditSecretValueModalProps {
-  appSlug: string;
+  appSlug?: string;
+  scope?: SecretModalScope;
   secretName: string;
   envSlug: string;
   open: boolean;
@@ -48,7 +45,8 @@ interface EditSecretValueModalProps {
 }
 
 export const EditSecretValueModal: React.FC<EditSecretValueModalProps> = ({ 
-  appSlug, 
+  appSlug,
+  scope,
   secretName, 
   envSlug,
   open, 
@@ -57,6 +55,10 @@ export const EditSecretValueModal: React.FC<EditSecretValueModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [showValue, setShowValue] = useState(false);
   const queryClient = useQueryClient();
+
+  const resolvedScope: SecretModalScope = scope ?? { appSlug: appSlug || '' };
+  const isGlobal = resolvedScope === 'global';
+  const targetAppSlug = isGlobal ? '' : resolvedScope.appSlug;
 
   const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<any>({
     resolver: zodResolver(schema),
@@ -70,11 +72,12 @@ export const EditSecretValueModal: React.FC<EditSecretValueModalProps> = ({
 
   const onSubmit = async (data: any) => {
     setLoading(true);
-    const formData = data as FormData;
     try {
-      // POST to /values as specified in the integration guide
-      // The API takes an array of values
-      await api.post(`/applications/${appSlug}/secrets/${encodeURIComponent(secretName)}/values`, [{
+      const endpoint = isGlobal
+        ? `/global/secrets/${encodeURIComponent(secretName)}/values`
+        : `/applications/${targetAppSlug}/secrets/${encodeURIComponent(secretName)}/values`;
+
+      await api.post(endpoint, [{
         environmentSlug: envSlug,
         value: data.value,
         isEnabled: data.isEnabled,
@@ -82,9 +85,17 @@ export const EditSecretValueModal: React.FC<EditSecretValueModalProps> = ({
         notBefore: toApiDateTime(data.notBefore),
       }]);
 
-      queryClient.invalidateQueries({ queryKey: ['secrets', appSlug] });
-      queryClient.invalidateQueries({ queryKey: ['secret', appSlug, secretName] });
-      queryClient.invalidateQueries({ queryKey: ['secret-versions', appSlug, secretName, envSlug] });
+      if (isGlobal) {
+        queryClient.invalidateQueries({ queryKey: ['global-secrets'] });
+        queryClient.invalidateQueries({ queryKey: ['global-secret', secretName] });
+        queryClient.invalidateQueries({ queryKey: ['global-secret-versions', secretName, envSlug] });
+        queryClient.invalidateQueries({ queryKey: ['effective-secrets'] });
+      } else {
+        queryClient.invalidateQueries({ queryKey: ['secrets', targetAppSlug] });
+        queryClient.invalidateQueries({ queryKey: ['effective-secrets', targetAppSlug] });
+        queryClient.invalidateQueries({ queryKey: ['secret', targetAppSlug, secretName] });
+        queryClient.invalidateQueries({ queryKey: ['secret-versions', targetAppSlug, secretName, envSlug] });
+      }
       reset();
       onOpenChange(false);
       toast.success('Secret value updated');
@@ -102,13 +113,16 @@ export const EditSecretValueModal: React.FC<EditSecretValueModalProps> = ({
           <div className="p-6">
             <DialogHeader className="mb-6">
               <div className="flex items-center gap-3 mb-2">
-                <div className="w-8 h-8 bg-grimoire/10 border border-grimoire text-grimoire flex items-center justify-center">
-                  <Lock className="w-4 h-4" />
+                <div className={`w-8 h-8 flex items-center justify-center border ${isGlobal ? 'bg-global/10 border-global text-global' : 'bg-grimoire/10 border-grimoire text-grimoire'}`}>
+                  {isGlobal ? <Globe className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
                 </div>
                 <div>
-                  <DialogTitle className="text-lg font-bold tracking-tight uppercase">Update Secret Value</DialogTitle>
+                  <DialogTitle className="text-lg font-bold tracking-tight uppercase">
+                    {isGlobal ? 'Update Global Secret Value' : 'Update Secret Value'}
+                  </DialogTitle>
                   <DialogDescription className="text-xs text-muted-foreground flex items-center gap-1 font-mono uppercase">
-                    {secretName} <ChevronRight className="w-3 h-3" /> {envSlug}
+                    {secretName} <ChevronRight className="w-3 h-3" />{' '}
+                    {envSlug === '*' ? 'All environments' : envSlug}
                   </DialogDescription>
                 </div>
               </div>
@@ -121,7 +135,7 @@ export const EditSecretValueModal: React.FC<EditSecretValueModalProps> = ({
                   <button 
                     type="button"
                     onClick={() => setShowValue(!showValue)}
-                    className="text-[10px] uppercase font-bold text-grimoire flex items-center gap-1"
+                    className={`text-[10px] uppercase font-bold flex items-center gap-1 ${isGlobal ? 'text-global' : 'text-grimoire'}`}
                   >
                     {showValue ? <><EyeOff className="w-3 h-3" /> Hide</> : <><Eye className="w-3 h-3" /> Reveal</>}
                   </button>
@@ -147,7 +161,7 @@ export const EditSecretValueModal: React.FC<EditSecretValueModalProps> = ({
                 <Switch 
                   checked={watch('isEnabled')}
                   onCheckedChange={(checked) => setValue('isEnabled', checked)}
-                  className="data-[state=checked]:bg-grimoire"
+                  className={isGlobal ? 'data-[state=checked]:bg-global' : 'data-[state=checked]:bg-grimoire'}
                 />
               </div>
 
@@ -184,7 +198,7 @@ export const EditSecretValueModal: React.FC<EditSecretValueModalProps> = ({
               <Button 
                 type="submit" 
                 disabled={loading}
-                className="bg-grimoire text-background hover:bg-grimoire/90 uppercase font-bold tracking-widest text-[10px] h-9 min-w-[140px]"
+                className={`${isGlobal ? 'bg-global text-black hover:bg-global/90' : 'bg-grimoire text-background hover:bg-grimoire/90'} uppercase font-bold tracking-widest text-[10px] h-9 min-w-[140px]`}
               >
                 {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Update Value'}
               </Button>

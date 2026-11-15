@@ -5,9 +5,9 @@ import { useStore } from './store/useStore';
 import { SetupScreen } from './components/auth/SetupScreen';
 import { Sidebar } from './components/layout/Sidebar';
 import { AppDetailView } from './components/app/AppDetailView';
+import { GlobalView } from './components/global/GlobalView';
 import { CreateAppModal } from './components/modals/CreateAppModal';
-import { Shield, Box } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { Box } from 'lucide-react';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -19,7 +19,7 @@ const queryClient = new QueryClient({
 });
 
 export default function App() {
-  const { isAdminAuthenticated, selectedAppSlug } = useStore();
+  const { isAdminAuthenticated, selectedView, selectedAppSlug } = useStore();
   const [isCreateAppOpen, setIsCreateAppOpen] = useState(false);
 
   if (!isAdminAuthenticated) {
@@ -46,7 +46,9 @@ export default function App() {
         <Sidebar onCreateApp={() => setIsCreateAppOpen(true)} />
         
         <main className="flex-1 ml-[220px] min-h-screen flex flex-col">
-          {selectedAppSlug ? (
+          {selectedView === 'global' ? (
+            <GlobalView />
+          ) : selectedAppSlug ? (
             <AppDetailView key={selectedAppSlug} />
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center p-12 text-center text-zinc-400">
@@ -55,7 +57,7 @@ export default function App() {
               </div>
               <h2 className="text-2xl font-bold tracking-tight mb-2 text-zinc-100 italic">Welcome to Grimoire</h2>
               <p className="text-zinc-500 max-w-sm mb-8 text-sm uppercase tracking-widest font-mono text-[10px]">
-                Select an application from the sidebar or create a new one to get started.
+                Select Global or an application from the sidebar, or create a new one to get started.
               </p>
               <button 
                 onClick={() => setIsCreateAppOpen(true)}

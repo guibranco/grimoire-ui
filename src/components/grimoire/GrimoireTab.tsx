@@ -1,34 +1,37 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery, useQueries, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { Secret, SecretStatus, SecretVersion, Environment } from '@/types/api';
-import { 
-  Plus, 
-  Search, 
-  Lock, 
-  Eye, 
-  EyeOff, 
-  Calendar, 
-  Clock, 
-  AlertCircle,
+import {
+  Application,
+  EffectiveSecret,
+  Secret,
+  SecretStatus,
+  SecretVersion,
+  Environment,
+} from '@/types/api';
+import { useStore } from '@/store/useStore';
+import {
+  Search,
+  Lock,
   MoreVertical,
   ChevronDown,
   ChevronUp,
   Loader2,
-  Trash2,
-  Edit2,
-  History
+  History,
+  Globe,
+  ArrowUpRight,
+  ExternalLink,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from '@/components/ui/table';
 import {
   DropdownMenu,
@@ -45,21 +48,39 @@ import { cn } from '@/lib/utils';
 import toast from 'react-hot-toast';
 
 export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
+  const { openGlobalEntry } = useStore();
   const [search, setSearch] = useState('');
+  const [showInherited, setShowInherited] = useState(true);
   const [isAddSecretOpen, setIsAddSecretOpen] = useState(false);
-  const [expandedSecret, setExpandedSecret] = useState<string | null>(null);
-  const [editingValue, setEditingValue] = useState<{ secretName: string, envSlug: string } | null>(null);
-  const [viewingVersions, setViewingVersions] = useState<{ secretName: string, envSlug: string } | null>(null);
-  const [deletingSecret, setDeletingSecret] = useState<string | null>(null);
-  
+  const [overrideTarget, setOverrideTarget] = useState<{ name: string; description: string } | null>(null);
+  const [expandedSecret, setExpandedSecret] = useState<{ name: string; source: 'application' | 'global' } | null>(null);
+  const [editingValue, setEditingValue] = useState<{ secretName: string; envSlug: string } | null>(null);
+  const [viewingVersions, setViewingVersions] = useState<{
+    secretName: string;
+    envSlug: string;
+    scope: 'global' | { appSlug: string };
+  } | null>(null);
+  const [deletingSecret, setDeletingSecret] = useState<EffectiveSecret | null>(null);
+  const [enablingInheritance, setEnablingInheritance] = useState(false);
+
   const queryClient = useQueryClient();
 
-  const { data: secrets, isLoading: secretsLoading } = useQuery({
-    queryKey: ['secrets', appSlug],
+  const { data: app } = useQuery({
+    queryKey: ['application', appSlug],
     queryFn: async () => {
-      const res = await api.get<Secret[]>(`/applications/${appSlug}/secrets`);
+      const res = await api.get<Application>(`/applications/${appSlug}`);
       return res.data;
     },
+    enabled: !!appSlug,
+  });
+
+  const { data: secrets, isLoading: secretsLoading } = useQuery({
+    queryKey: ['effective-secrets', appSlug],
+    queryFn: async () => {
+      const res = await api.get<EffectiveSecret[]>(`/applications/${appSlug}/secrets/effective`);
+      return res.data;
+    },
+    enabled: !!appSlug,
   });
 
   const { data: envs } = useQuery({
@@ -68,12 +89,20 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
       const res = await api.get<Environment[]>(`/applications/${appSlug}/environments`);
       return res.data;
     },
+    enabled: !!appSlug,
   });
 
   const { data: expandedSecretDetail, isLoading: expandedSecretLoading } = useQuery({
-    queryKey: ['secret', appSlug, expandedSecret],
+    queryKey: [
+      expandedSecret?.source === 'global' ? 'global-secret' : 'secret',
+      ...(expandedSecret?.source === 'global' ? [expandedSecret.name] : [appSlug, expandedSecret?.name]),
+    ],
     queryFn: async () => {
-      const res = await api.get<Secret>(`/applications/${appSlug}/secrets/${encodeURIComponent(expandedSecret!)}`);
+      const url =
+        expandedSecret?.source === 'global'
+          ? `/global/secrets/${encodeURIComponent(expandedSecret.name)}`
+          : `/applications/${appSlug}/secrets/${encodeURIComponent(expandedSecret!.name)}`;
+      const res = await api.get<Secret>(url);
       return res.data;
     },
     enabled: !!appSlug && !!expandedSecret,
@@ -81,21 +110,51 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
 
   const safeSecrets = Array.isArray(secrets) ? secrets : [];
   const safeEnvs = Array.isArray(envs) ? envs : [];
-  const searchLower = search.toLowerCase();
+  const visibleSecrets = showInherited
+    ? safeSecrets
+    : safeSecrets.filter(s => s.source !== 'global');
 
-  const versionPairs = useMemo(
+  const searchLower = search.toLowerCase();
+  const filteredSecrets = visibleSecrets.filter(s =>
+    (s.name || '').toLowerCase().includes(searchLower) ||
+    (s.description || '').toLowerCase().includes(searchLower)
+  );
+
+  // Version queries for app secrets (per env) and global secrets (per env + wildcard '*')
+  const appSecretsList = useMemo(
+    () => safeSecrets.filter(s => s.source !== 'global'),
+    [safeSecrets]
+  );
+  const globalSecretsList = useMemo(
+    () => safeSecrets.filter(s => s.source === 'global'),
+    [safeSecrets]
+  );
+
+  const appVersionPairs = useMemo(
     () =>
-      safeSecrets.flatMap((secret) =>
+      appSecretsList.flatMap((secret) =>
         safeEnvs.map((env) => ({
           secretName: secret.name,
           envSlug: env.slug,
         }))
       ),
-    [safeSecrets, safeEnvs]
+    [appSecretsList, safeEnvs]
   );
 
-  const versionQueries = useQueries({
-    queries: versionPairs.map(({ secretName, envSlug }) => ({
+  const globalVersionPairs = useMemo(
+    () =>
+      globalSecretsList.flatMap((secret) => [
+        { secretName: secret.name, envSlug: '*' },
+        ...safeEnvs.map((env) => ({
+          secretName: secret.name,
+          envSlug: env.slug,
+        })),
+      ]),
+    [globalSecretsList, safeEnvs]
+  );
+
+  const appVersionQueries = useQueries({
+    queries: appVersionPairs.map(({ secretName, envSlug }) => ({
       queryKey: ['secret-versions', appSlug, secretName, envSlug],
       queryFn: async () => {
         try {
@@ -115,10 +174,31 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
     })),
   });
 
-  const latestVersionByPair = useMemo(() => {
+  const globalVersionQueries = useQueries({
+    queries: globalVersionPairs.map(({ secretName, envSlug }) => ({
+      queryKey: ['global-secret-versions', secretName, envSlug],
+      queryFn: async () => {
+        try {
+          const res = await api.get<SecretVersion[]>(
+            `/global/secrets/${encodeURIComponent(secretName)}/versions/${encodeURIComponent(envSlug)}`
+          );
+          return Array.isArray(res.data) ? res.data : [];
+        } catch (err: any) {
+          if (err?.response?.status === 404) {
+            return [] as SecretVersion[];
+          }
+          throw err;
+        }
+      },
+      enabled: !!secretName && !!envSlug,
+      retry: false,
+    })),
+  });
+
+  const latestAppVersionByPair = useMemo(() => {
     const map = new Map<string, SecretVersion>();
-    versionPairs.forEach(({ secretName, envSlug }, idx) => {
-      const versions = versionQueries[idx]?.data;
+    appVersionPairs.forEach(({ secretName, envSlug }, idx) => {
+      const versions = appVersionQueries[idx]?.data;
       if (Array.isArray(versions) && versions.length > 0) {
         const latest = versions.reduce((best, curr) =>
           (curr.version ?? 0) >= (best.version ?? 0) ? curr : best
@@ -127,29 +207,55 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
       }
     });
     return map;
-  }, [versionPairs, versionQueries]);
+  }, [appVersionPairs, appVersionQueries]);
+
+  const latestGlobalVersionByPair = useMemo(() => {
+    const map = new Map<string, SecretVersion>();
+    globalVersionPairs.forEach(({ secretName, envSlug }, idx) => {
+      const versions = globalVersionQueries[idx]?.data;
+      if (Array.isArray(versions) && versions.length > 0) {
+        const latest = versions.reduce((best, curr) =>
+          (curr.version ?? 0) >= (best.version ?? 0) ? curr : best
+        );
+        map.set(`${secretName}:::${envSlug}`, latest);
+      }
+    });
+    return map;
+  }, [globalVersionPairs, globalVersionQueries]);
 
   const expandedVersionsLoading = useMemo(() => {
     if (!expandedSecret) return false;
-    return versionPairs.some(
-      (pair, idx) => pair.secretName === expandedSecret && versionQueries[idx]?.isLoading
+    if (expandedSecret.source === 'global') {
+      return globalVersionPairs.some(
+        (pair, idx) => pair.secretName === expandedSecret.name && globalVersionQueries[idx]?.isLoading
+      );
+    }
+    return appVersionPairs.some(
+      (pair, idx) => pair.secretName === expandedSecret.name && appVersionQueries[idx]?.isLoading
     );
-  }, [expandedSecret, versionPairs, versionQueries]);
+  }, [expandedSecret, appVersionPairs, appVersionQueries, globalVersionPairs, globalVersionQueries]);
 
-  const filteredSecrets = safeSecrets.filter(s =>
-    (s.name || '').toLowerCase().includes(searchLower) ||
-    (s.description || '').toLowerCase().includes(searchLower)
-  );
+  const resolveSecretVersion = (
+    secret: EffectiveSecret,
+    envSlug: string
+  ): { version?: SecretVersion; resolvedEnvSlug: string } => {
+    if (secret.source === 'global') {
+      const envSpecific = latestGlobalVersionByPair.get(`${secret.name}:::${envSlug}`);
+      if (envSpecific) return { version: envSpecific, resolvedEnvSlug: envSlug };
+      const wildcard = latestGlobalVersionByPair.get(`${secret.name}:::*`);
+      if (wildcard) return { version: wildcard, resolvedEnvSlug: '*' };
+      return { version: undefined, resolvedEnvSlug: envSlug };
+    }
+    return {
+      version: latestAppVersionByPair.get(`${secret.name}:::${envSlug}`),
+      resolvedEnvSlug: envSlug,
+    };
+  };
 
-  const resolveSecretVersion = (secretName: string, envSlug: string): SecretVersion | undefined => (
-    latestVersionByPair.get(`${secretName}:::${envSlug}`)
-  );
-
-  const getSecretStatus = (secretName: string, envSlug: string): SecretStatus => {
-    const versionInfo = resolveSecretVersion(secretName, envSlug);
+  const computeStatusFromVersion = (versionInfo?: SecretVersion): SecretStatus => {
     if (!versionInfo) return SecretStatus.MISSING;
     if (!versionInfo.isEnabled) return SecretStatus.DISABLED;
-    
+
     const now = new Date();
     if (versionInfo.expiresAt) {
       const expires = new Date(versionInfo.expiresAt);
@@ -159,8 +265,13 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
       const notBefore = new Date(versionInfo.notBefore);
       if (!Number.isNaN(notBefore.getTime()) && notBefore > now) return SecretStatus.PENDING;
     }
-    
+
     return SecretStatus.ENABLED;
+  };
+
+  const getSecretStatus = (secret: EffectiveSecret, envSlug: string): SecretStatus => {
+    const { version } = resolveSecretVersion(secret, envSlug);
+    return computeStatusFromVersion(version);
   };
 
   const formatDate = (ts?: string | null) => {
@@ -169,81 +280,102 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
     return Number.isNaN(d.getTime()) ? '—' : format(d, 'yyyy-MM-dd');
   };
 
-  const StatusChip = ({ status }: { status: SecretStatus }) => {
-    switch (status) {
-      case SecretStatus.ENABLED:
-        return (
-          <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/20 text-[10px] uppercase font-bold tracking-widest gap-1 p-1 pr-2">
-            <Lock className="w-2.5 h-2.5" /> Enabled
-          </Badge>
-        );
-      case SecretStatus.DISABLED:
-        return (
-          <Badge variant="outline" className="bg-gray-500/10 text-gray-500 border-gray-500/20 text-[10px] uppercase font-bold tracking-widest p-1 px-2">
-            Disabled
-          </Badge>
-        );
-      case SecretStatus.EXPIRED:
-        return (
-          <Badge variant="outline" className="bg-red-500/10 text-red-500 border-red-500/20 text-[10px] uppercase font-bold tracking-widest gap-1 p-1 pr-2">
-            <Clock className="w-2.5 h-2.5" /> Expired
-          </Badge>
-        );
-      case SecretStatus.PENDING:
-        return (
-          <Badge variant="outline" className="bg-amber-500/10 text-amber-500 border-amber-500/20 text-[10px] uppercase font-bold tracking-widest gap-1 p-1 pr-2">
-            <AlertCircle className="w-2.5 h-2.5" /> Pending
-          </Badge>
-        );
-      case SecretStatus.MISSING:
-        return (
-          <span className="text-muted-foreground/30 font-mono text-lg leading-none">−</span>
-        );
-      default:
-        return null;
+  const handleEnableInheritance = async () => {
+    if (!app) return;
+    setEnablingInheritance(true);
+    try {
+      await api.put(`/applications/${appSlug}`, {
+        name: app.name,
+        description: app.description ?? '',
+        inheritGlobals: true,
+      });
+      await queryClient.invalidateQueries({ queryKey: ['application', appSlug] });
+      await queryClient.invalidateQueries({ queryKey: ['applications'] });
+      await queryClient.invalidateQueries({ queryKey: ['effective-configurations', appSlug] });
+      await queryClient.invalidateQueries({ queryKey: ['effective-secrets', appSlug] });
+      toast.success('Global inheritance enabled');
+    } catch {
+      toast.error('Failed to enable global inheritance');
+    } finally {
+      setEnablingInheritance(false);
     }
   };
 
   const handleDeleteSecret = async () => {
     if (!deletingSecret) return;
+    const wasOverride = deletingSecret.overridesGlobal;
     try {
-      await api.delete(`/applications/${appSlug}/secrets/${encodeURIComponent(deletingSecret)}`);
-      queryClient.invalidateQueries({ queryKey: ['secrets', appSlug] });
-      queryClient.invalidateQueries({ queryKey: ['secret', appSlug, deletingSecret] });
-      queryClient.invalidateQueries({ queryKey: ['secret-versions', appSlug, deletingSecret] });
-      if (expandedSecret === deletingSecret) {
+      await api.delete(`/applications/${appSlug}/secrets/${encodeURIComponent(deletingSecret.name)}`);
+      await queryClient.invalidateQueries({ queryKey: ['effective-secrets', appSlug] });
+      await queryClient.invalidateQueries({ queryKey: ['secrets', appSlug] });
+      await queryClient.invalidateQueries({ queryKey: ['secret', appSlug, deletingSecret.name] });
+      await queryClient.invalidateQueries({ queryKey: ['secret-versions', appSlug, deletingSecret.name] });
+      if (expandedSecret?.name === deletingSecret.name) {
         setExpandedSecret(null);
       }
-      toast.success('Secret deleted');
-    } catch (err) {
+      toast.success(wasOverride ? 'Global value is active again' : 'Secret deleted');
+      setDeletingSecret(null);
+    } catch {
       toast.error('Failed to delete secret');
     }
   };
 
   return (
     <div className="flex flex-col h-full">
-      <div className="h-[48px] border-b border-border bg-[#121214] flex items-center justify-between px-6 shrink-0">
+      <div className="h-[48px] border-b border-border bg-[#121214] flex items-center justify-between px-6 shrink-0 gap-4">
         <div className="flex items-center gap-4 flex-1">
           <span className="text-[11px] font-bold text-zinc-500 uppercase tracking-widest whitespace-nowrap">
-            {filteredSecrets?.length || 0} Secrets Defined
+            {filteredSecrets.length} Secrets Defined
           </span>
           <div className="relative flex-1 max-w-xs">
             <Search className="absolute left-2.5 top-1.5 h-3.5 w-3.5 text-zinc-600" />
-            <input 
-              placeholder="Search..." 
+            <input
+              placeholder="Search..."
               className="w-full h-[28px] pl-8 pr-3 bg-zinc-900 border border-border text-xs focus:border-grimoire transition-colors"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Switch
+              id="secrets-show-inherited"
+              checked={showInherited}
+              onCheckedChange={setShowInherited}
+              className="data-[state=checked]:bg-global"
+            />
+            <Label
+              htmlFor="secrets-show-inherited"
+              className="text-[10px] uppercase font-bold tracking-widest text-zinc-400 cursor-pointer"
+            >
+              Show inherited
+            </Label>
+          </div>
         </div>
-        <button 
-          onClick={() => setIsAddSecretOpen(true)}
+        <button
+          type="button"
+          onClick={() => {
+            setOverrideTarget(null);
+            setIsAddSecretOpen(true);
+          }}
           className="h-[28px] px-3 bg-grimoire text-black hover:bg-grimoire/90 font-bold uppercase tracking-tight text-[10px] transition-colors"
         >
           + Add Secret
         </button>
       </div>
+
+      {app?.inheritGlobals === false && (
+        <div className="px-6 py-2 bg-zinc-900/70 border-b border-border flex items-center justify-between text-xs text-zinc-400 shrink-0">
+          <span>This application does not inherit global values</span>
+          <button
+            type="button"
+            disabled={enablingInheritance}
+            onClick={handleEnableInheritance}
+            className="text-[11px] font-bold uppercase tracking-widest text-global hover:text-global/80 transition-colors disabled:opacity-50"
+          >
+            {enablingInheritance ? 'Enabling...' : 'Turn it on'}
+          </button>
+        </div>
+      )}
 
       <div className="flex-1 overflow-auto scroll-area">
         {secretsLoading ? (
@@ -251,7 +383,7 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
             <Loader2 className="w-8 h-8 animate-spin" />
             <span className="text-[10px] uppercase font-bold tracking-widest font-mono text-zinc-700">Syncing Secrets...</span>
           </div>
-        ) : filteredSecrets?.length === 0 ? (
+        ) : filteredSecrets.length === 0 ? (
           <div className="flex flex-col items-center justify-center p-12 text-center h-full opacity-50">
             <Lock className="w-12 h-12 mb-4 text-muted-foreground" />
             <h3 className="text-lg font-bold tracking-tight uppercase">Secrets vault is empty</h3>
@@ -270,41 +402,86 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
               </TableHeader>
               <TableBody>
                 {filteredSecrets.map((secret) => {
-                  const isExpanded = expandedSecret === secret.name;
-                  const resolvedSecret: Secret =
+                  const isGlobal = secret.source === 'global';
+                  const isExpanded =
+                    expandedSecret?.name === secret.name &&
+                    expandedSecret?.source === secret.source;
+                  const resolvedMetadata: EffectiveSecret =
                     isExpanded && expandedSecretDetail?.name === secret.name
-                      ? {
-                          ...secret,
-                          ...expandedSecretDetail,
-                        }
+                      ? { ...secret, ...expandedSecretDetail }
                       : secret;
+
                   return (
-                    <React.Fragment key={secret.name}>
-                      <TableRow 
+                    <React.Fragment key={`${secret.source}:::${secret.name}`}>
+                      <TableRow
                         className={cn(
-                          "cursor-pointer border-zinc-900/50 transition-colors h-14 group", 
-                          isExpanded ? "bg-zinc-900/40" : "hover:bg-zinc-900/20"
+                          "cursor-pointer border-zinc-900/50 transition-colors h-14 group",
+                          isGlobal && "bg-global/[0.03] hover:bg-global/[0.06]",
+                          !isGlobal && (isExpanded ? "bg-zinc-900/40" : "hover:bg-zinc-900/20")
                         )}
-                        onClick={() => setExpandedSecret(isExpanded ? null : secret.name)}
+                        onClick={() =>
+                          setExpandedSecret(
+                            isExpanded ? null : { name: secret.name, source: secret.source }
+                          )
+                        }
                       >
                         <TableCell className="text-center px-2">
-                          {isExpanded ? <ChevronUp className="w-3 h-3 text-grimoire" /> : <ChevronDown className="w-3 h-3 text-zinc-700" />}
+                          {isExpanded ? (
+                            <ChevronUp className={cn("w-3 h-3", isGlobal ? "text-global" : "text-grimoire")} />
+                          ) : (
+                            <ChevronDown className="w-3 h-3 text-zinc-700" />
+                          )}
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-col">
-                            <span className={cn("font-mono text-sm font-medium transition-colors", isExpanded ? "text-grimoire" : "text-zinc-200")}>
-                              {secret.name}
-                            </span>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span
+                                className={cn(
+                                  "font-mono text-sm font-medium transition-colors",
+                                  isGlobal
+                                    ? "text-zinc-300"
+                                    : isExpanded
+                                      ? "text-grimoire"
+                                      : "text-zinc-200"
+                                )}
+                              >
+                                {secret.name}
+                              </span>
+                              {isGlobal && (
+                                <Badge
+                                  variant="outline"
+                                  className="border-global/40 bg-global/10 text-global text-[9px] font-bold uppercase tracking-widest gap-1"
+                                >
+                                  <Globe className="w-2.5 h-2.5" />
+                                  Global
+                                </Badge>
+                              )}
+                              {!isGlobal && secret.overridesGlobal && (
+                                <Badge
+                                  variant="outline"
+                                  title="Application secret takes precedence over the inherited global secret"
+                                  className="border-global/30 bg-global/5 text-global text-[9px] font-mono cursor-help"
+                                >
+                                  overrides global
+                                </Badge>
+                              )}
+                            </div>
                             <span className="text-[11px] text-zinc-600 truncate max-w-md">{secret.description || '—'}</span>
                           </div>
                         </TableCell>
                         <TableCell className="hidden lg:table-cell">
                           <div className="flex gap-1">
                             {safeEnvs.map(env => {
-                              const status = getSecretStatus(resolvedSecret.name, env.slug);
+                              const status = getSecretStatus(secret, env.slug);
                               if (status === SecretStatus.MISSING) return null;
                               return (
-                                <div key={env.slug} className="px-1.5 py-0.5 border border-zinc-800 text-[9px] font-bold font-mono text-zinc-500 uppercase tracking-tighter">
+                                <div
+                                  key={env.slug}
+                                  className={cn(
+                                    "px-1.5 py-0.5 border text-[9px] font-bold font-mono uppercase tracking-tighter",
+                                    isGlobal ? "border-global/30 text-global/80" : "border-zinc-800 text-zinc-500"
+                                  )}
+                                >
                                   {env.slug.substring(0, 3)}
                                 </div>
                               );
@@ -312,38 +489,75 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
                           </div>
                         </TableCell>
                         <TableCell className="text-right px-6">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger
+                          {isGlobal ? (
+                            <div
+                              className="flex justify-end items-center gap-2"
                               onClick={(e) => e.stopPropagation()}
-                              className="h-8 w-8 inline-flex items-center justify-center text-zinc-600 hover:text-zinc-300 transition-colors"
                             >
-                              <MoreVertical className="w-4 h-4" />
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="bg-[#0A0A0B] border-border p-0">
-                              <DropdownMenuItem 
-                                className="text-[10px] uppercase font-bold tracking-widest p-2 hover:bg-zinc-900 cursor-pointer"
-                                onClick={() => setExpandedSecret(isExpanded ? null : secret.name)}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOverrideTarget({
+                                    name: secret.name,
+                                    description: secret.description || '',
+                                  });
+                                  setIsAddSecretOpen(true);
+                                }}
+                                className="px-2 py-0.5 border border-grimoire/30 text-[10px] font-bold uppercase tracking-widest text-grimoire hover:bg-grimoire/10 transition-colors inline-flex items-center gap-1"
                               >
-                                {isExpanded ? 'Collapse' : 'Show Details'}
-                              </DropdownMenuItem>
-                              <DropdownMenuItem 
-                                className="text-destructive text-[10px] uppercase font-bold tracking-widest p-2 hover:bg-destructive/10 cursor-pointer"
-                                onClick={(e) => { e.stopPropagation(); setDeletingSecret(secret.name); }}
+                                <ArrowUpRight className="w-3 h-3" />
+                                Override
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => openGlobalEntry('secrets', secret.name)}
+                                className="px-2 py-0.5 border border-global/30 text-[10px] font-bold uppercase tracking-widest text-global hover:bg-global/10 transition-colors inline-flex items-center gap-1"
                               >
-                                Delete Secret
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                                <ExternalLink className="w-3 h-3" />
+                                View in Global
+                              </button>
+                            </div>
+                          ) : (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger
+                                onClick={(e) => e.stopPropagation()}
+                                className="h-8 w-8 inline-flex items-center justify-center text-zinc-600 hover:text-zinc-300 transition-colors"
+                              >
+                                <MoreVertical className="w-4 h-4" />
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="bg-[#0A0A0B] border-border p-0">
+                                <DropdownMenuItem
+                                  className="text-[10px] uppercase font-bold tracking-widest p-2 hover:bg-zinc-900 cursor-pointer"
+                                  onClick={() =>
+                                    setExpandedSecret(
+                                      isExpanded ? null : { name: secret.name, source: secret.source }
+                                    )
+                                  }
+                                >
+                                  {isExpanded ? 'Collapse' : 'Show Details'}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  className="text-destructive text-[10px] uppercase font-bold tracking-widest p-2 hover:bg-destructive/10 cursor-pointer"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDeletingSecret(secret);
+                                  }}
+                                >
+                                  Delete Secret
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
                         </TableCell>
                       </TableRow>
                       {isExpanded && (
                         <TableRow className="bg-[#080809] border-zinc-900 hover:bg-[#080809]">
                           <TableCell colSpan={4} className="p-0">
-                            <div className="p-8 border-l-2 border-grimoire">
+                            <div className={cn("p-8 border-l-2", isGlobal ? "border-global" : "border-grimoire")}>
                               <div className="grid grid-cols-1 xl:grid-cols-2 gap-12">
                                 <div>
                                   <h4 className="text-[10px] uppercase font-bold tracking-[0.25em] text-zinc-600 mb-6 flex items-center gap-2">
-                                    <div className="w-1 h-3 bg-grimoire" />
+                                    <div className={cn("w-1 h-3", isGlobal ? "bg-global" : "bg-grimoire")} />
                                     Secret Metadata
                                   </h4>
                                   <div className="grid grid-cols-2 gap-6 bg-black/20 p-6 border border-zinc-900">
@@ -353,25 +567,25 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
                                     </div>
                                     <div>
                                       <p className="text-[11px] font-bold text-zinc-700 uppercase mb-1">Created</p>
-                                      <p className="font-mono text-xs text-zinc-400">{formatDate(resolvedSecret.createdAt)}</p>
+                                      <p className="font-mono text-xs text-zinc-400">{formatDate(resolvedMetadata.createdAt)}</p>
                                     </div>
                                     <div>
                                       <p className="text-[11px] font-bold text-zinc-700 uppercase mb-1">Audit ID</p>
-                                      <p className="font-mono text-xs text-zinc-400">#{resolvedSecret.id?.substring(0, 8) || 'N/A'}</p>
+                                      <p className="font-mono text-xs text-zinc-400">#{resolvedMetadata.id?.substring(0, 8) || 'N/A'}</p>
                                     </div>
                                     <div className="col-span-2">
                                       <p className="text-[11px] font-bold text-zinc-700 uppercase mb-1">Description</p>
-                                      <p className="text-sm text-zinc-400 leading-relaxed">{resolvedSecret.description || '—'}</p>
+                                      <p className="text-sm text-zinc-400 leading-relaxed">{resolvedMetadata.description || '—'}</p>
                                     </div>
                                   </div>
                                 </div>
-                                
+
                                 <div className="space-y-6">
                                   <h4 className="text-[10px] uppercase font-bold tracking-[0.25em] text-zinc-600 flex items-center gap-2">
                                     <div className="w-1 h-3 bg-zinc-800" />
                                     Environment Logic
                                     {(expandedSecretLoading || expandedVersionsLoading) && (
-                                      <Loader2 className="w-3 h-3 animate-spin text-grimoire ml-1" />
+                                      <Loader2 className={cn("w-3 h-3 animate-spin ml-1", isGlobal ? "text-global" : "text-grimoire")} />
                                     )}
                                   </h4>
                                   <div className="border border-zinc-900 overflow-hidden">
@@ -386,8 +600,8 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
                                       </TableHeader>
                                       <TableBody>
                                         {safeEnvs.map(env => {
-                                          const status = getSecretStatus(resolvedSecret.name, env.slug);
-                                          const latestVersion = resolveSecretVersion(resolvedSecret.name, env.slug);
+                                          const { version: latestVersion, resolvedEnvSlug } = resolveSecretVersion(secret, env.slug);
+                                          const status = computeStatusFromVersion(latestVersion);
                                           return (
                                             <TableRow key={env.slug} className="border-zinc-900 hover:bg-zinc-900/30 h-12 transition-colors">
                                               <td className="px-4 font-mono text-[11px] font-bold">{env.name}</td>
@@ -402,7 +616,7 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
                                                   )} />
                                                   <span className={cn(
                                                     "text-[10px] font-bold uppercase tracking-widest",
-                                                    status === SecretStatus.ENABLED ? "text-green-500" : 
+                                                    status === SecretStatus.ENABLED ? "text-green-500" :
                                                     status === SecretStatus.MISSING ? "text-zinc-600" : "text-zinc-400"
                                                   )}>
                                                     {status}
@@ -413,8 +627,17 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
                                                 {latestVersion ? (
                                                   <button
                                                     type="button"
-                                                    onClick={() => setViewingVersions({ secretName: secret.name, envSlug: env.slug })}
-                                                    className="inline-flex items-center gap-1 text-zinc-400 hover:text-grimoire transition-colors"
+                                                    onClick={() =>
+                                                      setViewingVersions({
+                                                        secretName: secret.name,
+                                                        envSlug: resolvedEnvSlug,
+                                                        scope: isGlobal ? 'global' : { appSlug },
+                                                      })
+                                                    }
+                                                    className={cn(
+                                                      "inline-flex items-center gap-1 text-zinc-400 transition-colors",
+                                                      isGlobal ? "hover:text-global" : "hover:text-grimoire"
+                                                    )}
                                                     title="View version history"
                                                   >
                                                     <span>v{latestVersion.version}</span>
@@ -425,12 +648,29 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
                                                 )}
                                               </td>
                                               <td className="text-right pr-4">
-                                                <button 
-                                                  className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 hover:text-grimoire transition-colors"
-                                                  onClick={() => setEditingValue({ secretName: secret.name, envSlug: env.slug })}
-                                                >
-                                                  {status === SecretStatus.MISSING ? '+ SET' : 'UPDATE'}
-                                                </button>
+                                                {isGlobal ? (
+                                                  <button
+                                                    type="button"
+                                                    className="text-[10px] font-bold uppercase tracking-widest text-grimoire hover:text-grimoire/80 transition-colors"
+                                                    onClick={() => {
+                                                      setOverrideTarget({
+                                                        name: secret.name,
+                                                        description: secret.description || '',
+                                                      });
+                                                      setIsAddSecretOpen(true);
+                                                    }}
+                                                  >
+                                                    OVERRIDE
+                                                  </button>
+                                                ) : (
+                                                  <button
+                                                    type="button"
+                                                    className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 hover:text-grimoire transition-colors"
+                                                    onClick={() => setEditingValue({ secretName: secret.name, envSlug: env.slug })}
+                                                  >
+                                                    {status === SecretStatus.MISSING ? '+ SET' : 'UPDATE'}
+                                                  </button>
+                                                )}
                                               </td>
                                             </TableRow>
                                           );
@@ -453,15 +693,20 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
         )}
       </div>
 
-      <AddSecretModal 
-        appSlug={appSlug} 
-        open={isAddSecretOpen} 
-        onOpenChange={setIsAddSecretOpen} 
+      <AddSecretModal
+        scope={{ appSlug }}
+        initialName={overrideTarget?.name}
+        initialDescription={overrideTarget?.description}
+        open={isAddSecretOpen}
+        onOpenChange={(open) => {
+          setIsAddSecretOpen(open);
+          if (!open) setOverrideTarget(null);
+        }}
       />
 
       {editingValue && (
-        <EditSecretValueModal 
-          appSlug={appSlug}
+        <EditSecretValueModal
+          scope={{ appSlug }}
           secretName={editingValue.secretName}
           envSlug={editingValue.envSlug}
           open={!!editingValue}
@@ -471,7 +716,7 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
 
       {viewingVersions && (
         <SecretVersionsModal
-          appSlug={appSlug}
+          scope={viewingVersions.scope}
           secretName={viewingVersions.secretName}
           envSlug={viewingVersions.envSlug}
           open={!!viewingVersions}
@@ -479,12 +724,16 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
         />
       )}
 
-      <ConfirmationModal 
+      <ConfirmationModal
         open={!!deletingSecret}
         onOpenChange={(open) => !open && setDeletingSecret(null)}
         onConfirm={handleDeleteSecret}
         title="Delete Secret"
-        description={`Are you sure you want to delete the secret "${deletingSecret}"? This will delete all values in all environments. This action cannot be undone.`}
+        description={
+          deletingSecret?.overridesGlobal
+            ? `Are you sure you want to delete the app-level override for "${deletingSecret?.name}"? The inherited global secret will become active again.`
+            : `Are you sure you want to delete the secret "${deletingSecret?.name}"? This will delete all values in all environments. This action cannot be undone.`
+        }
         confirmText="Permanently Delete"
         variant="destructive"
       />

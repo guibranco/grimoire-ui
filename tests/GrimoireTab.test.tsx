@@ -38,11 +38,16 @@ describe('GrimoireTab', () => {
   it('renders without crashing when secrets have null descriptions, missing dates, or 404 version endpoints', async () => {
     const mockGet = api.get as ReturnType<typeof vi.fn>;
     mockGet.mockImplementation((url: string) => {
-      if (url === '/applications/my-app/secrets') {
+      if (url === '/applications/my-app') {
+        return Promise.resolve({
+          data: { id: '1', name: 'My App', slug: 'my-app', inheritGlobals: true },
+        });
+      }
+      if (url === '/applications/my-app/secrets/effective') {
         return Promise.resolve({
           data: [
-            { name: 'DB_PASSWORD', description: null, createdAt: '' },
-            { name: 'API_TOKEN', description: 'Main API token' },
+            { name: 'DB_PASSWORD', description: null, source: 'application', overridesGlobal: false },
+            { name: 'API_TOKEN', description: 'Main API token', source: 'application', overridesGlobal: false },
           ],
         });
       }
@@ -109,15 +114,19 @@ describe('GrimoireTab', () => {
   it('resolves status and latest version strictly from /versions/{envSlug} metadata', async () => {
     const mockGet = api.get as ReturnType<typeof vi.fn>;
     mockGet.mockImplementation((url: string) => {
-      if (url === '/applications/my-app/secrets') {
+      if (url === '/applications/my-app') {
+        return Promise.resolve({
+          data: { id: '1', name: 'My App', slug: 'my-app', inheritGlobals: true },
+        });
+      }
+      if (url === '/applications/my-app/secrets/effective') {
         return Promise.resolve({
           data: [
             {
-              id: '90871406-362f-403b-8acb-ba1331a40f72',
               name: 'Mailbox--Password',
               description: 'Mail password',
-              createdAt: '2026-11-15T19:11:05.2077893+00:00',
-              updatedAt: '2026-11-15T19:11:05.2077894+00:00',
+              source: 'application',
+              overridesGlobal: false,
             },
           ],
         });
@@ -187,6 +196,72 @@ describe('GrimoireTab', () => {
       expect(screen.getByText('enabled')).toBeDefined();
       expect(screen.getByText('v2')).toBeDefined();
       expect(screen.getByText('missing')).toBeDefined();
+    });
+  });
+
+  it('displays inherited global secrets with Global badge, resolves global versions, and opens Override modal prefilled', async () => {
+    const mockGet = api.get as ReturnType<typeof vi.fn>;
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/applications/my-app') {
+        return Promise.resolve({
+          data: { id: '1', name: 'My App', slug: 'my-app', inheritGlobals: true },
+        });
+      }
+      if (url === '/applications/my-app/secrets/effective') {
+        return Promise.resolve({
+          data: [
+            {
+              name: 'Sentry--Dsn',
+              description: 'Shared error reporting',
+              source: 'global',
+              overridesGlobal: false,
+            },
+          ],
+        });
+      }
+      if (url === '/applications/my-app/environments') {
+        return Promise.resolve({
+          data: [{ name: 'Production', slug: 'production' }],
+        });
+      }
+      if (url === `/global/secrets/Sentry--Dsn/versions/${encodeURIComponent('*')}`) {
+        return Promise.resolve({
+          data: [
+            {
+              id: 'gv-1',
+              version: 1,
+              isEnabled: true,
+              expiresAt: null,
+              notBefore: null,
+              createdAt: '2026-11-15T12:00:00Z',
+            },
+          ],
+        });
+      }
+      if (url.includes('/versions/')) {
+        return Promise.resolve({ data: [] });
+      }
+      return Promise.resolve({ data: [] });
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <GrimoireTab appSlug="my-app" />
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Sentry--Dsn')).toBeDefined();
+      expect(screen.getByText('Global')).toBeDefined();
+      expect(screen.getByText('pro')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Override/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Override Global Secret')).toBeDefined();
+      const nameInput = screen.getByLabelText('Secret Key / Name') as HTMLInputElement;
+      expect(nameInput.value).toBe('Sentry--Dsn');
     });
   });
 });

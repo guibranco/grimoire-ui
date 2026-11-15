@@ -3,6 +3,7 @@ import { render, screen, waitFor, cleanup } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ConfigTab } from '../src/components/config/ConfigTab';
 import { api } from '../src/lib/api';
+import { useStore } from '../src/store/useStore';
 
 vi.mock('../src/lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/lib/api')>();
@@ -28,6 +29,7 @@ describe('ConfigTab', () => {
         },
       },
     });
+    useStore.setState({ selectedEnvironmentSlug: null });
     vi.clearAllMocks();
   });
 
@@ -38,20 +40,25 @@ describe('ConfigTab', () => {
   it('displays configuration keys, values, and descriptions with exact API casing', async () => {
     const mockGet = api.get as ReturnType<typeof vi.fn>;
     mockGet.mockImplementation((url: string) => {
+      if (url === '/applications/my-app') {
+        return Promise.resolve({
+          data: { id: '1', name: 'My App', slug: 'my-app', inheritGlobals: true },
+        });
+      }
       if (url === '/applications/my-app/environments') {
         return Promise.resolve({
           data: [{ name: 'Production', slug: 'production' }],
         });
       }
-      if (url === '/applications/my-app/configurations') {
+      if (url === '/applications/my-app/configurations/effective?environment=production') {
         return Promise.resolve({
           data: [
             {
               key: 'FeatureFlag.EnableBetaUI',
               value: 'TrueOrMixedCaseValue',
               description: 'Enables Beta UI for Selected Users',
-              environmentSlug: 'production',
-              updatedAt: '2026-11-15T10:00:00Z',
+              source: 'application',
+              overridesGlobal: false,
             },
           ],
         });
@@ -89,5 +96,115 @@ describe('ConfigTab', () => {
     const searchInput = screen.getByPlaceholderText('Filter configs...');
     expect(searchInput.classList.contains('lowercase')).toBe(false);
     expect(hasCaseTransformAncestor(searchInput)).toBe(false);
+  });
+
+  it('renders inherited Global badge, overrides global badge, Override prefill, and Show inherited toggle', async () => {
+    const mockGet = api.get as ReturnType<typeof vi.fn>;
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/applications/my-app') {
+        return Promise.resolve({
+          data: { id: '1', name: 'My App', slug: 'my-app', inheritGlobals: true },
+        });
+      }
+      if (url === '/applications/my-app/environments') {
+        return Promise.resolve({
+          data: [{ name: 'Production', slug: 'production' }],
+        });
+      }
+      if (url === '/applications/my-app/configurations/effective?environment=production') {
+        return Promise.resolve({
+          data: [
+            {
+              key: 'LogStream:Url',
+              value: 'https://logs.internal',
+              description: 'Centralized logs',
+              source: 'global',
+              globalEnvironmentSlug: '*',
+              overridesGlobal: false,
+            },
+            {
+              key: 'FeatureFlags:NewDashboard',
+              value: 'false',
+              description: 'App override',
+              source: 'application',
+              overridesGlobal: true,
+            },
+          ],
+        });
+      }
+      return Promise.resolve({ data: [] });
+    });
+
+    const { fireEvent } = await import('@testing-library/react');
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ConfigTab appSlug="my-app" />
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('LogStream:Url')).toBeDefined();
+      expect(screen.getByText('FeatureFlags:NewDashboard')).toBeDefined();
+      expect(screen.getByText('Global')).toBeDefined();
+      expect(screen.getByText('overrides global')).toBeDefined();
+    });
+
+    // Clicking Override opens inline add row prefilled with inherited key & value
+    fireEvent.click(screen.getByRole('button', { name: /Override/i }));
+    const keyInput = screen.getByPlaceholderText('CONFIG_KEY') as HTMLInputElement;
+    const valInput = screen.getByPlaceholderText('Value') as HTMLInputElement;
+    expect(keyInput.value).toBe('LogStream:Url');
+    expect(valInput.value).toBe('https://logs.internal');
+
+    // Toggle "Show inherited" off hides global rows
+    const showInheritedSwitch = screen.getByRole('switch', { name: 'Show inherited' });
+    fireEvent.click(showInheritedSwitch);
+    await waitFor(() => {
+      expect(screen.queryByText('LogStream:Url')).toBeNull();
+      expect(screen.getByText('FeatureFlags:NewDashboard')).toBeDefined();
+    });
+  });
+
+  it('shows opt-out banner and enables inheritance when Turn it on is clicked', async () => {
+    const mockGet = api.get as ReturnType<typeof vi.fn>;
+    const mockPut = api.put as ReturnType<typeof vi.fn>;
+    mockPut.mockResolvedValue({ status: 200, data: { slug: 'my-app', name: 'My App', inheritGlobals: true } });
+
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/applications/my-app') {
+        return Promise.resolve({
+          data: { id: '1', name: 'My App', slug: 'my-app', inheritGlobals: false },
+        });
+      }
+      if (url === '/applications/my-app/environments') {
+        return Promise.resolve({
+          data: [{ name: 'Production', slug: 'production' }],
+        });
+      }
+      return Promise.resolve({ data: [] });
+    });
+
+    const { fireEvent } = await import('@testing-library/react');
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ConfigTab appSlug="my-app" />
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('This application does not inherit global values')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Turn it on' }));
+
+    await waitFor(() => {
+      expect(mockPut).toHaveBeenCalledWith('/applications/my-app', {
+        name: 'My App',
+        description: '',
+        inheritGlobals: true,
+      });
+    });
   });
 });

@@ -2,6 +2,7 @@ export interface Application {
   name: string;
   slug: string;
   description?: string | null;
+  inheritGlobals?: boolean;
   createdAt?: string;
 }
 
@@ -33,6 +34,43 @@ export interface Configuration {
   value: string;
   description?: string | null;
   environmentSlug: string;
+  updatedAt?: string;
+}
+
+export interface GlobalConfiguration {
+  id?: string;
+  environmentSlug: string; // "*" = all environments
+  key: string;
+  value: string;
+  description?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface GlobalEnvironment {
+  slug: string;
+  name: string;
+  applicationCount: number;
+}
+
+export type ValueSource = 'application' | 'global';
+
+export interface EffectiveConfiguration {
+  key: string;
+  value: string;
+  description?: string | null;
+  source: ValueSource;
+  globalEnvironmentSlug?: string | null;
+  overridesGlobal: boolean;
+}
+
+export interface EffectiveSecret {
+  id?: string;
+  name: string;
+  description?: string | null;
+  source: ValueSource;
+  overridesGlobal: boolean;
+  createdAt?: string;
   updatedAt?: string;
 }
 

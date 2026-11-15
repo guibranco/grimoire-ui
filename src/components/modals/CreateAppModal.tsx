@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
 import { api } from '@/lib/api';
 import { useQueryClient } from '@tanstack/react-query';
 import { APIKeyRevealModal } from './APIKeyRevealModal';
@@ -23,9 +24,14 @@ import toast from 'react-hot-toast';
 const schema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
   description: z.string().min(10, 'Description must be at least 10 characters'),
+  inheritGlobals: z.boolean().default(true),
 });
 
-type FormData = z.infer<typeof schema>;
+type FormData = {
+  name: string;
+  description: string;
+  inheritGlobals: boolean;
+};
 
 interface CreateAppModalProps {
   open: boolean;
@@ -37,17 +43,27 @@ export const CreateAppModal: React.FC<CreateAppModalProps> = ({ open, onOpenChan
   const [revealKey, setRevealKey] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<FormData>({
+  const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<any>({
     resolver: zodResolver(schema),
+    defaultValues: {
+      name: '',
+      description: '',
+      inheritGlobals: true,
+    },
   });
 
-  const onSubmit = async (data: FormData) => {
+  const onSubmit = async (data: any) => {
+    const formData = data as FormData;
     setLoading(true);
     try {
-      const res = await api.post('/applications', data);
+      const res = await api.post('/applications', {
+        name: formData.name,
+        description: formData.description,
+        inheritGlobals: formData.inheritGlobals ?? true,
+      });
       setRevealKey(res.data.apiKey);
       queryClient.invalidateQueries({ queryKey: ['applications'] });
-      reset();
+      reset({ name: '', description: '', inheritGlobals: true });
       onOpenChange(false);
       toast.success('Application created');
     } catch (err: any) {
@@ -82,7 +98,7 @@ export const CreateAppModal: React.FC<CreateAppModalProps> = ({ open, onOpenChan
                     className="border-border focus-visible:ring-grimoire"
                     {...register('name')}
                   />
-                  {errors.name && <p className="text-[10px] text-destructive uppercase font-bold tracking-widest">{errors.name.message}</p>}
+                  {errors.name && <p className="text-[10px] text-destructive uppercase font-bold tracking-widest">{errors.name.message as string}</p>}
                 </div>
 
                 <div className="space-y-2">
@@ -93,12 +109,29 @@ export const CreateAppModal: React.FC<CreateAppModalProps> = ({ open, onOpenChan
                     className="border-border focus-visible:ring-grimoire min-h-[100px] resize-none"
                     {...register('description')}
                   />
-                  {errors.description && <p className="text-[10px] text-destructive uppercase font-bold tracking-widest">{errors.description.message}</p>}
+                  {errors.description && <p className="text-[10px] text-destructive uppercase font-bold tracking-widest">{errors.description.message as string}</p>}
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-muted/10 border border-border">
+                  <div className="space-y-0.5 pr-3">
+                    <Label htmlFor="create-inherit-globals" className="text-[10px] uppercase font-bold tracking-widest leading-none">
+                      Inherit global configuration
+                    </Label>
+                    <p className="text-[10px] text-muted-foreground">
+                      Receive shared global configs and secrets across environments
+                    </p>
+                  </div>
+                  <Switch
+                    id="create-inherit-globals"
+                    checked={watch('inheritGlobals')}
+                    onCheckedChange={(checked) => setValue('inheritGlobals', checked)}
+                    className="data-[state=checked]:bg-global"
+                  />
                 </div>
               </div>
             </div>
 
-            <DialogFooter className="bg-muted/30 p-4 border-t border-border mt-0 sm:justify-end gap-2">
+            <DialogFooter className="mx-0 mb-0 bg-muted/30 p-4 border-t border-border mt-0 sm:justify-end gap-2">
               <Button 
                 type="button"
                 variant="ghost" 
@@ -123,5 +156,3 @@ export const CreateAppModal: React.FC<CreateAppModalProps> = ({ open, onOpenChan
     </>
   );
 };
-
-// Also need to create Textarea in UI

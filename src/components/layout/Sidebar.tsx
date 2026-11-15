@@ -2,24 +2,27 @@ import React from 'react';
 import { useStore } from '@/store/useStore';
 import { useQuery } from '@tanstack/react-query';
 import { api, fetchApiVersion, getApiConnectionInfo, UI_VERSION } from '@/lib/api';
-import { Application } from '@/types/api';
-import { 
-  Shield, 
-  Plus, 
-  LogOut, 
-  Activity,
-  Box,
-  ChevronRight,
-  Loader2
+import { Application, GlobalConfiguration, Secret } from '@/types/api';
+import {
+  Plus,
+  Loader2,
+  Globe,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
 
 export const Sidebar: React.FC<{ onCreateApp: () => void }> = ({ onCreateApp }) => {
-  const { selectedAppSlug, setSelectedAppSlug, disconnect } = useStore();
-  
+  const {
+    selectedView,
+    selectedAppSlug,
+    setSelectedView,
+    setSelectedAppSlug,
+    clearGlobalHighlight,
+    disconnect,
+  } = useStore();
+
   const connectionInfo = getApiConnectionInfo();
 
   const { data: apps, isLoading } = useQuery({
@@ -29,6 +32,26 @@ export const Sidebar: React.FC<{ onCreateApp: () => void }> = ({ onCreateApp }) 
       return res.data;
     },
   });
+
+  const { data: globalConfigs } = useQuery({
+    queryKey: ['global-configurations', 'all'],
+    queryFn: async () => {
+      const res = await api.get<GlobalConfiguration[]>('/global/configurations');
+      return res.data;
+    },
+  });
+
+  const { data: globalSecrets } = useQuery({
+    queryKey: ['global-secrets'],
+    queryFn: async () => {
+      const res = await api.get<Secret[]>('/global/secrets');
+      return res.data;
+    },
+  });
+
+  const globalCount =
+    (Array.isArray(globalConfigs) ? globalConfigs.length : 0) +
+    (Array.isArray(globalSecrets) ? globalSecrets.length : 0);
 
   const { data: apiVersion, isLoading: apiVersionLoading } = useQuery({
     queryKey: ['api-version', connectionInfo.rawUrl],
@@ -51,8 +74,35 @@ export const Sidebar: React.FC<{ onCreateApp: () => void }> = ({ onCreateApp }) 
         <div className="text-[10px] text-zinc-600 font-mono mt-1 uppercase tracking-widest">v{UI_VERSION}-STABLE</div>
       </div>
 
-      <div className="flex-1 overflow-hidden flex flex-col pt-4">
-        <div className="px-5 py-2 flex items-center justify-between">
+      <div className="flex-1 overflow-hidden flex flex-col pt-3">
+        <div className="px-2 pb-3 border-b border-border/60">
+          <button
+            type="button"
+            onClick={() => {
+              clearGlobalHighlight();
+              setSelectedView('global');
+            }}
+            className={cn(
+              "w-full flex items-center justify-between gap-2 px-3 py-2 text-[13px] font-medium transition-all",
+              selectedView === 'global'
+                ? "bg-zinc-900 border-l-2 border-global text-global"
+                : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-global"
+            )}
+          >
+            <span className="flex items-center gap-2.5">
+              <Globe className="w-3.5 h-3.5 text-global shrink-0" />
+              <span className="font-sans">Global</span>
+            </span>
+            <Badge
+              variant="outline"
+              className="border-global/30 bg-global/10 text-global text-[9px] font-mono px-1.5 py-0 h-4"
+            >
+              {globalCount}
+            </Badge>
+          </button>
+        </div>
+
+        <div className="px-5 pt-4 pb-2 flex items-center justify-between">
           <h2 className="text-[10px] font-bold text-zinc-600 uppercase tracking-[0.2em]">Applications</h2>
         </div>
 
@@ -69,15 +119,15 @@ export const Sidebar: React.FC<{ onCreateApp: () => void }> = ({ onCreateApp }) 
                   onClick={() => setSelectedAppSlug(app.slug)}
                   className={cn(
                     "w-full flex items-center gap-3 px-3 py-1.5 text-[13px] font-medium transition-all group relative",
-                    selectedAppSlug === app.slug 
-                      ? "bg-zinc-900 border-l-2 border-grimoire text-grimoire" 
+                    selectedView === 'app' && selectedAppSlug === app.slug
+                      ? "bg-zinc-900 border-l-2 border-grimoire text-grimoire"
                       : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"
                   )}
                 >
                   <span className="truncate flex-1 text-left font-sans">{app.name}</span>
                 </button>
               ))}
-              <button 
+              <button
                 onClick={onCreateApp}
                 className="w-[calc(100%-16px)] mx-2 mt-4 flex items-center justify-center gap-2 px-3 py-2 border border-dashed border-zinc-700 text-zinc-500 text-[10px] font-bold tracking-widest uppercase hover:border-zinc-500 hover:text-zinc-300 transition-colors"
               >
@@ -105,8 +155,8 @@ export const Sidebar: React.FC<{ onCreateApp: () => void }> = ({ onCreateApp }) 
             </span>
           </div>
         </div>
-        <Button 
-          variant="ghost" 
+        <Button
+          variant="ghost"
           className="w-full h-8 bg-zinc-800 text-[10px] font-bold uppercase tracking-widest hover:bg-zinc-700 text-zinc-400"
           onClick={disconnect}
         >

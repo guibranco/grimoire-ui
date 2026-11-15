@@ -20,11 +20,13 @@ import {
 } from '@/components/ui/table';
 import { api } from '@/lib/api';
 import { SecretVersion } from '@/types/api';
-import { History, Loader2, ChevronRight } from 'lucide-react';
+import { History, Loader2, ChevronRight, Globe } from 'lucide-react';
 import { format } from 'date-fns';
+import { SecretModalScope } from './EditSecretValueModal';
 
 interface SecretVersionsModalProps {
-  appSlug: string;
+  appSlug?: string;
+  scope?: SecretModalScope;
   secretName: string;
   envSlug: string;
   open: boolean;
@@ -33,20 +35,28 @@ interface SecretVersionsModalProps {
 
 export const SecretVersionsModal: React.FC<SecretVersionsModalProps> = ({
   appSlug,
+  scope,
   secretName,
   envSlug,
   open,
   onOpenChange,
 }) => {
+  const resolvedScope: SecretModalScope = scope ?? { appSlug: appSlug || '' };
+  const isGlobal = resolvedScope === 'global';
+  const targetAppSlug = isGlobal ? '' : resolvedScope.appSlug;
+
   const { data: versions, isLoading } = useQuery({
-    queryKey: ['secret-versions', appSlug, secretName, envSlug],
+    queryKey: isGlobal
+      ? ['global-secret-versions', secretName, envSlug]
+      : ['secret-versions', targetAppSlug, secretName, envSlug],
     queryFn: async () => {
-      const res = await api.get<SecretVersion[]>(
-        `/applications/${appSlug}/secrets/${encodeURIComponent(secretName)}/versions/${encodeURIComponent(envSlug)}`
-      );
+      const endpoint = isGlobal
+        ? `/global/secrets/${encodeURIComponent(secretName)}/versions/${encodeURIComponent(envSlug)}`
+        : `/applications/${targetAppSlug}/secrets/${encodeURIComponent(secretName)}/versions/${encodeURIComponent(envSlug)}`;
+      const res = await api.get<SecretVersion[]>(endpoint);
       return res.data;
     },
-    enabled: open && !!appSlug && !!secretName && !!envSlug,
+    enabled: open && (isGlobal || !!targetAppSlug) && !!secretName && !!envSlug,
   });
 
   const formatTimestamp = (ts?: string | null) => {
@@ -61,13 +71,24 @@ export const SecretVersionsModal: React.FC<SecretVersionsModalProps> = ({
         <div className="p-6 border-b border-border">
           <DialogHeader>
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 bg-grimoire/10 border border-grimoire text-grimoire flex items-center justify-center shrink-0">
+              <div className={`w-9 h-9 flex items-center justify-center shrink-0 border ${isGlobal ? 'bg-global/10 border-global text-global' : 'bg-grimoire/10 border-grimoire text-grimoire'}`}>
                 <History className="w-4 h-4" />
               </div>
               <div>
-                <DialogTitle className="text-lg font-bold tracking-tight uppercase">Secret Version History</DialogTitle>
-                <DialogDescription className="text-xs text-muted-foreground flex items-center gap-1 font-mono uppercase">
-                  {secretName} <ChevronRight className="w-3 h-3" /> {envSlug}
+                <DialogTitle className="text-lg font-bold tracking-tight uppercase">
+                  {isGlobal ? 'Global Secret Version History' : 'Secret Version History'}
+                </DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground flex items-center gap-1 font-mono">
+                  <span>{secretName}</span>
+                  <ChevronRight className="w-3 h-3" />
+                  {envSlug === '*' ? (
+                    <span className="inline-flex items-center gap-1 text-global">
+                      <Globe className="w-3 h-3" />
+                      All environments
+                    </span>
+                  ) : (
+                    <span>{envSlug}</span>
+                  )}
                 </DialogDescription>
               </div>
             </div>
@@ -77,7 +98,7 @@ export const SecretVersionsModal: React.FC<SecretVersionsModalProps> = ({
         <div className="flex-1 overflow-auto p-6">
           {isLoading ? (
             <div className="py-10 flex flex-col items-center justify-center gap-3 text-muted-foreground">
-              <Loader2 className="w-6 h-6 animate-spin text-grimoire" />
+              <Loader2 className={`w-6 h-6 animate-spin ${isGlobal ? 'text-global' : 'text-grimoire'}`} />
               <span className="text-[10px] font-mono uppercase tracking-widest">Loading Versions...</span>
             </div>
           ) : !versions || versions.length === 0 ? (
@@ -99,7 +120,7 @@ export const SecretVersionsModal: React.FC<SecretVersionsModalProps> = ({
                 <TableBody>
                   {versions.map((ver) => (
                     <TableRow key={ver.version} className="border-border hover:bg-muted/20">
-                      <TableCell className="font-mono text-xs font-bold text-grimoire">v{ver.version}</TableCell>
+                      <TableCell className={`font-mono text-xs font-bold ${isGlobal ? 'text-global' : 'text-grimoire'}`}>v{ver.version}</TableCell>
                       <TableCell>
                         <Badge
                           variant="outline"

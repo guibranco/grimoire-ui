@@ -268,4 +268,140 @@ describe('Grimoire Mock API Integration Tests', () => {
       expect(versionsRes.data[0].version).toBe(2);
     });
   });
+
+  describe('Global Configuration, Secrets & Inheritance Precedence', () => {
+    it('should list global environments, global configurations, and global secrets', async () => {
+      const envRes = await api.get('/global/environments');
+      expect(envRes.status).toBe(200);
+      const prodEnv = envRes.data.find((e: any) => e.slug === 'production');
+      expect(prodEnv).toBeDefined();
+      expect(prodEnv.applicationCount).toBeGreaterThanOrEqual(2);
+
+      const configRes = await api.get('/global/configurations');
+      expect(configRes.status).toBe(200);
+      expect(configRes.data.some((c: any) => c.environmentSlug === '*' && c.key === 'LogStream:Url')).toBe(true);
+
+      const filteredRes = await api.get('/global/configurations?environment=production');
+      expect(filteredRes.status).toBe(200);
+      expect(filteredRes.data.every((c: any) => c.environmentSlug === 'production')).toBe(true);
+
+      const secretRes = await api.get('/global/secrets');
+      expect(secretRes.status).toBe(200);
+      expect(secretRes.data.some((s: any) => s.name === 'Sentry--Dsn')).toBe(true);
+      expect(secretRes.data[0]).not.toHaveProperty('values');
+    });
+
+    it('should support CRUD on global configurations and return 409 on duplicate', async () => {
+      const createRes = await api.post('/global/configurations', {
+        environmentSlug: '*',
+        key: 'Global:Region',
+        value: 'us-east-1',
+        description: 'Default region',
+      });
+      expect(createRes.status).toBe(201);
+
+      const dupRes = await api.post('/global/configurations', {
+        environmentSlug: '*',
+        key: 'Global:Region',
+        value: 'eu-west-1',
+      });
+      expect(dupRes.status).toBe(409);
+
+      const updateRes = await api.put('/global/configurations/%2A/Global%3ARegion', {
+        value: 'eu-central-1',
+        description: 'Updated region',
+      });
+      expect(updateRes.status).toBe(200);
+      expect(updateRes.data.value).toBe('eu-central-1');
+
+      const delRes = await api.delete('/global/configurations/%2A/Global%3ARegion');
+      expect(delRes.status).toBe(204);
+    });
+
+    it('should enforce effective precedence: app > env-slug global > * global and overridesGlobal flag', async () => {
+      // Seed global "*" and "production" for the same key, plus an app override
+      await api.post('/global/configurations', {
+        environmentSlug: '*',
+        key: 'PrecedenceKey',
+        value: 'from-wildcard',
+      });
+      await api.post('/global/configurations', {
+        environmentSlug: 'production',
+        key: 'PrecedenceKey',
+        value: 'from-global-prod',
+      });
+
+      // Staging has no env-specific global, so "*" wins
+      const stagingEffective = await api.get('/applications/production-gateway/configurations/effective?environment=staging');
+      const stagingEntry = stagingEffective.data.find((e: any) => e.key === 'PrecedenceKey');
+      expect(stagingEntry).toMatchObject({
+        value: 'from-wildcard',
+        source: 'global',
+        globalEnvironmentSlug: '*',
+        overridesGlobal: false,
+      });
+
+      // Production has env-specific global, so "production" global beats "*"
+      const prodEffective1 = await api.get('/applications/production-gateway/configurations/effective?environment=production');
+      const prodEntry1 = prodEffective1.data.find((e: any) => e.key === 'PrecedenceKey');
+      expect(prodEntry1).toMatchObject({
+        value: 'from-global-prod',
+        source: 'global',
+        globalEnvironmentSlug: 'production',
+        overridesGlobal: false,
+      });
+
+      // Now add app-level override in production
+      await api.post('/applications/production-gateway/configurations', {
+        environmentSlug: 'production',
+        key: 'PrecedenceKey',
+        value: 'from-app-override',
+      });
+
+      const prodEffective2 = await api.get('/applications/production-gateway/configurations/effective?environment=production');
+      const prodEntry2 = prodEffective2.data.find((e: any) => e.key === 'PrecedenceKey');
+      expect(prodEntry2).toMatchObject({
+        value: 'from-app-override',
+        source: 'application',
+        overridesGlobal: true,
+      });
+    });
+
+    it('should hide inherited configurations and secrets when application sets inheritGlobals: false', async () => {
+      await api.put('/applications/production-gateway', {
+        name: 'Production Gateway',
+        description: 'Gateway',
+        inheritGlobals: false,
+      });
+
+      const effConfigs = await api.get('/applications/production-gateway/configurations/effective?environment=production');
+      expect(effConfigs.data.some((c: any) => c.source === 'global')).toBe(false);
+      expect(effConfigs.data.every((c: any) => c.overridesGlobal === false)).toBe(true);
+
+      const effSecrets = await api.get('/applications/production-gateway/secrets/effective');
+      expect(effSecrets.data.some((s: any) => s.source === 'global')).toBe(false);
+      expect(effSecrets.data.every((s: any) => s.overridesGlobal === false)).toBe(true);
+    });
+
+    it('should create global secrets, add wildcard versions, and delete them cleanly', async () => {
+      const createRes = await api.post('/global/secrets', {
+        name: 'GLOBAL_API_KEY',
+        description: 'Shared key',
+      });
+      expect(createRes.status).toBe(201);
+      expect(createRes.data).not.toHaveProperty('values');
+
+      await api.post('/global/secrets/GLOBAL_API_KEY/values', [
+        { environmentSlug: '*', value: 'secret-val', isEnabled: true, expiresAt: null, notBefore: null },
+      ]);
+
+      const versionsRes = await api.get('/global/secrets/GLOBAL_API_KEY/versions/%2A');
+      expect(versionsRes.status).toBe(200);
+      expect(versionsRes.data[0].version).toBe(1);
+      expect(versionsRes.data[0]).not.toHaveProperty('value');
+
+      const delRes = await api.delete('/global/secrets/GLOBAL_API_KEY');
+      expect(delRes.status).toBe(204);
+    });
+  });
 });
