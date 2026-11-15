@@ -18,6 +18,53 @@
 
 ---
 
+## 🖼️ Screenshots
+
+> 🔮 **Try it yourself** — open the [live demo](http://guilherme.stracini.com.br/grimoire-ui/) and click **Launch Live Demo (Mock API)**. It runs entirely in your browser against a built-in mock API with demo data, so no Grimoire server is needed and nothing leaves your machine.
+
+All screenshots below were captured from that same demo mode.
+
+### 🔐 Application secrets
+Per-application secrets with per-environment presence, status and versions. Secrets inherited from **Global** are flagged and can be overridden.
+
+![Application secrets](docs/screenshots/02-application-secrets.png)
+
+### 🕰️ Secret version history
+Every value change creates a new version, with `Not Before` / `Expires At` support.
+
+![Secret version history](docs/screenshots/03-secret-versions.png)
+
+### ⚙️ Application configuration
+Key-value configuration per environment, with import/export and inherited globals.
+
+![Application configuration](docs/screenshots/04-application-configuration.png)
+
+### 🌍 Global configuration & secrets
+Shared values defined once and inherited by every application (unless it opts out), scoped to all environments or a specific one.
+
+| Global configuration | Global secrets |
+| :---: | :---: |
+| ![Global configuration](docs/screenshots/05-global-configuration.png) | ![Global secrets](docs/screenshots/06-global-secrets.png) |
+
+### 🔑 Connect & create
+| Connect to an instance (or launch the demo) | Create an application |
+| :---: | :---: |
+| ![Connect screen](docs/screenshots/01-connect.png) | ![Create application](docs/screenshots/07-create-application.png) |
+
+<details>
+<summary>📸 Regenerating the screenshots</summary>
+
+The screenshots are produced by [`scripts/screenshots.mjs`](scripts/screenshots.mjs), which starts Vite, opens the app in headless Chromium, enters the mock demo and captures each view into `docs/screenshots/`:
+
+```bash
+npx playwright install chromium   # first run only
+npm run screenshots
+```
+
+</details>
+
+---
+
 ## 🛠️ Technology Spellbook
 
 | Ingredient | Purpose |
@@ -64,6 +111,7 @@ Open [http://localhost:3000](http://localhost:3000) to see the magic happen.
 *   `npm run test:coverage` — Executes tests and generates a detailed coverage report.
 *   `npm run lint` — Performs a thorough type-check with TypeScript.
 *   `npm run clean` — Clears the `dist` directory.
+*   `npm run screenshots` — Regenerates the README screenshots from the mock demo.
 
 ---
 
