@@ -10,15 +10,6 @@ export interface Environment {
   slug: string;
 }
 
-export interface SecretValue {
-  environmentSlug: string;
-  version: number;
-  isEnabled: boolean;
-  expiresAt: string | null;
-  notBefore: string | null;
-  updatedAt?: string;
-}
-
 export interface SecretVersion {
   id?: string;
   version: number;
@@ -33,7 +24,6 @@ export interface Secret {
   id?: string;
   name: string;
   description?: string | null;
-  values?: SecretValue[] | null;
   createdAt?: string;
   updatedAt?: string;
 }

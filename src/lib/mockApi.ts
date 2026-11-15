@@ -31,59 +31,94 @@ const DEFAULT_ENVIRONMENTS: Record<string, { name: string, slug: string }[]> = {
 const DEFAULT_SECRETS: Record<string, any[]> = {
   "production-gateway": [
     {
+      id: "11111111-1111-4111-8111-111111111111",
       name: "DATABASE_PASSWORDS",
       description: "Encrypted PostgreSQL server authentication keys for primary cluster.",
       createdAt: "2026-06-20T10:15:00.000Z",
-      values: [
-        {
-          environmentSlug: "production",
-          version: 1,
-          isEnabled: true,
-          expiresAt: null,
-          notBefore: null,
-          updatedAt: "2026-06-20T10:15:00.000Z"
-        },
-        {
-          environmentSlug: "staging",
-          version: 2,
-          isEnabled: true,
-          expiresAt: null,
-          notBefore: null,
-          updatedAt: "2026-06-20T12:00:00.000Z"
-        }
-      ]
+      updatedAt: "2026-06-20T10:15:00.000Z"
     },
     {
+      id: "22222222-2222-4222-8222-222222222222",
       name: "REDIS_CACHE_TOKEN",
       description: "Distributed cache access tokens.",
       createdAt: "2026-06-20T11:00:00.000Z",
-      values: [
-        {
-          environmentSlug: "production",
-          version: 1,
-          isEnabled: false,
-          expiresAt: null,
-          notBefore: null,
-          updatedAt: "2026-06-20T11:00:00.000Z"
-        }
-      ]
+      updatedAt: "2026-06-20T11:00:00.000Z"
     }
   ],
   "auth-provider-security": [
     {
+      id: "33333333-3333-4333-8333-333333333333",
       name: "JWT_SIGNING_SECRET",
       description: "Symmetric key for JWT validation and encryption tokens.",
       createdAt: "2026-06-21T12:45:00.000Z",
-      values: [
-        {
-          environmentSlug: "production",
-          version: 3,
-          isEnabled: true,
-          expiresAt: "2027-06-21T12:45:00.000Z",
-          notBefore: null,
-          updatedAt: "2026-06-21T12:45:00.000Z"
-        }
-      ]
+      updatedAt: "2026-06-21T12:45:00.000Z"
+    }
+  ]
+};
+
+const DEFAULT_SECRET_VERSIONS: Record<string, any[]> = {
+  "production-gateway:DATABASE_PASSWORDS:production": [
+    {
+      id: "aaaa1111-1111-4111-8111-111111111111",
+      version: 1,
+      isEnabled: true,
+      expiresAt: null,
+      notBefore: null,
+      createdAt: "2026-06-20T10:15:00.000Z"
+    }
+  ],
+  "production-gateway:DATABASE_PASSWORDS:staging": [
+    {
+      id: "aaaa2222-2222-4222-8222-222222222222",
+      version: 2,
+      isEnabled: true,
+      expiresAt: null,
+      notBefore: null,
+      createdAt: "2026-06-20T12:00:00.000Z"
+    },
+    {
+      id: "aaaa2221-2222-4222-8222-222222222222",
+      version: 1,
+      isEnabled: true,
+      expiresAt: null,
+      notBefore: null,
+      createdAt: "2026-06-20T10:20:00.000Z"
+    }
+  ],
+  "production-gateway:REDIS_CACHE_TOKEN:production": [
+    {
+      id: "bbbb1111-1111-4111-8111-111111111111",
+      version: 1,
+      isEnabled: false,
+      expiresAt: null,
+      notBefore: null,
+      createdAt: "2026-06-20T11:00:00.000Z"
+    }
+  ],
+  "auth-provider-security:JWT_SIGNING_SECRET:production": [
+    {
+      id: "cccc3333-3333-4333-8333-333333333333",
+      version: 3,
+      isEnabled: true,
+      expiresAt: "2027-06-21T12:45:00.000Z",
+      notBefore: null,
+      createdAt: "2026-06-21T12:45:00.000Z"
+    },
+    {
+      id: "cccc2222-3333-4333-8333-333333333333",
+      version: 2,
+      isEnabled: true,
+      expiresAt: null,
+      notBefore: null,
+      createdAt: "2026-06-21T12:30:00.000Z"
+    },
+    {
+      id: "cccc1111-3333-4333-8333-333333333333",
+      version: 1,
+      isEnabled: true,
+      expiresAt: null,
+      notBefore: null,
+      createdAt: "2026-06-21T12:00:00.000Z"
     }
   ]
 };
@@ -142,24 +177,12 @@ let applications = getStored('applications', DEFAULT_APPLICATIONS);
 let environments = getStored('environments', DEFAULT_ENVIRONMENTS);
 let secrets = getStored('secrets', DEFAULT_SECRETS);
 let configurations = getStored('configurations', DEFAULT_CONFIGURATIONS);
-let secretVersions = getStored<Record<string, any[]>>('secret_versions', {});
+let secretVersions = getStored<Record<string, any[]>>('secret_versions', DEFAULT_SECRET_VERSIONS);
 
-function buildInitialVersions(appSlug: string, secretName: string, envSlug: string) {
-  const secret = (secrets[appSlug] || []).find((s: any) => s.name === secretName);
-  const current = secret?.values?.find((v: any) => v.environmentSlug === envSlug);
-  if (!current) return [];
-  const versions = [];
-  for (let v = 1; v <= current.version; v++) {
-    versions.push({
-      version: v,
-      isEnabled: v === current.version ? current.isEnabled : true,
-      expiresAt: v === current.version ? current.expiresAt : null,
-      notBefore: v === current.version ? current.notBefore : null,
-      createdAt: current.updatedAt,
-      updatedAt: current.updatedAt,
-    });
-  }
-  return versions.reverse();
+function sanitizeSecretMetadata(secret: any) {
+  if (!secret) return secret;
+  const { values: _ignored, ...metadata } = secret;
+  return metadata;
 }
 
 // Reset handler (useful for testing)
@@ -168,7 +191,7 @@ export function resetMockDatabase() {
   environments = JSON.parse(JSON.stringify(DEFAULT_ENVIRONMENTS));
   secrets = JSON.parse(JSON.stringify(DEFAULT_SECRETS));
   configurations = JSON.parse(JSON.stringify(DEFAULT_CONFIGURATIONS));
-  secretVersions = {};
+  secretVersions = JSON.parse(JSON.stringify(DEFAULT_SECRET_VERSIONS));
   if (isBrowser) {
     localStorage.removeItem('grm_mock_applications');
     localStorage.removeItem('grm_mock_environments');
@@ -362,7 +385,7 @@ export function mockApiAdapter(config: AxiosRequestConfig): Promise<AxiosRespons
   match = cleanPath.match(/^\/applications\/([^\/]+)\/secrets$/);
   if (match && method === 'GET') {
     const slug = match[1];
-    const appSecrets = secrets[slug] || [];
+    const appSecrets = (secrets[slug] || []).map(sanitizeSecretMetadata);
     return makeResponse(200, appSecrets, config);
   }
 
@@ -372,13 +395,15 @@ export function mockApiAdapter(config: AxiosRequestConfig): Promise<AxiosRespons
     if (!secrets[slug]) {
       secrets[slug] = [];
     }
-    const newSecretName = (body.name || '').toUpperCase();
+    const newSecretName = body.name || '';
     const existingIndex = secrets[slug].findIndex(s => s.name === newSecretName);
+    const nowIso = new Date().toISOString();
     const newSecret = {
+      id: existingIndex !== -1 ? secrets[slug][existingIndex].id : `sec-${Date.now()}`,
       name: newSecretName,
       description: body.description || '',
-      values: existingIndex !== -1 ? secrets[slug][existingIndex].values : [],
-      createdAt: new Date().toISOString()
+      createdAt: existingIndex !== -1 ? secrets[slug][existingIndex].createdAt : nowIso,
+      updatedAt: nowIso
     };
     if (existingIndex !== -1) {
       secrets[slug][existingIndex] = newSecret;
@@ -386,14 +411,14 @@ export function mockApiAdapter(config: AxiosRequestConfig): Promise<AxiosRespons
       secrets[slug].push(newSecret);
     }
     saveStored('secrets', secrets);
-    return makeResponse(201, newSecret, config);
+    return makeResponse(201, sanitizeSecretMetadata(newSecret), config);
   }
 
   // 10. POST /applications/:appSlug/secrets/:secretName/values
   match = cleanPath.match(/^\/applications\/([^\/]+)\/secrets\/([^\/]+)\/values$/);
   if (match && method === 'POST') {
     const appSlug = match[1];
-    const secretName = match[2].toUpperCase();
+    const secretName = decodeURIComponent(match[2]);
     const appSecrets = secrets[appSlug] || [];
     const secret = appSecrets.find(s => s.name === secretName);
     
@@ -404,53 +429,39 @@ export function mockApiAdapter(config: AxiosRequestConfig): Promise<AxiosRespons
     const postedValues = Array.isArray(body) ? body : [body];
     
     postedValues.forEach((val: any) => {
-      const existingValIndex = secret.values.findIndex((v: any) => v.environmentSlug === val.environmentSlug);
-      const nextVersion = existingValIndex !== -1 ? (secret.values[existingValIndex].version + 1) : 1;
+      const historyKey = `${appSlug}:${secretName}:${val.environmentSlug}`;
+      const existingVersions = secretVersions[historyKey] || [];
+      const nextVersion = existingVersions.length > 0
+        ? Math.max(...existingVersions.map((v: any) => v.version ?? 0)) + 1
+        : 1;
       const nowIso = new Date().toISOString();
 
-      const historyKey = `${appSlug}:${secretName}:${val.environmentSlug}`;
-      if (!secretVersions[historyKey]) {
-        secretVersions[historyKey] = buildInitialVersions(appSlug, secretName, val.environmentSlug);
-      }
-
-      const newVal = {
-        environmentSlug: val.environmentSlug,
+      const newVersionEntry = {
+        id: `ver-${Date.now()}-${nextVersion}`,
         version: nextVersion,
         isEnabled: val.isEnabled !== undefined ? val.isEnabled : true,
         expiresAt: val.expiresAt || null,
         notBefore: val.notBefore || null,
-        updatedAt: nowIso
+        createdAt: nowIso,
       };
 
-      secretVersions[historyKey].unshift({
-        version: nextVersion,
-        isEnabled: newVal.isEnabled,
-        expiresAt: newVal.expiresAt,
-        notBefore: newVal.notBefore,
-        createdAt: nowIso,
-        updatedAt: nowIso,
-      });
-
-      if (existingValIndex !== -1) {
-        secret.values[existingValIndex] = newVal;
-      } else {
-        secret.values.push(newVal);
-      }
+      secretVersions[historyKey] = [newVersionEntry, ...existingVersions];
+      secret.updatedAt = nowIso;
     });
 
     saveStored('secrets', secrets);
     saveStored('secret_versions', secretVersions);
-    return makeResponse(200, secret, config);
+    return makeResponse(200, sanitizeSecretMetadata(secret), config);
   }
 
   // 10b. GET /applications/:appSlug/secrets/:secretName/versions/:envSlug
   match = cleanPath.match(/^\/applications\/([^\/]+)\/secrets\/([^\/]+)\/versions\/([^\/]+)$/);
   if (match && method === 'GET') {
     const appSlug = match[1];
-    const secretName = match[2].toUpperCase();
-    const envSlug = match[3];
+    const secretName = decodeURIComponent(match[2]);
+    const envSlug = decodeURIComponent(match[3]);
     const historyKey = `${appSlug}:${secretName}:${envSlug}`;
-    const versions = secretVersions[historyKey] || buildInitialVersions(appSlug, secretName, envSlug);
+    const versions = secretVersions[historyKey] || [];
     return makeResponse(200, versions, config);
   }
 
@@ -458,26 +469,33 @@ export function mockApiAdapter(config: AxiosRequestConfig): Promise<AxiosRespons
   match = cleanPath.match(/^\/applications\/([^\/]+)\/secrets\/([^\/]+)$/);
   if (match && method === 'GET') {
     const appSlug = match[1];
-    const secretName = match[2].toUpperCase();
+    const secretName = decodeURIComponent(match[2]);
     const appSecrets = secrets[appSlug] || [];
     const secret = appSecrets.find(s => s.name === secretName);
     if (!secret) {
       return makeResponse(404, { message: `Secret ${secretName} not found` }, config);
     }
-    return makeResponse(200, secret, config);
+    return makeResponse(200, sanitizeSecretMetadata(secret), config);
   }
 
   // 11b. DELETE /applications/:appSlug/secrets/:secretName
   if (match && method === 'DELETE') {
     const appSlug = match[1];
-    const secretName = match[2].toUpperCase();
+    const secretName = decodeURIComponent(match[2]);
     const appSecrets = secrets[appSlug] || [];
     const index = appSecrets.findIndex(s => s.name === secretName);
     if (index === -1) {
       return makeResponse(404, { message: `Secret ${secretName} not found` }, config);
     }
     appSecrets.splice(index, 1);
+    const prefix = `${appSlug}:${secretName}:`;
+    Object.keys(secretVersions).forEach((k) => {
+      if (k.startsWith(prefix)) {
+        delete secretVersions[k];
+      }
+    });
     saveStored('secrets', secrets);
+    saveStored('secret_versions', secretVersions);
     return makeResponse(200, { message: `Secret ${secretName} deleted successfully` }, config);
   }
 
@@ -502,7 +520,7 @@ export function mockApiAdapter(config: AxiosRequestConfig): Promise<AxiosRespons
       configurations[appSlug] = [];
     }
     
-    const newConfigKey = (body.key || '').toUpperCase();
+    const newConfigKey = body.key || '';
     const envSlug = body.environmentSlug;
     
     // Check if configuration already exists for this env
@@ -532,8 +550,8 @@ export function mockApiAdapter(config: AxiosRequestConfig): Promise<AxiosRespons
   match = cleanPath.match(/^\/applications\/([^\/]+)\/configurations\/([^\/]+)\/([^\/]+)$/);
   if (match && method === 'PUT') {
     const appSlug = match[1];
-    const envSlug = match[2];
-    const key = match[3].toUpperCase();
+    const envSlug = decodeURIComponent(match[2]);
+    const key = decodeURIComponent(match[3]);
     
     const appConfigs = configurations[appSlug] || [];
     const configItem = appConfigs.find(c => c.key === key && c.environmentSlug === envSlug);
@@ -553,8 +571,8 @@ export function mockApiAdapter(config: AxiosRequestConfig): Promise<AxiosRespons
   // 15. DELETE /applications/:appSlug/configurations/:envSlug/:key
   if (match && method === 'DELETE') {
     const appSlug = match[1];
-    const envSlug = match[2];
-    const key = match[3].toUpperCase();
+    const envSlug = decodeURIComponent(match[2]);
+    const key = decodeURIComponent(match[3]);
     
     const appConfigs = configurations[appSlug] || [];
     const index = appConfigs.findIndex(c => c.key === key && c.environmentSlug === envSlug);

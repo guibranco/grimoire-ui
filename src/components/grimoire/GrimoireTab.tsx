@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery, useQueries, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { Secret, SecretStatus, SecretValue, SecretVersion, Environment } from '@/types/api';
+import { Secret, SecretStatus, SecretVersion, Environment } from '@/types/api';
 import { 
   Plus, 
   Search, 
@@ -116,21 +116,14 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
   });
 
   const latestVersionByPair = useMemo(() => {
-    const map = new Map<string, SecretValue>();
+    const map = new Map<string, SecretVersion>();
     versionPairs.forEach(({ secretName, envSlug }, idx) => {
       const versions = versionQueries[idx]?.data;
       if (Array.isArray(versions) && versions.length > 0) {
         const latest = versions.reduce((best, curr) =>
           (curr.version ?? 0) >= (best.version ?? 0) ? curr : best
         );
-        map.set(`${secretName}:::${envSlug}`, {
-          environmentSlug: envSlug,
-          version: latest.version,
-          isEnabled: latest.isEnabled,
-          expiresAt: latest.expiresAt ?? null,
-          notBefore: latest.notBefore ?? null,
-          updatedAt: latest.updatedAt ?? latest.createdAt,
-        });
+        map.set(`${secretName}:::${envSlug}`, latest);
       }
     });
     return map;
@@ -148,28 +141,22 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
     (s.description || '').toLowerCase().includes(searchLower)
   );
 
-  const getSecretValues = (secret: Secret) => (
-    Array.isArray(secret.values) ? secret.values : []
+  const resolveSecretVersion = (secretName: string, envSlug: string): SecretVersion | undefined => (
+    latestVersionByPair.get(`${secretName}:::${envSlug}`)
   );
 
-  const resolveSecretValue = (secret: Secret, envSlug: string): SecretValue | undefined => {
-    const fromVersions = latestVersionByPair.get(`${secret.name}:::${envSlug}`);
-    if (fromVersions) return fromVersions;
-    return getSecretValues(secret).find(v => v.environmentSlug === envSlug);
-  };
-
-  const getSecretStatus = (secret: Secret, envSlug: string): SecretStatus => {
-    const value = resolveSecretValue(secret, envSlug);
-    if (!value) return SecretStatus.MISSING;
-    if (!value.isEnabled) return SecretStatus.DISABLED;
+  const getSecretStatus = (secretName: string, envSlug: string): SecretStatus => {
+    const versionInfo = resolveSecretVersion(secretName, envSlug);
+    if (!versionInfo) return SecretStatus.MISSING;
+    if (!versionInfo.isEnabled) return SecretStatus.DISABLED;
     
     const now = new Date();
-    if (value.expiresAt) {
-      const expires = new Date(value.expiresAt);
+    if (versionInfo.expiresAt) {
+      const expires = new Date(versionInfo.expiresAt);
       if (!Number.isNaN(expires.getTime()) && expires < now) return SecretStatus.EXPIRED;
     }
-    if (value.notBefore) {
-      const notBefore = new Date(value.notBefore);
+    if (versionInfo.notBefore) {
+      const notBefore = new Date(versionInfo.notBefore);
       if (!Number.isNaN(notBefore.getTime()) && notBefore > now) return SecretStatus.PENDING;
     }
     
@@ -289,7 +276,6 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
                       ? {
                           ...secret,
                           ...expandedSecretDetail,
-                          values: expandedSecretDetail.values ?? secret.values ?? [],
                         }
                       : secret;
                   return (
@@ -315,7 +301,7 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
                         <TableCell className="hidden lg:table-cell">
                           <div className="flex gap-1">
                             {safeEnvs.map(env => {
-                              const status = getSecretStatus(resolvedSecret, env.slug);
+                              const status = getSecretStatus(resolvedSecret.name, env.slug);
                               if (status === SecretStatus.MISSING) return null;
                               return (
                                 <div key={env.slug} className="px-1.5 py-0.5 border border-zinc-800 text-[9px] font-bold font-mono text-zinc-500 uppercase tracking-tighter">
@@ -400,8 +386,8 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
                                       </TableHeader>
                                       <TableBody>
                                         {safeEnvs.map(env => {
-                                          const status = getSecretStatus(resolvedSecret, env.slug);
-                                          const value = resolveSecretValue(resolvedSecret, env.slug);
+                                          const status = getSecretStatus(resolvedSecret.name, env.slug);
+                                          const latestVersion = resolveSecretVersion(resolvedSecret.name, env.slug);
                                           return (
                                             <TableRow key={env.slug} className="border-zinc-900 hover:bg-zinc-900/30 h-12 transition-colors">
                                               <td className="px-4 font-mono text-[11px] font-bold">{env.name}</td>
@@ -424,14 +410,14 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
                                                 </div>
                                               </td>
                                               <td className="px-4 font-mono text-[10px] text-zinc-600">
-                                                {value ? (
+                                                {latestVersion ? (
                                                   <button
                                                     type="button"
                                                     onClick={() => setViewingVersions({ secretName: secret.name, envSlug: env.slug })}
                                                     className="inline-flex items-center gap-1 text-zinc-400 hover:text-grimoire transition-colors"
                                                     title="View version history"
                                                   >
-                                                    <span>v{value.version}</span>
+                                                    <span>v{latestVersion.version}</span>
                                                     <History className="w-3 h-3" />
                                                   </button>
                                                 ) : (

@@ -35,14 +35,14 @@ describe('GrimoireTab', () => {
     cleanup();
   });
 
-  it('renders without crashing when secrets omit values or have null description', async () => {
+  it('renders without crashing when secrets have null descriptions, missing dates, or 404 version endpoints', async () => {
     const mockGet = api.get as ReturnType<typeof vi.fn>;
     mockGet.mockImplementation((url: string) => {
       if (url === '/applications/my-app/secrets') {
         return Promise.resolve({
           data: [
             { name: 'DB_PASSWORD', description: null, createdAt: '' },
-            { name: 'API_TOKEN', description: 'Main API token', values: null },
+            { name: 'API_TOKEN', description: 'Main API token' },
           ],
         });
       }
@@ -57,20 +57,28 @@ describe('GrimoireTab', () => {
       if (url === '/applications/my-app/secrets/DB_PASSWORD') {
         return Promise.resolve({
           data: {
+            id: '11112222-3333-4444-5555-666677778888',
             name: 'DB_PASSWORD',
             description: 'Resolved description',
             createdAt: '2026-01-15T12:00:00Z',
-            values: [
-              {
-                environmentSlug: 'production',
-                version: 3,
-                isEnabled: true,
-                expiresAt: null,
-                notBefore: null,
-              },
-            ],
           },
         });
+      }
+      if (url === '/applications/my-app/secrets/DB_PASSWORD/versions/production') {
+        return Promise.resolve({
+          data: [
+            {
+              version: 3,
+              isEnabled: true,
+              expiresAt: null,
+              notBefore: null,
+              createdAt: '2026-01-15T12:00:00Z',
+            },
+          ],
+        });
+      }
+      if (url.includes('/versions/')) {
+        return Promise.reject({ response: { status: 404 } });
       }
       return Promise.resolve({ data: [] });
     });
@@ -84,19 +92,21 @@ describe('GrimoireTab', () => {
     await waitFor(() => {
       expect(screen.getByText('DB_PASSWORD')).toBeDefined();
       expect(screen.getByText('API_TOKEN')).toBeDefined();
+      expect(screen.getByText('pro')).toBeDefined();
     });
 
-    // Expand DB_PASSWORD and verify detail fetch loads version info safely
     fireEvent.click(screen.getByText('DB_PASSWORD'));
 
     await waitFor(() => {
       expect(mockGet).toHaveBeenCalledWith('/applications/my-app/secrets/DB_PASSWORD');
       expect(screen.getByText('v3')).toBeDefined();
       expect(screen.getByText('Resolved description')).toBeDefined();
+      expect(screen.getByText('enabled')).toBeDefined();
+      expect(screen.getByText('missing')).toBeDefined();
     });
   });
 
-  it('resolves status and latest version from /versions/{envSlug} when secret detail omits values', async () => {
+  it('resolves status and latest version strictly from /versions/{envSlug} metadata', async () => {
     const mockGet = api.get as ReturnType<typeof vi.fn>;
     mockGet.mockImplementation((url: string) => {
       if (url === '/applications/my-app/secrets') {
@@ -165,7 +175,6 @@ describe('GrimoireTab', () => {
       </QueryClientProvider>
     );
 
-    // Presence badge appears once /versions/production resolves
     await waitFor(() => {
       expect(screen.getByText('Mailbox--Password')).toBeDefined();
       expect(screen.getByText('pro')).toBeDefined();

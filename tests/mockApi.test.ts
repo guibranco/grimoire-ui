@@ -104,20 +104,21 @@ describe('Grimoire Mock API Integration Tests', () => {
       expect(res.data[0]).toHaveProperty('name', 'DATABASE_PASSWORDS');
     });
 
-    it('should define a new secret', async () => {
+    it('should define a new secret without exposing values', async () => {
       const secretData = { name: 'STRIPE_API_KEY', description: 'Stripe webhook security signature client.' };
       const res = await api.post('/applications/production-gateway/secrets', secretData);
       expect(res.status).toBe(201);
       expect(res.data).toHaveProperty('name', 'STRIPE_API_KEY');
-      expect(res.data.values).toEqual([]);
+      expect(res.data).not.toHaveProperty('values');
 
       // Verify in secrets list
       const listRes = await api.get('/applications/production-gateway/secrets');
       const found = listRes.data.find((s: any) => s.name === 'STRIPE_API_KEY');
       expect(found).toBeDefined();
+      expect(found).not.toHaveProperty('values');
     });
 
-    it('should create values and increment versions for a secret', async () => {
+    it('should create values and increment versions tracked via /versions/{envSlug}', async () => {
       const valData = [
         { environmentSlug: 'production', isEnabled: true, value: 'prod_pass_123', expiresAt: null, notBefore: null },
         { environmentSlug: 'staging', isEnabled: false, value: 'stage_pass_123', expiresAt: null, notBefore: null }
@@ -126,17 +127,21 @@ describe('Grimoire Mock API Integration Tests', () => {
       const res = await api.post('/applications/production-gateway/secrets/DATABASE_PASSWORDS/values', valData);
       expect(res.status).toBe(200);
       expect(res.data).toHaveProperty('name', 'DATABASE_PASSWORDS');
-      expect(res.data.values.length).toBeGreaterThanOrEqual(2);
+      expect(res.data).not.toHaveProperty('values');
 
-      const prodVal = res.data.values.find((v: any) => v.environmentSlug === 'production');
-      expect(prodVal.isEnabled).toBe(true);
+      const prodVersions = await api.get('/applications/production-gateway/secrets/DATABASE_PASSWORDS/versions/production');
+      expect(prodVersions.status).toBe(200);
+      expect(prodVersions.data[0].isEnabled).toBe(true);
       // DATABASE_PASSWORDS version started at 1 by default, updating it should increment to 2
-      expect(prodVal.version).toBe(2);
+      expect(prodVersions.data[0].version).toBe(2);
+      expect(prodVersions.data[0]).not.toHaveProperty('value');
 
-      const stageVal = res.data.values.find((v: any) => v.environmentSlug === 'staging');
-      expect(stageVal.isEnabled).toBe(false);
+      const stageVersions = await api.get('/applications/production-gateway/secrets/DATABASE_PASSWORDS/versions/staging');
+      expect(stageVersions.status).toBe(200);
+      expect(stageVersions.data[0].isEnabled).toBe(false);
       // DATABASE_PASSWORDS staging value started at version 2, updating it should increment to 3
-      expect(stageVal.version).toBe(3);
+      expect(stageVersions.data[0].version).toBe(3);
+      expect(stageVersions.data[0]).not.toHaveProperty('value');
     });
 
     it('should delete a secret and all its values', async () => {
