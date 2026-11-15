@@ -120,16 +120,20 @@ export async function fetchApiVersion(): Promise<string | null> {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const candidates = [
-    `${originBase}/swagger/v1/swagger.json`,
-    `${managementBase}/version`,
-    `${originBase}/version`,
-    `${originBase}/health`,
+  const candidates: Array<{ url: string; withAuth: boolean }> = [
+    { url: `${originBase}/health`, withAuth: false },
+    { url: `${originBase}/swagger/management/swagger.json`, withAuth: false },
+    { url: `${originBase}/swagger/v1/swagger.json`, withAuth: false },
+    { url: `${managementBase}/version`, withAuth: true },
+    { url: `${originBase}/version`, withAuth: false },
   ];
 
-  for (const endpoint of candidates) {
+  for (const candidate of candidates) {
     try {
-      const res = await axios.get(endpoint, { headers, timeout: 3000 });
+      const res = await axios.get(candidate.url, {
+        headers: candidate.withAuth ? headers : undefined,
+        timeout: 3000,
+      });
       const version =
         extractVersionFromPayload(res.data) ||
         extractVersionFromHeaders(res.headers as Record<string, any>);
