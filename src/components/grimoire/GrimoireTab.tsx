@@ -16,7 +16,8 @@ import {
   ChevronUp,
   Loader2,
   Trash2,
-  Edit2
+  Edit2,
+  History
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -37,6 +38,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { AddSecretModal } from './AddSecretModal';
 import { EditSecretValueModal } from './EditSecretValueModal';
+import { SecretVersionsModal } from './SecretVersionsModal';
 import { ConfirmationModal } from '@/components/shared/ConfirmationModal';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -47,6 +49,7 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
   const [isAddSecretOpen, setIsAddSecretOpen] = useState(false);
   const [expandedSecret, setExpandedSecret] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState<{ secretName: string, envSlug: string } | null>(null);
+  const [viewingVersions, setViewingVersions] = useState<{ secretName: string, envSlug: string } | null>(null);
   const [deletingSecret, setDeletingSecret] = useState<string | null>(null);
   
   const queryClient = useQueryClient();
@@ -307,7 +310,21 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
                                                   </span>
                                                 </div>
                                               </td>
-                                              <td className="px-4 font-mono text-[10px] text-zinc-600">v{value?.version || 1}</td>
+                                              <td className="px-4 font-mono text-[10px] text-zinc-600">
+                                                {value ? (
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => setViewingVersions({ secretName: secret.name, envSlug: env.slug })}
+                                                    className="inline-flex items-center gap-1 text-zinc-400 hover:text-grimoire transition-colors"
+                                                    title="View version history"
+                                                  >
+                                                    <span>v{value.version}</span>
+                                                    <History className="w-3 h-3" />
+                                                  </button>
+                                                ) : (
+                                                  '—'
+                                                )}
+                                              </td>
                                               <td className="text-right pr-4">
                                                 <button 
                                                   className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 hover:text-grimoire transition-colors"
@@ -350,6 +367,16 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
           envSlug={editingValue.envSlug}
           open={!!editingValue}
           onOpenChange={(open) => !open && setEditingValue(null)}
+        />
+      )}
+
+      {viewingVersions && (
+        <SecretVersionsModal
+          appSlug={appSlug}
+          secretName={viewingVersions.secretName}
+          envSlug={viewingVersions.envSlug}
+          open={!!viewingVersions}
+          onOpenChange={(open) => !open && setViewingVersions(null)}
         />
       )}
 

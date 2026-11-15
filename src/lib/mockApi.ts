@@ -142,6 +142,25 @@ let applications = getStored('applications', DEFAULT_APPLICATIONS);
 let environments = getStored('environments', DEFAULT_ENVIRONMENTS);
 let secrets = getStored('secrets', DEFAULT_SECRETS);
 let configurations = getStored('configurations', DEFAULT_CONFIGURATIONS);
+let secretVersions = getStored<Record<string, any[]>>('secret_versions', {});
+
+function buildInitialVersions(appSlug: string, secretName: string, envSlug: string) {
+  const secret = (secrets[appSlug] || []).find((s: any) => s.name === secretName);
+  const current = secret?.values?.find((v: any) => v.environmentSlug === envSlug);
+  if (!current) return [];
+  const versions = [];
+  for (let v = 1; v <= current.version; v++) {
+    versions.push({
+      version: v,
+      isEnabled: v === current.version ? current.isEnabled : true,
+      expiresAt: v === current.version ? current.expiresAt : null,
+      notBefore: v === current.version ? current.notBefore : null,
+      createdAt: current.updatedAt,
+      updatedAt: current.updatedAt,
+    });
+  }
+  return versions.reverse();
+}
 
 // Reset handler (useful for testing)
 export function resetMockDatabase() {
@@ -149,11 +168,13 @@ export function resetMockDatabase() {
   environments = JSON.parse(JSON.stringify(DEFAULT_ENVIRONMENTS));
   secrets = JSON.parse(JSON.stringify(DEFAULT_SECRETS));
   configurations = JSON.parse(JSON.stringify(DEFAULT_CONFIGURATIONS));
+  secretVersions = {};
   if (isBrowser) {
     localStorage.removeItem('grm_mock_applications');
     localStorage.removeItem('grm_mock_environments');
     localStorage.removeItem('grm_mock_secrets');
     localStorage.removeItem('grm_mock_configurations');
+    localStorage.removeItem('grm_mock_secret_versions');
   }
 }
 
@@ -176,8 +197,11 @@ export function mockApiAdapter(config: AxiosRequestConfig): Promise<AxiosRespons
     path = path.substring(config.baseURL.length);
   }
   
-  // Normalize leading slash and remove domain if any
+  // Normalize leading slash and remove domain or /management prefix if any
   path = path.replace(/^(https?:\/\/[^\/]+)?\/?/, '/');
+  if (path.startsWith('/management/')) {
+    path = path.substring('/management'.length);
+  }
 
   const method = (config.method || 'GET').toUpperCase();
   
@@ -204,7 +228,7 @@ export function mockApiAdapter(config: AxiosRequestConfig): Promise<AxiosRespons
 
   // 0. GET /version or /health
   if ((cleanPath === '/version' || cleanPath === '/health') && method === 'GET') {
-    return makeResponse(200, { status: 'Healthy', version: '2.4.0-mock' }, config);
+    return makeResponse(200, { status: 'Healthy', version: '1.2.0-mock' }, config);
   }
 
   // 1. GET /applications
@@ -242,6 +266,19 @@ export function mockApiAdapter(config: AxiosRequestConfig): Promise<AxiosRespons
     if (!app) {
       return makeResponse(404, { message: `Application ${slug} not found` }, config);
     }
+    return makeResponse(200, app, config);
+  }
+
+  // 3b. PUT /applications/:appSlug
+  if (match && method === 'PUT') {
+    const slug = match[1];
+    const app = applications.find(a => a.slug === slug);
+    if (!app) {
+      return makeResponse(404, { message: `Application ${slug} not found` }, config);
+    }
+    if (body.name !== undefined) app.name = body.name;
+    if (body.description !== undefined) app.description = body.description;
+    saveStored('applications', applications);
     return makeResponse(200, app, config);
   }
 
@@ -293,11 +330,32 @@ export function mockApiAdapter(config: AxiosRequestConfig): Promise<AxiosRespons
     }
     const newEnv = {
       name: body.name || 'New Environment',
-      slug: body.slug || (body.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-')
+      slug: body.slug || (body.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
     };
     environments[slug].push(newEnv);
     saveStored('environments', environments);
     return makeResponse(201, newEnv, config);
+  }
+
+  // 7b. DELETE /applications/:appSlug/environments/:envSlug
+  match = cleanPath.match(/^\/applications\/([^\/]+)\/environments\/([^\/]+)$/);
+  if (match && method === 'DELETE') {
+    const appSlug = match[1];
+    const envSlug = match[2];
+    const appEnvs = environments[appSlug] || [];
+    const index = appEnvs.findIndex(e => e.slug === envSlug);
+    if (index === -1) {
+      return makeResponse(404, { message: `Environment ${envSlug} not found` }, config);
+    }
+    appEnvs.splice(index, 1);
+    saveStored('environments', environments);
+
+    if (configurations[appSlug]) {
+      configurations[appSlug] = configurations[appSlug].filter((c: any) => c.environmentSlug !== envSlug);
+      saveStored('configurations', configurations);
+    }
+
+    return makeResponse(200, { message: `Environment ${envSlug} deleted successfully` }, config);
   }
 
   // 8. GET /applications/:appSlug/secrets
@@ -348,16 +406,31 @@ export function mockApiAdapter(config: AxiosRequestConfig): Promise<AxiosRespons
     postedValues.forEach((val: any) => {
       const existingValIndex = secret.values.findIndex((v: any) => v.environmentSlug === val.environmentSlug);
       const nextVersion = existingValIndex !== -1 ? (secret.values[existingValIndex].version + 1) : 1;
-      
+      const nowIso = new Date().toISOString();
+
+      const historyKey = `${appSlug}:${secretName}:${val.environmentSlug}`;
+      if (!secretVersions[historyKey]) {
+        secretVersions[historyKey] = buildInitialVersions(appSlug, secretName, val.environmentSlug);
+      }
+
       const newVal = {
         environmentSlug: val.environmentSlug,
         version: nextVersion,
         isEnabled: val.isEnabled !== undefined ? val.isEnabled : true,
         expiresAt: val.expiresAt || null,
         notBefore: val.notBefore || null,
-        updatedAt: new Date().toISOString()
+        updatedAt: nowIso
       };
-      
+
+      secretVersions[historyKey].unshift({
+        version: nextVersion,
+        isEnabled: newVal.isEnabled,
+        expiresAt: newVal.expiresAt,
+        notBefore: newVal.notBefore,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      });
+
       if (existingValIndex !== -1) {
         secret.values[existingValIndex] = newVal;
       } else {
@@ -366,11 +439,35 @@ export function mockApiAdapter(config: AxiosRequestConfig): Promise<AxiosRespons
     });
 
     saveStored('secrets', secrets);
+    saveStored('secret_versions', secretVersions);
     return makeResponse(200, secret, config);
   }
 
-  // 11. DELETE /applications/:appSlug/secrets/:secretName
+  // 10b. GET /applications/:appSlug/secrets/:secretName/versions/:envSlug
+  match = cleanPath.match(/^\/applications\/([^\/]+)\/secrets\/([^\/]+)\/versions\/([^\/]+)$/);
+  if (match && method === 'GET') {
+    const appSlug = match[1];
+    const secretName = match[2].toUpperCase();
+    const envSlug = match[3];
+    const historyKey = `${appSlug}:${secretName}:${envSlug}`;
+    const versions = secretVersions[historyKey] || buildInitialVersions(appSlug, secretName, envSlug);
+    return makeResponse(200, versions, config);
+  }
+
+  // 11a. GET /applications/:appSlug/secrets/:secretName
   match = cleanPath.match(/^\/applications\/([^\/]+)\/secrets\/([^\/]+)$/);
+  if (match && method === 'GET') {
+    const appSlug = match[1];
+    const secretName = match[2].toUpperCase();
+    const appSecrets = secrets[appSlug] || [];
+    const secret = appSecrets.find(s => s.name === secretName);
+    if (!secret) {
+      return makeResponse(404, { message: `Secret ${secretName} not found` }, config);
+    }
+    return makeResponse(200, secret, config);
+  }
+
+  // 11b. DELETE /applications/:appSlug/secrets/:secretName
   if (match && method === 'DELETE') {
     const appSlug = match[1];
     const secretName = match[2].toUpperCase();

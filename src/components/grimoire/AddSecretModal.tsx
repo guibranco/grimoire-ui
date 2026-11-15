@@ -21,7 +21,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { api } from '@/lib/api';
+import { api, toApiDateTime } from '@/lib/api';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { Environment } from '@/types/api';
 import { Badge } from '@/components/ui/badge';
@@ -121,17 +121,26 @@ export const AddSecretModal: React.FC<AddSecretModalProps> = ({ appSlug, open, o
     setLoading(true);
     try {
       // 1. Create Secret
-      await api.post(`/applications/${appSlug}/secrets`, {
+      const createRes = await api.post(`/applications/${appSlug}/secrets`, {
         name: data.name,
         description: data.description
       });
 
+      const createdName = createRes.data?.name || data.name;
+
       // 2. Add Values for each environment that has a value
       const valuesToCreate = (data.values || [])
-        .filter((v: any) => v.value && v.value.trim().length > 0);
+        .filter((v: any) => v.value && v.value.trim().length > 0)
+        .map((v: any) => ({
+          environmentSlug: v.environmentSlug,
+          value: v.value,
+          isEnabled: v.isEnabled ?? true,
+          expiresAt: toApiDateTime(v.expiresAt),
+          notBefore: toApiDateTime(v.notBefore),
+        }));
       
       if (valuesToCreate.length > 0) {
-        await api.post(`/applications/${appSlug}/secrets/${data.name}/values`, valuesToCreate);
+        await api.post(`/applications/${appSlug}/secrets/${createdName}/values`, valuesToCreate);
       }
 
       queryClient.invalidateQueries({ queryKey: ['secrets', appSlug] });

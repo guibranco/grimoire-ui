@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { api } from '@/lib/api';
+import { api, toApiDateTime } from '@/lib/api';
 import { useQueryClient } from '@tanstack/react-query';
 import { 
   Loader2, 
@@ -78,11 +78,12 @@ export const EditSecretValueModal: React.FC<EditSecretValueModalProps> = ({
         environmentSlug: envSlug,
         value: data.value,
         isEnabled: data.isEnabled,
-        expiresAt: data.expiresAt || null,
-        notBefore: data.notBefore || null,
+        expiresAt: toApiDateTime(data.expiresAt),
+        notBefore: toApiDateTime(data.notBefore),
       }]);
 
       queryClient.invalidateQueries({ queryKey: ['secrets', appSlug] });
+      queryClient.invalidateQueries({ queryKey: ['secret-versions', appSlug, secretName, envSlug] });
       reset();
       onOpenChange(false);
       toast.success('Secret value updated');
@@ -170,7 +171,7 @@ export const EditSecretValueModal: React.FC<EditSecretValueModalProps> = ({
             </div>
           </div>
 
-          <DialogFooter className="bg-muted/30 p-4 border-t border-border mt-0 sm:justify-end gap-2">
+          <DialogFooter className="mx-0 mb-0 bg-muted/30 p-4 border-t border-border mt-0 sm:justify-end gap-2">
             <Button 
                 type="button"
                 variant="ghost" 

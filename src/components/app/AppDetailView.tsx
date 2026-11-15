@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useStore } from '@/store/useStore';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Application } from '@/types/api';
 import { ApplicationHeader } from '@/components/layout/ApplicationHeader';
@@ -10,12 +10,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Lock, Settings, Loader2 } from 'lucide-react';
 import { ConfirmationModal } from '@/components/shared/ConfirmationModal';
 import { AddEnvModal } from '@/components/modals/AddEnvModal';
+import { EditAppModal } from '@/components/modals/EditAppModal';
 import { APIKeyRevealModal } from '@/components/modals/APIKeyRevealModal';
 import toast from 'react-hot-toast';
 
 export const AppDetailView: React.FC = () => {
   const { selectedAppSlug, setSelectedAppSlug } = useStore();
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('secrets');
+  const [isEditAppOpen, setIsEditAppOpen] = useState(false);
   const [isAddEnvOpen, setIsAddEnvOpen] = useState(false);
   const [isRotateKeyOpen, setIsRotateKeyOpen] = useState(false);
   const [isDeleteAppOpen, setIsDeleteAppOpen] = useState(false);
@@ -76,6 +79,7 @@ export const AppDetailView: React.FC = () => {
   const handleDeleteApp = async () => {
     try {
       await api.delete(`/applications/${app.slug}`);
+      await queryClient.invalidateQueries({ queryKey: ['applications'] });
       toast.success('Application deleted');
       setSelectedAppSlug(null);
     } catch (err) {
@@ -87,6 +91,7 @@ export const AppDetailView: React.FC = () => {
     <div className="flex-1 flex flex-col overflow-hidden">
       <ApplicationHeader 
         app={app} 
+        onEditApp={() => setIsEditAppOpen(true)}
         onAddEnv={() => setIsAddEnvOpen(true)}
         onRotateKey={() => setIsRotateKeyOpen(true)}
         onDeleteApp={() => setIsDeleteAppOpen(true)}
@@ -125,6 +130,12 @@ export const AppDetailView: React.FC = () => {
           </TabsContent>
         </div>
       </Tabs>
+
+      <EditAppModal
+        app={app}
+        open={isEditAppOpen}
+        onOpenChange={setIsEditAppOpen}
+      />
 
       <AddEnvModal 
         appSlug={app.slug} 

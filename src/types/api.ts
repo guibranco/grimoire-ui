@@ -19,6 +19,15 @@ export interface SecretValue {
   updatedAt: string;
 }
 
+export interface SecretVersion {
+  version: number;
+  isEnabled: boolean;
+  expiresAt: string | null;
+  notBefore: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface Secret {
   name: string;
   description: string;

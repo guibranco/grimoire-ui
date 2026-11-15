@@ -17,6 +17,15 @@ export function clearDetectedApiVersion() {
   detectedHeaderApiVersion = null;
 }
 
+export function toApiDateTime(value?: string | null): string | null {
+  if (!value || !value.trim()) return null;
+  const trimmed = value.trim();
+  const parsed = /^\d{4}-\d{2}-\d{2}$/.test(trimmed)
+    ? new Date(`${trimmed}T00:00:00.000Z`)
+    : new Date(trimmed);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
 function extractVersionFromHeaders(headers: Record<string, any> | undefined): string | null {
   if (!headers) return null;
   const candidate =
@@ -31,10 +40,22 @@ function extractVersionFromPayload(data: any): string | null {
   if (!data || typeof data !== 'object') return null;
   const candidate =
     data.version ??
+    data.info?.version ??
     data.apiVersion ??
     data.serverVersion ??
     data.informationalVersion;
   return typeof candidate === 'string' && candidate.trim() ? candidate.trim() : null;
+}
+
+function stripManagementSuffix(url: string): string {
+  const trimmed = url.endsWith('/') ? url.slice(0, -1) : url;
+  if (trimmed.endsWith('/api/management')) {
+    return trimmed.slice(0, -'/api/management'.length);
+  }
+  if (trimmed.endsWith('/management')) {
+    return trimmed.slice(0, -'/management'.length);
+  }
+  return trimmed;
 }
 
 export interface ApiConnectionInfo {
@@ -80,9 +101,9 @@ export async function fetchApiVersion(): Promise<string | null> {
   if (info.isMock) {
     try {
       const res = await api.get('/version');
-      return extractVersionFromPayload(res.data) || '2.4.0-mock';
+      return extractVersionFromPayload(res.data) || '1.2.0-mock';
     } catch {
-      return '2.4.0-mock';
+      return '1.2.0-mock';
     }
   }
 
@@ -91,11 +112,8 @@ export async function fetchApiVersion(): Promise<string | null> {
   }
 
   const token = localStorage.getItem('grimoire_api_key');
-  const trimmed = info.rawUrl.endsWith('/') ? info.rawUrl.slice(0, -1) : info.rawUrl;
-  const originBase = trimmed.endsWith('/api/management')
-    ? trimmed.slice(0, -'/api/management'.length)
-    : trimmed;
-  const managementBase = `${originBase}/api/management`;
+  const originBase = stripManagementSuffix(info.rawUrl);
+  const managementBase = `${originBase}/management`;
 
   const headers: Record<string, string> = {};
   if (token) {
@@ -103,6 +121,7 @@ export async function fetchApiVersion(): Promise<string | null> {
   }
 
   const candidates = [
+    `${originBase}/swagger/v1/swagger.json`,
     `${managementBase}/version`,
     `${originBase}/version`,
     `${originBase}/health`,
@@ -132,10 +151,10 @@ api.interceptors.request.use((config) => {
   if (url === 'mock://' || isTestMode) {
     config.adapter = mockApiAdapter;
   } else if (url) {
-    config.baseURL = url.endsWith('/') ? url.slice(0, -1) : url;
-    if (!config.baseURL.endsWith('/api/management')) {
-      config.baseURL += '/api/management';
-    }
+    const sanitized = url.endsWith('/') ? url.slice(0, -1) : url;
+    config.baseURL = sanitized.endsWith('/management') ? sanitized : `${sanitized}/management`;
+  } else {
+    config.baseURL = 'http://localhost:5000/management';
   }
 
   if (token) {
@@ -159,5 +178,6 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
 
 

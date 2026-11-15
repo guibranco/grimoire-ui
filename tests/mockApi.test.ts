@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { api, fetchApiVersion, getApiConnectionInfo, UI_VERSION } from '../src/lib/api';
+import { api, fetchApiVersion, getApiConnectionInfo, toApiDateTime, UI_VERSION } from '../src/lib/api';
 import { resetMockDatabase } from '../src/lib/mockApi';
 
 describe('Grimoire Mock API Integration Tests', () => {
@@ -212,7 +212,7 @@ describe('Grimoire Mock API Integration Tests', () => {
     });
 
     it('should extract host/domain for remote API servers', () => {
-      localStorage.setItem('grimoire_api_url', 'https://vault.example.com:8443/api/management');
+      localStorage.setItem('grimoire_api_url', 'https://vault.example.com:8443/management');
       const info = getApiConnectionInfo();
       expect(info.isMock).toBe(false);
       expect(info.label).toBe('vault.example.com:8443');
@@ -221,8 +221,46 @@ describe('Grimoire Mock API Integration Tests', () => {
     it('should fetch mock API version and expose UI_VERSION', async () => {
       localStorage.setItem('grimoire_api_url', 'mock://');
       const apiVersion = await fetchApiVersion();
-      expect(apiVersion).toBe('2.4.0-mock');
+      expect(apiVersion).toBe('1.2.0-mock');
       expect(UI_VERSION).toBeTruthy();
+    });
+
+    it('should format date strings to ISO date-time or null', () => {
+      expect(toApiDateTime('')).toBeNull();
+      expect(toApiDateTime(null)).toBeNull();
+      expect(toApiDateTime('2026-11-15')).toBe('2026-11-15T00:00:00.000Z');
+    });
+  });
+
+  describe('Additional Swagger v1.2.0 Endpoints', () => {
+    it('should update an application via PUT /applications/:slug', async () => {
+      const res = await api.put('/applications/production-gateway', {
+        name: 'Production Gateway v2',
+        description: 'Updated gateway description'
+      });
+      expect(res.status).toBe(200);
+      expect(res.data.name).toBe('Production Gateway v2');
+      expect(res.data.description).toBe('Updated gateway description');
+    });
+
+    it('should delete an environment via DELETE /applications/:slug/environments/:envSlug', async () => {
+      const res = await api.delete('/applications/production-gateway/environments/development');
+      expect(res.status).toBe(200);
+
+      const listRes = await api.get('/applications/production-gateway/environments');
+      expect(listRes.data.find((e: any) => e.slug === 'development')).toBeUndefined();
+    });
+
+    it('should fetch a single secret and its version history', async () => {
+      const secretRes = await api.get('/applications/production-gateway/secrets/DATABASE_PASSWORDS');
+      expect(secretRes.status).toBe(200);
+      expect(secretRes.data.name).toBe('DATABASE_PASSWORDS');
+
+      const versionsRes = await api.get('/applications/production-gateway/secrets/DATABASE_PASSWORDS/versions/staging');
+      expect(versionsRes.status).toBe(200);
+      expect(Array.isArray(versionsRes.data)).toBe(true);
+      expect(versionsRes.data.length).toBe(2);
+      expect(versionsRes.data[0].version).toBe(2);
     });
   });
 });

@@ -1,9 +1,10 @@
 import React from 'react';
 import { Application } from '@/types/api';
-import { Plus } from 'lucide-react';
+import { Plus, Pencil } from 'lucide-react';
 
 interface ApplicationHeaderProps {
   app: Application;
+  onEditApp: () => void;
   onAddEnv: () => void;
   onRotateKey: () => void;
   onDeleteApp: () => void;
@@ -11,6 +12,7 @@ interface ApplicationHeaderProps {
 
 export const ApplicationHeader: React.FC<ApplicationHeaderProps> = ({ 
   app, 
+  onEditApp,
   onAddEnv, 
   onRotateKey, 
   onDeleteApp 
@@ -22,6 +24,14 @@ export const ApplicationHeader: React.FC<ApplicationHeaderProps> = ({
         <span className="px-2 py-0.5 bg-zinc-900 text-zinc-500 font-mono text-[11px] border border-zinc-800 uppercase tracking-tight">
           slug: {app.slug}
         </span>
+        <button
+          type="button"
+          onClick={onEditApp}
+          title="Edit application"
+          className="h-7 w-7 inline-flex items-center justify-center border border-border text-zinc-400 hover:text-foreground hover:bg-zinc-800 transition-colors"
+        >
+          <Pencil className="w-3.5 h-3.5" />
+        </button>
       </div>
 
       <div className="flex items-center gap-3">

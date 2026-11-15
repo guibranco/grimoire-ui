@@ -46,6 +46,7 @@ export const ConfigTab: React.FC<{ appSlug: string; onAddEnv?: () => void }> = (
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
+  const [deletingEnv, setDeletingEnv] = useState<Environment | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const queryClient = useQueryClient();
@@ -68,16 +69,16 @@ export const ConfigTab: React.FC<{ appSlug: string; onAddEnv?: () => void }> = (
     }
   }, [envs, selectedEnvironmentSlug, setSelectedEnvironmentSlug]);
 
-  const { data: configs, isLoading: configsLoading } = useQuery({
-    queryKey: ['configurations', appSlug, activeEnvironmentSlug],
+  const { data: allConfigs, isLoading: configsLoading } = useQuery({
+    queryKey: ['configurations', appSlug],
     queryFn: async () => {
-      const res = await api.get<Configuration[]>(`/applications/${appSlug}/configurations`, {
-        params: { environmentSlug: activeEnvironmentSlug }
-      });
+      const res = await api.get<Configuration[]>(`/applications/${appSlug}/configurations`);
       return res.data;
     },
-    enabled: !!activeEnvironmentSlug,
+    enabled: !!appSlug,
   });
+
+  const configs = allConfigs?.filter(c => !activeEnvironmentSlug || c.environmentSlug === activeEnvironmentSlug);
 
   const filteredConfigs = configs?.filter(c => 
     c.key.toLowerCase().includes(search.toLowerCase()) ||
@@ -118,7 +119,7 @@ export const ConfigTab: React.FC<{ appSlug: string; onAddEnv?: () => void }> = (
         );
 
         await Promise.all(promises);
-        queryClient.invalidateQueries({ queryKey: ['configurations', appSlug, activeEnvironmentSlug] });
+        queryClient.invalidateQueries({ queryKey: ['configurations', appSlug] });
         toast.success(`Imported ${promises.length} configurations`);
       } catch (err) {
         toast.error('Failed to import JSON. Ensure it is a flat key-value object.');
@@ -132,10 +133,26 @@ export const ConfigTab: React.FC<{ appSlug: string; onAddEnv?: () => void }> = (
     if (!deletingKey || !activeEnvironmentSlug) return;
     try {
       await api.delete(`/applications/${appSlug}/configurations/${activeEnvironmentSlug}/${deletingKey}`);
-      queryClient.invalidateQueries({ queryKey: ['configurations', appSlug, activeEnvironmentSlug] });
+      queryClient.invalidateQueries({ queryKey: ['configurations', appSlug] });
       toast.success('Configuration deleted');
     } catch (err) {
       toast.error('Failed to delete configuration');
+    }
+  };
+
+  const handleDeleteEnv = async () => {
+    if (!deletingEnv) return;
+    try {
+      await api.delete(`/applications/${appSlug}/environments/${deletingEnv.slug}`);
+      await queryClient.invalidateQueries({ queryKey: ['environments', appSlug] });
+      await queryClient.invalidateQueries({ queryKey: ['configurations', appSlug] });
+      if (selectedEnvironmentSlug === deletingEnv.slug) {
+        const remaining = envs?.filter(e => e.slug !== deletingEnv.slug);
+        setSelectedEnvironmentSlug(remaining?.[0]?.slug || null);
+      }
+      toast.success(`Environment "${deletingEnv.name}" deleted`);
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to delete environment');
     }
   };
 
@@ -155,14 +172,25 @@ export const ConfigTab: React.FC<{ appSlug: string; onAddEnv?: () => void }> = (
                   <ChevronDown className="w-3 h-3" />
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-[180px] bg-[#0A0A0B] border-border shadow-2xl p-0">
+              <DropdownMenuContent align="start" className="w-[210px] bg-[#0A0A0B] border-border shadow-2xl p-0">
                 {envs?.map((env) => (
                   <DropdownMenuItem
                     key={env.slug}
                     onClick={() => setSelectedEnvironmentSlug(env.slug)}
-                    className="font-mono text-[11px] uppercase p-2 border-b border-zinc-900 last:border-0 hover:bg-zinc-900 cursor-pointer"
+                    className="font-mono text-[11px] uppercase p-2 border-b border-zinc-900 last:border-0 hover:bg-zinc-900 cursor-pointer flex items-center justify-between gap-2"
                   >
-                    {env.name}
+                    <span className="truncate">{env.name}</span>
+                    <button
+                      type="button"
+                      title={`Delete ${env.name}`}
+                      className="text-zinc-600 hover:text-destructive p-0.5 transition-colors shrink-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeletingEnv(env);
+                      }}
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
                   </DropdownMenuItem>
                 ))}
                 {onAddEnv && (
@@ -311,6 +339,16 @@ export const ConfigTab: React.FC<{ appSlug: string; onAddEnv?: () => void }> = (
         confirmText="Remove Entry"
         variant="destructive"
       />
+
+      <ConfirmationModal 
+        open={!!deletingEnv}
+        onOpenChange={(open) => !open && setDeletingEnv(null)}
+        onConfirm={handleDeleteEnv}
+        title="Delete Environment"
+        description={`Are you sure you want to delete the environment "${deletingEnv?.name}" (${deletingEnv?.slug})? This will remove all configurations in this environment.`}
+        confirmText="Delete Environment"
+        variant="destructive"
+      />
     </div>
   );
 };
@@ -351,7 +389,7 @@ const ConfigRow: React.FC<ConfigRowProps> = ({ appSlug, envSlug, initialData, on
           description
         });
       }
-      queryClient.invalidateQueries({ queryKey: ['configurations', appSlug, envSlug] });
+      queryClient.invalidateQueries({ queryKey: ['configurations', appSlug] });
       toast.success(initialData ? 'Configuration updated' : 'Configuration added');
       onSave();
     } catch (err) {
