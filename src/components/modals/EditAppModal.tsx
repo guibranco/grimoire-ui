@@ -41,7 +41,7 @@ export const EditAppModal: React.FC<EditAppModalProps> = ({ app, open, onOpenCha
     resolver: zodResolver(schema),
     defaultValues: {
       name: app.name,
-      description: app.description,
+      description: app.description ?? '',
     },
   });
 
@@ -49,7 +49,7 @@ export const EditAppModal: React.FC<EditAppModalProps> = ({ app, open, onOpenCha
     if (open) {
       reset({
         name: app.name,
-        description: app.description,
+        description: app.description ?? '',
       });
     }
   }, [app, open, reset]);

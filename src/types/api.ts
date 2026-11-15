@@ -1,8 +1,8 @@
 export interface Application {
   name: string;
   slug: string;
-  description: string;
-  createdAt: string;
+  description?: string | null;
+  createdAt?: string;
 }
 
 export interface Environment {
@@ -16,7 +16,7 @@ export interface SecretValue {
   isEnabled: boolean;
   expiresAt: string | null;
   notBefore: string | null;
-  updatedAt: string;
+  updatedAt?: string;
 }
 
 export interface SecretVersion {
@@ -30,17 +30,17 @@ export interface SecretVersion {
 
 export interface Secret {
   name: string;
-  description: string;
-  values: SecretValue[];
-  createdAt: string;
+  description?: string | null;
+  values?: SecretValue[] | null;
+  createdAt?: string;
 }
 
 export interface Configuration {
   key: string;
   value: string;
-  description: string;
+  description?: string | null;
   environmentSlug: string;
-  updatedAt: string;
+  updatedAt?: string;
 }
 
 export interface ApiResponse<T> {

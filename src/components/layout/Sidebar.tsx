@@ -63,7 +63,7 @@ export const Sidebar: React.FC<{ onCreateApp: () => void }> = ({ onCreateApp }) 
             </div>
           ) : (
             <div className="space-y-0.5">
-              {apps?.map((app) => (
+              {(Array.isArray(apps) ? apps : []).map((app) => (
                 <button
                   key={app.slug}
                   onClick={() => setSelectedAppSlug(app.slug)}

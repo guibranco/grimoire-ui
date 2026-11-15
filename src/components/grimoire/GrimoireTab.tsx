@@ -70,13 +70,30 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
     },
   });
 
-  const filteredSecrets = secrets?.filter(s => 
-    s.name.toLowerCase().includes(search.toLowerCase()) ||
-    s.description.toLowerCase().includes(search.toLowerCase())
+  const { data: expandedSecretDetail, isLoading: expandedSecretLoading } = useQuery({
+    queryKey: ['secret', appSlug, expandedSecret],
+    queryFn: async () => {
+      const res = await api.get<Secret>(`/applications/${appSlug}/secrets/${expandedSecret}`);
+      return res.data;
+    },
+    enabled: !!appSlug && !!expandedSecret,
+  });
+
+  const safeSecrets = Array.isArray(secrets) ? secrets : [];
+  const safeEnvs = Array.isArray(envs) ? envs : [];
+  const searchLower = search.toLowerCase();
+
+  const filteredSecrets = safeSecrets.filter(s =>
+    (s.name || '').toLowerCase().includes(searchLower) ||
+    (s.description || '').toLowerCase().includes(searchLower)
+  );
+
+  const getSecretValues = (secret: Secret) => (
+    Array.isArray(secret.values) ? secret.values : []
   );
 
   const getSecretStatus = (secret: Secret, envSlug: string): SecretStatus => {
-    const value = secret.values.find(v => v.environmentSlug === envSlug);
+    const value = getSecretValues(secret).find(v => v.environmentSlug === envSlug);
     if (!value) return SecretStatus.MISSING;
     if (!value.isEnabled) return SecretStatus.DISABLED;
     
@@ -85,6 +102,12 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
     if (value.notBefore && new Date(value.notBefore) > now) return SecretStatus.PENDING;
     
     return SecretStatus.ENABLED;
+  };
+
+  const formatDate = (ts?: string | null) => {
+    if (!ts) return '—';
+    const d = new Date(ts);
+    return Number.isNaN(d.getTime()) ? '—' : format(d, 'yyyy-MM-dd');
   };
 
   const StatusChip = ({ status }: { status: SecretStatus }) => {
@@ -127,6 +150,10 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
     try {
       await api.delete(`/applications/${appSlug}/secrets/${deletingSecret}`);
       queryClient.invalidateQueries({ queryKey: ['secrets', appSlug] });
+      queryClient.invalidateQueries({ queryKey: ['secret', appSlug, deletingSecret] });
+      if (expandedSecret === deletingSecret) {
+        setExpandedSecret(null);
+      }
       toast.success('Secret deleted');
     } catch (err) {
       toast.error('Failed to delete secret');
@@ -182,8 +209,16 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredSecrets?.map((secret) => {
+                {filteredSecrets.map((secret) => {
                   const isExpanded = expandedSecret === secret.name;
+                  const resolvedSecret: Secret =
+                    isExpanded && expandedSecretDetail?.name === secret.name
+                      ? {
+                          ...secret,
+                          ...expandedSecretDetail,
+                          values: expandedSecretDetail.values ?? secret.values ?? [],
+                        }
+                      : secret;
                   return (
                     <React.Fragment key={secret.name}>
                       <TableRow 
@@ -201,13 +236,13 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
                             <span className={cn("font-mono text-sm font-medium transition-colors", isExpanded ? "text-grimoire" : "text-zinc-200")}>
                               {secret.name}
                             </span>
-                            <span className="text-[11px] text-zinc-600 truncate max-w-md">{secret.description}</span>
+                            <span className="text-[11px] text-zinc-600 truncate max-w-md">{secret.description || '—'}</span>
                           </div>
                         </TableCell>
                         <TableCell className="hidden lg:table-cell">
                           <div className="flex gap-1">
-                            {envs?.map(env => {
-                              const status = getSecretStatus(secret, env.slug);
+                            {safeEnvs.map(env => {
+                              const status = getSecretStatus(resolvedSecret, env.slug);
                               if (status === SecretStatus.MISSING) return null;
                               return (
                                 <div key={env.slug} className="px-1.5 py-0.5 border border-zinc-800 text-[9px] font-bold font-mono text-zinc-500 uppercase tracking-tighter">
@@ -219,10 +254,11 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
                         </TableCell>
                         <TableCell className="text-right px-6">
                           <DropdownMenu>
-                            <DropdownMenuTrigger onClick={(e) => e.stopPropagation()}>
-                              <button className="h-8 w-8 inline-flex items-center justify-center text-zinc-600 hover:text-zinc-300 transition-colors">
-                                <MoreVertical className="w-4 h-4" />
-                              </button>
+                            <DropdownMenuTrigger
+                              onClick={(e) => e.stopPropagation()}
+                              className="h-8 w-8 inline-flex items-center justify-center text-zinc-600 hover:text-zinc-300 transition-colors"
+                            >
+                              <MoreVertical className="w-4 h-4" />
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="bg-[#0A0A0B] border-border p-0">
                               <DropdownMenuItem 
@@ -258,15 +294,15 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
                                     </div>
                                     <div>
                                       <p className="text-[11px] font-bold text-zinc-700 uppercase mb-1">Created</p>
-                                      <p className="font-mono text-xs text-zinc-400">{format(new Date(secret.createdAt), 'yyyy-MM-dd')}</p>
+                                      <p className="font-mono text-xs text-zinc-400">{formatDate(resolvedSecret.createdAt)}</p>
                                     </div>
                                     <div>
                                       <p className="text-[11px] font-bold text-zinc-700 uppercase mb-1">Audit ID</p>
-                                      <p className="font-mono text-xs text-zinc-400">#{(secret as any).id?.substring(0, 8) || 'N/A'}</p>
+                                      <p className="font-mono text-xs text-zinc-400">#{(resolvedSecret as any).id?.substring(0, 8) || 'N/A'}</p>
                                     </div>
                                     <div className="col-span-2">
                                       <p className="text-[11px] font-bold text-zinc-700 uppercase mb-1">Description</p>
-                                      <p className="text-sm text-zinc-400 leading-relaxed">{secret.description}</p>
+                                      <p className="text-sm text-zinc-400 leading-relaxed">{resolvedSecret.description || '—'}</p>
                                     </div>
                                   </div>
                                 </div>
@@ -275,6 +311,9 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
                                   <h4 className="text-[10px] uppercase font-bold tracking-[0.25em] text-zinc-600 flex items-center gap-2">
                                     <div className="w-1 h-3 bg-zinc-800" />
                                     Environment Logic
+                                    {expandedSecretLoading && (
+                                      <Loader2 className="w-3 h-3 animate-spin text-grimoire ml-1" />
+                                    )}
                                   </h4>
                                   <div className="border border-zinc-900 overflow-hidden">
                                     <Table>
@@ -287,9 +326,9 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
                                         </TableRow>
                                       </TableHeader>
                                       <TableBody>
-                                        {envs?.map(env => {
-                                          const status = getSecretStatus(secret, env.slug);
-                                          const value = secret.values.find(v => v.environmentSlug === env.slug);
+                                        {safeEnvs.map(env => {
+                                          const status = getSecretStatus(resolvedSecret, env.slug);
+                                          const value = getSecretValues(resolvedSecret).find(v => v.environmentSlug === env.slug);
                                           return (
                                             <TableRow key={env.slug} className="border-zinc-900 hover:bg-zinc-900/30 h-12 transition-colors">
                                               <td className="px-4 font-mono text-[11px] font-bold">{env.name}</td>

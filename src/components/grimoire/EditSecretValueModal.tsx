@@ -83,6 +83,7 @@ export const EditSecretValueModal: React.FC<EditSecretValueModalProps> = ({
       }]);
 
       queryClient.invalidateQueries({ queryKey: ['secrets', appSlug] });
+      queryClient.invalidateQueries({ queryKey: ['secret', appSlug, secretName] });
       queryClient.invalidateQueries({ queryKey: ['secret-versions', appSlug, secretName, envSlug] });
       reset();
       onOpenChange(false);

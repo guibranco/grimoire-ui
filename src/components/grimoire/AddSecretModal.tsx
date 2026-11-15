@@ -144,6 +144,7 @@ export const AddSecretModal: React.FC<AddSecretModalProps> = ({ appSlug, open, o
       }
 
       queryClient.invalidateQueries({ queryKey: ['secrets', appSlug] });
+      queryClient.invalidateQueries({ queryKey: ['secret', appSlug] });
       reset();
       onOpenChange(false);
       toast.success('Secret and values created');

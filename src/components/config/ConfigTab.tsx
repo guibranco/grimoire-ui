@@ -60,14 +60,15 @@ export const ConfigTab: React.FC<{ appSlug: string; onAddEnv?: () => void }> = (
     enabled: !!appSlug,
   });
 
-  const selectedEnv = envs?.find(e => e.slug === selectedEnvironmentSlug) || envs?.[0];
+  const safeEnvs = Array.isArray(envs) ? envs : [];
+  const selectedEnv = safeEnvs.find(e => e.slug === selectedEnvironmentSlug) || safeEnvs[0];
   const activeEnvironmentSlug = selectedEnv?.slug || null;
 
   useEffect(() => {
-    if (envs?.length && (!selectedEnvironmentSlug || !envs.some(e => e.slug === selectedEnvironmentSlug))) {
-      setSelectedEnvironmentSlug(envs[0].slug);
+    if (safeEnvs.length && (!selectedEnvironmentSlug || !safeEnvs.some(e => e.slug === selectedEnvironmentSlug))) {
+      setSelectedEnvironmentSlug(safeEnvs[0].slug);
     }
-  }, [envs, selectedEnvironmentSlug, setSelectedEnvironmentSlug]);
+  }, [safeEnvs, selectedEnvironmentSlug, setSelectedEnvironmentSlug]);
 
   const { data: allConfigs, isLoading: configsLoading } = useQuery({
     queryKey: ['configurations', appSlug],
@@ -78,13 +79,21 @@ export const ConfigTab: React.FC<{ appSlug: string; onAddEnv?: () => void }> = (
     enabled: !!appSlug,
   });
 
-  const configs = allConfigs?.filter(c => !activeEnvironmentSlug || c.environmentSlug === activeEnvironmentSlug);
+  const safeAllConfigs = Array.isArray(allConfigs) ? allConfigs : [];
+  const configs = safeAllConfigs.filter(c => !activeEnvironmentSlug || c.environmentSlug === activeEnvironmentSlug);
 
-  const filteredConfigs = configs?.filter(c => 
-    c.key.toLowerCase().includes(search.toLowerCase()) ||
-    c.value.toLowerCase().includes(search.toLowerCase()) ||
-    c.description.toLowerCase().includes(search.toLowerCase())
+  const searchLower = search.toLowerCase();
+  const filteredConfigs = configs.filter(c => 
+    (c.key || '').toLowerCase().includes(searchLower) ||
+    String(c.value ?? '').toLowerCase().includes(searchLower) ||
+    (c.description || '').toLowerCase().includes(searchLower)
   );
+
+  const formatTimestamp = (ts?: string | null) => {
+    if (!ts) return '—';
+    const d = new Date(ts);
+    return Number.isNaN(d.getTime()) ? '—' : format(d, 'yyyy-MM-dd HH:mm');
+  };
 
   const handleExport = () => {
     if (!configs || !activeEnvironmentSlug) return;
@@ -173,7 +182,7 @@ export const ConfigTab: React.FC<{ appSlug: string; onAddEnv?: () => void }> = (
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-[210px] bg-[#0A0A0B] border-border shadow-2xl p-0">
-                {envs?.map((env) => (
+                {safeEnvs.map((env) => (
                   <DropdownMenuItem
                     key={env.slug}
                     onClick={() => setSelectedEnvironmentSlug(env.slug)}
@@ -300,9 +309,9 @@ export const ConfigTab: React.FC<{ appSlug: string; onAddEnv?: () => void }> = (
                       <TableRow key={config.key} className="group border-zinc-900/50 hover:bg-zinc-900/20 h-12 transition-colors">
                         <TableCell className="font-mono text-[13px] font-bold text-config pl-6 uppercase tracking-tight">{config.key}</TableCell>
                         <TableCell className="font-mono text-xs text-zinc-300">{config.value}</TableCell>
-                        <TableCell className="text-xs text-zinc-500 hidden lg:table-cell font-sans lowercase">{config.description}</TableCell>
+                        <TableCell className="text-xs text-zinc-500 hidden lg:table-cell font-sans lowercase">{config.description || '—'}</TableCell>
                         <TableCell className="text-[9px] font-mono text-zinc-600 hidden xl:table-cell">
-                          {format(new Date(config.updatedAt), 'yyyy-MM-dd HH:mm')}
+                          {formatTimestamp(config.updatedAt)}
                         </TableCell>
                         <TableCell className="text-right pr-6">
                           <div className="flex justify-end gap-2 pr-1 opacity-0 group-hover:opacity-100 transition-opacity">
