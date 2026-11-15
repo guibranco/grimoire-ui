@@ -11,12 +11,22 @@
     
     --color-background: #0F0F11;
     --color-foreground: #E4E4E7;
+    --color-card: #121214;
+    --color-card-foreground: #E4E4E7;
+    --color-popover: #121214;
+    --color-popover-foreground: #E4E4E7;
     
     --color-grimoire: #F59E0B;
     --color-config: #38BDF8;
     
     --color-primary: #E4E4E7;
     --color-primary-foreground: #0F0F11;
+    --color-secondary: #18181B;
+    --color-secondary-foreground: #E4E4E7;
+    --color-accent: #18181B;
+    --color-accent-foreground: #E4E4E7;
+    --color-destructive: #EF4444;
+    --color-destructive-foreground: #E4E4E7;
     
     --color-border: #1E1E21;
     --color-input: #121214;
