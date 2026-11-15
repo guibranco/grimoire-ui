@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import React, { useState, useMemo } from 'react';
+import { useQuery, useQueries, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { Secret, SecretStatus, Environment } from '@/types/api';
+import { Secret, SecretStatus, SecretValue, SecretVersion, Environment } from '@/types/api';
 import { 
   Plus, 
   Search, 
@@ -73,7 +73,7 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
   const { data: expandedSecretDetail, isLoading: expandedSecretLoading } = useQuery({
     queryKey: ['secret', appSlug, expandedSecret],
     queryFn: async () => {
-      const res = await api.get<Secret>(`/applications/${appSlug}/secrets/${expandedSecret}`);
+      const res = await api.get<Secret>(`/applications/${appSlug}/secrets/${encodeURIComponent(expandedSecret!)}`);
       return res.data;
     },
     enabled: !!appSlug && !!expandedSecret,
@@ -82,6 +82,66 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
   const safeSecrets = Array.isArray(secrets) ? secrets : [];
   const safeEnvs = Array.isArray(envs) ? envs : [];
   const searchLower = search.toLowerCase();
+
+  const versionPairs = useMemo(
+    () =>
+      safeSecrets.flatMap((secret) =>
+        safeEnvs.map((env) => ({
+          secretName: secret.name,
+          envSlug: env.slug,
+        }))
+      ),
+    [safeSecrets, safeEnvs]
+  );
+
+  const versionQueries = useQueries({
+    queries: versionPairs.map(({ secretName, envSlug }) => ({
+      queryKey: ['secret-versions', appSlug, secretName, envSlug],
+      queryFn: async () => {
+        try {
+          const res = await api.get<SecretVersion[]>(
+            `/applications/${appSlug}/secrets/${encodeURIComponent(secretName)}/versions/${encodeURIComponent(envSlug)}`
+          );
+          return Array.isArray(res.data) ? res.data : [];
+        } catch (err: any) {
+          if (err?.response?.status === 404) {
+            return [] as SecretVersion[];
+          }
+          throw err;
+        }
+      },
+      enabled: !!appSlug && !!secretName && !!envSlug,
+      retry: false,
+    })),
+  });
+
+  const latestVersionByPair = useMemo(() => {
+    const map = new Map<string, SecretValue>();
+    versionPairs.forEach(({ secretName, envSlug }, idx) => {
+      const versions = versionQueries[idx]?.data;
+      if (Array.isArray(versions) && versions.length > 0) {
+        const latest = versions.reduce((best, curr) =>
+          (curr.version ?? 0) >= (best.version ?? 0) ? curr : best
+        );
+        map.set(`${secretName}:::${envSlug}`, {
+          environmentSlug: envSlug,
+          version: latest.version,
+          isEnabled: latest.isEnabled,
+          expiresAt: latest.expiresAt ?? null,
+          notBefore: latest.notBefore ?? null,
+          updatedAt: latest.updatedAt ?? latest.createdAt,
+        });
+      }
+    });
+    return map;
+  }, [versionPairs, versionQueries]);
+
+  const expandedVersionsLoading = useMemo(() => {
+    if (!expandedSecret) return false;
+    return versionPairs.some(
+      (pair, idx) => pair.secretName === expandedSecret && versionQueries[idx]?.isLoading
+    );
+  }, [expandedSecret, versionPairs, versionQueries]);
 
   const filteredSecrets = safeSecrets.filter(s =>
     (s.name || '').toLowerCase().includes(searchLower) ||
@@ -92,14 +152,26 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
     Array.isArray(secret.values) ? secret.values : []
   );
 
+  const resolveSecretValue = (secret: Secret, envSlug: string): SecretValue | undefined => {
+    const fromVersions = latestVersionByPair.get(`${secret.name}:::${envSlug}`);
+    if (fromVersions) return fromVersions;
+    return getSecretValues(secret).find(v => v.environmentSlug === envSlug);
+  };
+
   const getSecretStatus = (secret: Secret, envSlug: string): SecretStatus => {
-    const value = getSecretValues(secret).find(v => v.environmentSlug === envSlug);
+    const value = resolveSecretValue(secret, envSlug);
     if (!value) return SecretStatus.MISSING;
     if (!value.isEnabled) return SecretStatus.DISABLED;
     
     const now = new Date();
-    if (value.expiresAt && new Date(value.expiresAt) < now) return SecretStatus.EXPIRED;
-    if (value.notBefore && new Date(value.notBefore) > now) return SecretStatus.PENDING;
+    if (value.expiresAt) {
+      const expires = new Date(value.expiresAt);
+      if (!Number.isNaN(expires.getTime()) && expires < now) return SecretStatus.EXPIRED;
+    }
+    if (value.notBefore) {
+      const notBefore = new Date(value.notBefore);
+      if (!Number.isNaN(notBefore.getTime()) && notBefore > now) return SecretStatus.PENDING;
+    }
     
     return SecretStatus.ENABLED;
   };
@@ -148,9 +220,10 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
   const handleDeleteSecret = async () => {
     if (!deletingSecret) return;
     try {
-      await api.delete(`/applications/${appSlug}/secrets/${deletingSecret}`);
+      await api.delete(`/applications/${appSlug}/secrets/${encodeURIComponent(deletingSecret)}`);
       queryClient.invalidateQueries({ queryKey: ['secrets', appSlug] });
       queryClient.invalidateQueries({ queryKey: ['secret', appSlug, deletingSecret] });
+      queryClient.invalidateQueries({ queryKey: ['secret-versions', appSlug, deletingSecret] });
       if (expandedSecret === deletingSecret) {
         setExpandedSecret(null);
       }
@@ -298,7 +371,7 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
                                     </div>
                                     <div>
                                       <p className="text-[11px] font-bold text-zinc-700 uppercase mb-1">Audit ID</p>
-                                      <p className="font-mono text-xs text-zinc-400">#{(resolvedSecret as any).id?.substring(0, 8) || 'N/A'}</p>
+                                      <p className="font-mono text-xs text-zinc-400">#{resolvedSecret.id?.substring(0, 8) || 'N/A'}</p>
                                     </div>
                                     <div className="col-span-2">
                                       <p className="text-[11px] font-bold text-zinc-700 uppercase mb-1">Description</p>
@@ -311,7 +384,7 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
                                   <h4 className="text-[10px] uppercase font-bold tracking-[0.25em] text-zinc-600 flex items-center gap-2">
                                     <div className="w-1 h-3 bg-zinc-800" />
                                     Environment Logic
-                                    {expandedSecretLoading && (
+                                    {(expandedSecretLoading || expandedVersionsLoading) && (
                                       <Loader2 className="w-3 h-3 animate-spin text-grimoire ml-1" />
                                     )}
                                   </h4>
@@ -328,7 +401,7 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
                                       <TableBody>
                                         {safeEnvs.map(env => {
                                           const status = getSecretStatus(resolvedSecret, env.slug);
-                                          const value = getSecretValues(resolvedSecret).find(v => v.environmentSlug === env.slug);
+                                          const value = resolveSecretValue(resolvedSecret, env.slug);
                                           return (
                                             <TableRow key={env.slug} className="border-zinc-900 hover:bg-zinc-900/30 h-12 transition-colors">
                                               <td className="px-4 font-mono text-[11px] font-bold">{env.name}</td>
@@ -338,7 +411,8 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
                                                     "w-1.5 h-1.5 rounded-full",
                                                     status === SecretStatus.ENABLED ? "bg-green-500 shadow-[0_0_4px_rgba(34,197,94,0.4)]" :
                                                     status === SecretStatus.DISABLED ? "bg-zinc-700" :
-                                                    status === SecretStatus.EXPIRED ? "bg-red-500" : "bg-amber-500"
+                                                    status === SecretStatus.EXPIRED ? "bg-red-500" :
+                                                    status === SecretStatus.MISSING ? "bg-zinc-800" : "bg-amber-500"
                                                   )} />
                                                   <span className={cn(
                                                     "text-[10px] font-bold uppercase tracking-widest",

@@ -166,7 +166,7 @@ export const ConfigTab: React.FC<{ appSlug: string; onAddEnv?: () => void }> = (
   };
 
   return (
-    <div className="flex flex-col h-full uppercase">
+    <div className="flex flex-col h-full">
       <div className="h-[48px] border-b border-border bg-[#121214] flex items-center justify-between px-6 shrink-0 gap-4">
         <div className="flex items-center gap-4 flex-1">
           <div className="flex items-center bg-zinc-900 border border-zinc-800 px-3 h-[28px] text-[10px] font-bold uppercase tracking-widest text-zinc-500 shrink-0">
@@ -220,7 +220,7 @@ export const ConfigTab: React.FC<{ appSlug: string; onAddEnv?: () => void }> = (
             <Search className="absolute left-2.5 top-1.5 h-3.5 w-3.5 text-zinc-600" />
             <input 
               placeholder="Filter configs..." 
-              className="w-full h-[28px] pl-8 pr-3 bg-zinc-900 border border-border text-xs focus:border-config transition-colors font-sans lowercase"
+              className="w-full h-[28px] pl-8 pr-3 bg-zinc-900 border border-border text-xs focus:border-config transition-colors font-sans"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -307,9 +307,9 @@ export const ConfigTab: React.FC<{ appSlug: string; onAddEnv?: () => void }> = (
                       />
                     ) : (
                       <TableRow key={config.key} className="group border-zinc-900/50 hover:bg-zinc-900/20 h-12 transition-colors">
-                        <TableCell className="font-mono text-[13px] font-bold text-config pl-6 uppercase tracking-tight">{config.key}</TableCell>
+                        <TableCell className="font-mono text-[13px] font-bold text-config pl-6 tracking-tight">{config.key}</TableCell>
                         <TableCell className="font-mono text-xs text-zinc-300">{config.value}</TableCell>
-                        <TableCell className="text-xs text-zinc-500 hidden lg:table-cell font-sans lowercase">{config.description || '—'}</TableCell>
+                        <TableCell className="text-xs text-zinc-500 hidden lg:table-cell font-sans">{config.description || '—'}</TableCell>
                         <TableCell className="text-[9px] font-mono text-zinc-600 hidden xl:table-cell">
                           {formatTimestamp(config.updatedAt)}
                         </TableCell>

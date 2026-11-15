@@ -74,7 +74,7 @@ export const EditSecretValueModal: React.FC<EditSecretValueModalProps> = ({
     try {
       // POST to /values as specified in the integration guide
       // The API takes an array of values
-      await api.post(`/applications/${appSlug}/secrets/${secretName}/values`, [{
+      await api.post(`/applications/${appSlug}/secrets/${encodeURIComponent(secretName)}/values`, [{
         environmentSlug: envSlug,
         value: data.value,
         isEnabled: data.isEnabled,

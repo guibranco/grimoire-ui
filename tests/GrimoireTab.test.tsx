@@ -95,4 +95,89 @@ describe('GrimoireTab', () => {
       expect(screen.getByText('Resolved description')).toBeDefined();
     });
   });
+
+  it('resolves status and latest version from /versions/{envSlug} when secret detail omits values', async () => {
+    const mockGet = api.get as ReturnType<typeof vi.fn>;
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/applications/my-app/secrets') {
+        return Promise.resolve({
+          data: [
+            {
+              id: '90871406-362f-403b-8acb-ba1331a40f72',
+              name: 'Mailbox--Password',
+              description: 'Mail password',
+              createdAt: '2026-11-15T19:11:05.2077893+00:00',
+              updatedAt: '2026-11-15T19:11:05.2077894+00:00',
+            },
+          ],
+        });
+      }
+      if (url === '/applications/my-app/environments') {
+        return Promise.resolve({
+          data: [
+            { name: 'Production', slug: 'production' },
+            { name: 'Staging', slug: 'staging' },
+          ],
+        });
+      }
+      if (url === '/applications/my-app/secrets/Mailbox--Password') {
+        return Promise.resolve({
+          data: {
+            id: '90871406-362f-403b-8acb-ba1331a40f72',
+            name: 'Mailbox--Password',
+            description: 'Mail password',
+            createdAt: '2026-11-15T19:11:05.2077893+00:00',
+            updatedAt: '2026-11-15T19:11:05.2077894+00:00',
+          },
+        });
+      }
+      if (url === '/applications/my-app/secrets/Mailbox--Password/versions/production') {
+        return Promise.resolve({
+          data: [
+            {
+              id: '0d9aeb93-b2d5-41d8-b779-ec2009d801bb',
+              version: 2,
+              isEnabled: true,
+              expiresAt: null,
+              notBefore: null,
+              createdAt: '2026-11-15T19:11:40.9908309+00:00',
+            },
+            {
+              id: '5bf7a610-9b6b-42ed-90ef-ba340d0b800e',
+              version: 1,
+              isEnabled: true,
+              expiresAt: null,
+              notBefore: null,
+              createdAt: '2026-11-15T19:11:05.740662+00:00',
+            },
+          ],
+        });
+      }
+      if (url === '/applications/my-app/secrets/Mailbox--Password/versions/staging') {
+        return Promise.resolve({ data: [] });
+      }
+      return Promise.resolve({ data: [] });
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <GrimoireTab appSlug="my-app" />
+      </QueryClientProvider>
+    );
+
+    // Presence badge appears once /versions/production resolves
+    await waitFor(() => {
+      expect(screen.getByText('Mailbox--Password')).toBeDefined();
+      expect(screen.getByText('pro')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByText('Mailbox--Password'));
+
+    await waitFor(() => {
+      expect(screen.getByText('#90871406')).toBeDefined();
+      expect(screen.getByText('enabled')).toBeDefined();
+      expect(screen.getByText('v2')).toBeDefined();
+      expect(screen.getByText('missing')).toBeDefined();
+    });
+  });
 });

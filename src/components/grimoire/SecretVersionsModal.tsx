@@ -42,7 +42,7 @@ export const SecretVersionsModal: React.FC<SecretVersionsModalProps> = ({
     queryKey: ['secret-versions', appSlug, secretName, envSlug],
     queryFn: async () => {
       const res = await api.get<SecretVersion[]>(
-        `/applications/${appSlug}/secrets/${secretName}/versions/${envSlug}`
+        `/applications/${appSlug}/secrets/${encodeURIComponent(secretName)}/versions/${encodeURIComponent(envSlug)}`
       );
       return res.data;
     },

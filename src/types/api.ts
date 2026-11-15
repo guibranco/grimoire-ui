@@ -20,6 +20,7 @@ export interface SecretValue {
 }
 
 export interface SecretVersion {
+  id?: string;
   version: number;
   isEnabled: boolean;
   expiresAt: string | null;
@@ -29,10 +30,12 @@ export interface SecretVersion {
 }
 
 export interface Secret {
+  id?: string;
   name: string;
   description?: string | null;
   values?: SecretValue[] | null;
   createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Configuration {

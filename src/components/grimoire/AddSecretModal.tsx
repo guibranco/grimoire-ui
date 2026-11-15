@@ -140,11 +140,12 @@ export const AddSecretModal: React.FC<AddSecretModalProps> = ({ appSlug, open, o
         }));
       
       if (valuesToCreate.length > 0) {
-        await api.post(`/applications/${appSlug}/secrets/${createdName}/values`, valuesToCreate);
+        await api.post(`/applications/${appSlug}/secrets/${encodeURIComponent(createdName)}/values`, valuesToCreate);
       }
 
       queryClient.invalidateQueries({ queryKey: ['secrets', appSlug] });
       queryClient.invalidateQueries({ queryKey: ['secret', appSlug] });
+      queryClient.invalidateQueries({ queryKey: ['secret-versions', appSlug] });
       reset();
       onOpenChange(false);
       toast.success('Secret and values created');
@@ -186,7 +187,7 @@ export const AddSecretModal: React.FC<AddSecretModalProps> = ({ appSlug, open, o
                 <Input
                   id="s-name"
                   placeholder="DATABASE_PASSWORD"
-                  className="font-mono border-border focus-visible:ring-grimoire uppercase"
+                  className="font-mono border-border focus-visible:ring-grimoire"
                   {...register('name')}
                 />
                 {errors.name && <p className="text-[10px] text-destructive font-bold uppercase tracking-widest">{(errors.name.message as string)}</p>}
