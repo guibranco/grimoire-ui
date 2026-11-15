@@ -1,29 +1,6 @@
 import React from 'react';
-import { useStore } from '@/store/useStore';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api';
-import { Application, Environment } from '@/types/api';
-import { 
-  ChevronDown, 
-  Plus, 
-  RefreshCcw, 
-  Trash2,
-  Settings,
-  Globe,
-  Loader2
-} from 'lucide-react';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-  DropdownMenuLabel,
-} from "@/components/ui/dropdown-menu";
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
-import toast from 'react-hot-toast';
+import { Application } from '@/types/api';
+import { Plus } from 'lucide-react';
 
 interface ApplicationHeaderProps {
   app: Application;
@@ -38,25 +15,6 @@ export const ApplicationHeader: React.FC<ApplicationHeaderProps> = ({
   onRotateKey, 
   onDeleteApp 
 }) => {
-  const { selectedEnvironmentSlug, setSelectedEnvironmentSlug } = useStore();
-  
-  const { data: envs, isLoading: envsLoading } = useQuery({
-    queryKey: ['environments', app.slug],
-    queryFn: async () => {
-      const res = await api.get<Environment[]>(`/applications/${app.slug}/environments`);
-      return res.data;
-    },
-    enabled: !!app.slug,
-  });
-
-  const selectedEnv = envs?.find(e => e.slug === selectedEnvironmentSlug) || envs?.[0];
-
-  React.useEffect(() => {
-    if (envs?.length && !selectedEnvironmentSlug) {
-      setSelectedEnvironmentSlug(envs[0].slug);
-    }
-  }, [envs, selectedEnvironmentSlug, setSelectedEnvironmentSlug]);
-
   return (
     <header className="h-[64px] flex items-center justify-between px-6 border-b border-border bg-background">
       <div className="flex items-center gap-4">
@@ -67,32 +25,13 @@ export const ApplicationHeader: React.FC<ApplicationHeaderProps> = ({
       </div>
 
       <div className="flex items-center gap-3">
-        <div className="flex items-center bg-zinc-900 border border-zinc-800 px-3 py-1 text-[11px] font-bold uppercase tracking-widest text-zinc-500">
-          <span>ENV:</span>
-          <DropdownMenu>
-            <DropdownMenuTrigger>
-              <button className="flex items-center gap-1.5 text-grimoire ml-2 font-bold cursor-pointer hover:text-grimoire/80 transition-colors">
-                {selectedEnv?.name || 'SELECT'}
-                <ChevronDown className="w-3 h-3" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-[180px] bg-[#0A0A0B] border-border shadow-2xl p-0">
-              {envs?.map((env) => (
-                <DropdownMenuItem 
-                  key={env.slug}
-                  onClick={() => setSelectedEnvironmentSlug(env.slug)}
-                  className="font-mono text-[11px] uppercase p-2 border-b border-zinc-900 last:border-0 hover:bg-zinc-900 cursor-pointer"
-                >
-                  {env.name}
-                </DropdownMenuItem>
-              ))}
-              <DropdownMenuSeparator className="bg-zinc-800 m-0" />
-              <DropdownMenuItem onClick={onAddEnv} className="text-[11px] font-bold uppercase p-2 text-grimoire hover:bg-grimoire/5 cursor-pointer">
-                + Add Environment
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+        <button 
+          onClick={onAddEnv}
+          className="h-[32px] px-3 border border-border text-[11px] font-bold uppercase tracking-widest text-grimoire hover:bg-grimoire/10 transition-colors inline-flex items-center gap-1.5"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          Add Env
+        </button>
 
         <button 
           onClick={onRotateKey}
@@ -111,3 +50,4 @@ export const ApplicationHeader: React.FC<ApplicationHeaderProps> = ({
     </header>
   );
 };
+

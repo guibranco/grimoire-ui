@@ -6,7 +6,7 @@ import { defineConfig, loadEnv } from 'vite';
 
 const pkg = JSON.parse(fs.readFileSync(new URL('./package.json', import.meta.url), 'utf-8'));
 
-export default defineConfig(({mode}) => {
+export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, '.', '');
   const appVersion =
     env.VITE_APP_VERSION ||
@@ -16,7 +16,7 @@ export default defineConfig(({mode}) => {
 
   return {
     plugins: [react(), tailwindcss()],
-    base: '/grimoire-ui/',
+    base: command === 'build' ? '/grimoire-ui/' : '/',
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
       '__APP_VERSION__': JSON.stringify(appVersion),

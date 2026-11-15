@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Configuration, Environment } from '@/types/api';
@@ -14,7 +14,8 @@ import {
   Check, 
   X,
   Loader2,
-  FileJson
+  FileJson,
+  ChevronDown
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,13 +28,20 @@ import {
   TableHeader, 
   TableRow 
 } from '@/components/ui/table';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ConfirmationModal } from '@/components/shared/ConfirmationModal';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import toast from 'react-hot-toast';
 
-export const ConfigTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
-  const { selectedEnvironmentSlug } = useStore();
+export const ConfigTab: React.FC<{ appSlug: string; onAddEnv?: () => void }> = ({ appSlug, onAddEnv }) => {
+  const { selectedEnvironmentSlug, setSelectedEnvironmentSlug } = useStore();
   const [search, setSearch] = useState('');
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
@@ -42,15 +50,33 @@ export const ConfigTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
   
   const queryClient = useQueryClient();
 
+  const { data: envs } = useQuery({
+    queryKey: ['environments', appSlug],
+    queryFn: async () => {
+      const res = await api.get<Environment[]>(`/applications/${appSlug}/environments`);
+      return res.data;
+    },
+    enabled: !!appSlug,
+  });
+
+  const selectedEnv = envs?.find(e => e.slug === selectedEnvironmentSlug) || envs?.[0];
+  const activeEnvironmentSlug = selectedEnv?.slug || null;
+
+  useEffect(() => {
+    if (envs?.length && (!selectedEnvironmentSlug || !envs.some(e => e.slug === selectedEnvironmentSlug))) {
+      setSelectedEnvironmentSlug(envs[0].slug);
+    }
+  }, [envs, selectedEnvironmentSlug, setSelectedEnvironmentSlug]);
+
   const { data: configs, isLoading: configsLoading } = useQuery({
-    queryKey: ['configurations', appSlug, selectedEnvironmentSlug],
+    queryKey: ['configurations', appSlug, activeEnvironmentSlug],
     queryFn: async () => {
       const res = await api.get<Configuration[]>(`/applications/${appSlug}/configurations`, {
-        params: { environmentSlug: selectedEnvironmentSlug }
+        params: { environmentSlug: activeEnvironmentSlug }
       });
       return res.data;
     },
-    enabled: !!selectedEnvironmentSlug,
+    enabled: !!activeEnvironmentSlug,
   });
 
   const filteredConfigs = configs?.filter(c => 
@@ -60,13 +86,13 @@ export const ConfigTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
   );
 
   const handleExport = () => {
-    if (!configs || !selectedEnvironmentSlug) return;
+    if (!configs || !activeEnvironmentSlug) return;
     const exportData = configs.reduce((acc, curr) => ({ ...acc, [curr.key]: curr.value }), {});
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${appSlug}-${selectedEnvironmentSlug}-config.json`;
+    a.download = `${appSlug}-${activeEnvironmentSlug}-config.json`;
     a.click();
     URL.revokeObjectURL(url);
     toast.success('Configuration exported');
@@ -74,7 +100,7 @@ export const ConfigTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !selectedEnvironmentSlug) return;
+    if (!file || !activeEnvironmentSlug) return;
 
     const reader = new FileReader();
     reader.onload = async (event) => {
@@ -84,7 +110,7 @@ export const ConfigTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
         
         const promises = Object.entries(data).map(([key, value]) => 
           api.post(`/applications/${appSlug}/configurations`, {
-            environmentSlug: selectedEnvironmentSlug,
+            environmentSlug: activeEnvironmentSlug,
             key,
             value: String(value),
             description: 'Imported configuration'
@@ -92,7 +118,7 @@ export const ConfigTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
         );
 
         await Promise.all(promises);
-        queryClient.invalidateQueries({ queryKey: ['configurations', appSlug, selectedEnvironmentSlug] });
+        queryClient.invalidateQueries({ queryKey: ['configurations', appSlug, activeEnvironmentSlug] });
         toast.success(`Imported ${promises.length} configurations`);
       } catch (err) {
         toast.error('Failed to import JSON. Ensure it is a flat key-value object.');
@@ -103,10 +129,10 @@ export const ConfigTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
   };
 
   const handleDelete = async () => {
-    if (!deletingKey || !selectedEnvironmentSlug) return;
+    if (!deletingKey || !activeEnvironmentSlug) return;
     try {
-      await api.delete(`/applications/${appSlug}/configurations/${selectedEnvironmentSlug}/${deletingKey}`);
-      queryClient.invalidateQueries({ queryKey: ['configurations', appSlug, selectedEnvironmentSlug] });
+      await api.delete(`/applications/${appSlug}/configurations/${activeEnvironmentSlug}/${deletingKey}`);
+      queryClient.invalidateQueries({ queryKey: ['configurations', appSlug, activeEnvironmentSlug] });
       toast.success('Configuration deleted');
     } catch (err) {
       toast.error('Failed to delete configuration');
@@ -115,8 +141,44 @@ export const ConfigTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
 
   return (
     <div className="flex flex-col h-full uppercase">
-      <div className="h-[48px] border-b border-border bg-[#121214] flex items-center justify-between px-6 shrink-0">
+      <div className="h-[48px] border-b border-border bg-[#121214] flex items-center justify-between px-6 shrink-0 gap-4">
         <div className="flex items-center gap-4 flex-1">
+          <div className="flex items-center bg-zinc-900 border border-zinc-800 px-3 h-[28px] text-[10px] font-bold uppercase tracking-widest text-zinc-500 shrink-0">
+            <span>ENV:</span>
+            <DropdownMenu>
+              <DropdownMenuTrigger>
+                <button
+                  type="button"
+                  className="flex items-center gap-1.5 text-config ml-2 font-bold cursor-pointer hover:text-config/80 transition-colors"
+                >
+                  {selectedEnv?.name || 'SELECT'}
+                  <ChevronDown className="w-3 h-3" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-[180px] bg-[#0A0A0B] border-border shadow-2xl p-0">
+                {envs?.map((env) => (
+                  <DropdownMenuItem
+                    key={env.slug}
+                    onClick={() => setSelectedEnvironmentSlug(env.slug)}
+                    className="font-mono text-[11px] uppercase p-2 border-b border-zinc-900 last:border-0 hover:bg-zinc-900 cursor-pointer"
+                  >
+                    {env.name}
+                  </DropdownMenuItem>
+                ))}
+                {onAddEnv && (
+                  <>
+                    <DropdownMenuSeparator className="bg-zinc-800 m-0" />
+                    <DropdownMenuItem
+                      onClick={onAddEnv}
+                      className="text-[11px] font-bold uppercase p-2 text-config hover:bg-config/5 cursor-pointer"
+                    >
+                      + Add Environment
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
           <div className="relative flex-1 max-w-xs">
             <Search className="absolute left-2.5 top-1.5 h-3.5 w-3.5 text-zinc-600" />
             <input 
@@ -157,10 +219,10 @@ export const ConfigTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
       </div>
 
       <div className="flex-1 overflow-auto scroll-area">
-        {!selectedEnvironmentSlug ? (
+        {!activeEnvironmentSlug ? (
           <div className="flex flex-col items-center justify-center p-12 text-center h-full opacity-50">
             <h3 className="text-lg font-bold tracking-tight uppercase">No Env Selected</h3>
-            <p className="text-xs text-muted-foreground uppercase tracking-widest mt-1 font-sans">Toggle environment in header</p>
+            <p className="text-xs text-muted-foreground uppercase tracking-widest mt-1 font-sans">Select or create an environment above</p>
           </div>
         ) : configsLoading ? (
             <div className="p-12 flex flex-col items-center justify-center gap-4 text-muted-foreground">
@@ -183,9 +245,9 @@ export const ConfigTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
                 {isAdding && (
                   <ConfigRow 
                     appSlug={appSlug} 
-                    envSlug={selectedEnvironmentSlug} 
+                    envSlug={activeEnvironmentSlug} 
                     onCancel={() => setIsAdding(false)} 
-                    onSave={() => setIsAdding(false)} 
+                    onSave={() => setIsAdding(false)}
                   />
                 )}
                 {filteredConfigs?.length === 0 && !isAdding ? (
@@ -201,7 +263,7 @@ export const ConfigTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
                       <ConfigRow 
                         key={config.key}
                         appSlug={appSlug} 
-                        envSlug={selectedEnvironmentSlug} 
+                        envSlug={activeEnvironmentSlug} 
                         initialData={config}
                         onCancel={() => setEditingKey(null)} 
                         onSave={() => setEditingKey(null)} 
@@ -245,7 +307,7 @@ export const ConfigTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
         onOpenChange={(open) => !open && setDeletingKey(null)}
         onConfirm={handleDelete}
         title="Delete Configuration"
-        description={`Are you sure you want to delete the configuration key "${deletingKey}" from ${selectedEnvironmentSlug}?`}
+        description={`Are you sure you want to delete the configuration key "${deletingKey}" from ${activeEnvironmentSlug}?`}
         confirmText="Remove Entry"
         variant="destructive"
       />

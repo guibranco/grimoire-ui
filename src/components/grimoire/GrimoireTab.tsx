@@ -159,12 +159,12 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
         {secretsLoading ? (
           <div className="p-12 flex flex-col items-center justify-center gap-4 text-muted-foreground">
             <Loader2 className="w-8 h-8 animate-spin" />
-            <span className="text-[10px] uppercase font-bold tracking-widest font-mono text-zinc-700">Syncing Grimoire...</span>
+            <span className="text-[10px] uppercase font-bold tracking-widest font-mono text-zinc-700">Syncing Secrets...</span>
           </div>
         ) : filteredSecrets?.length === 0 ? (
           <div className="flex flex-col items-center justify-center p-12 text-center h-full opacity-50">
             <Lock className="w-12 h-12 mb-4 text-muted-foreground" />
-            <h3 className="text-lg font-bold tracking-tight uppercase">Grimoire is empty</h3>
+            <h3 className="text-lg font-bold tracking-tight uppercase">Secrets vault is empty</h3>
             <p className="text-xs text-muted-foreground uppercase tracking-widest mt-1">No secrets defined</p>
           </div>
         ) : (
