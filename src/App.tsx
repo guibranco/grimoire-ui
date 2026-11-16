@@ -7,7 +7,7 @@ import { Sidebar } from './components/layout/Sidebar';
 import { AppDetailView } from './components/app/AppDetailView';
 import { GlobalView } from './components/global/GlobalView';
 import { CreateAppModal } from './components/modals/CreateAppModal';
-import { Box } from 'lucide-react';
+import logoMark from '@/assets/logo-mark.svg';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -52,9 +52,7 @@ export default function App() {
             <AppDetailView key={selectedAppSlug} />
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center p-12 text-center text-zinc-400">
-              <div className="w-16 h-16 bg-muted/30 border border-border flex items-center justify-center mb-6">
-                <Box className="w-8 h-8 text-zinc-600" />
-              </div>
+              <img src={logoMark} alt="Grimoire" className="w-20 h-20 mb-6" />
               <h2 className="text-2xl font-bold tracking-tight mb-2 text-zinc-100 italic">Welcome to Grimoire</h2>
               <p className="text-zinc-500 max-w-sm mb-8 text-sm uppercase tracking-widest font-mono text-[10px]">
                 Select Global or an application from the sidebar, or create a new one to get started.

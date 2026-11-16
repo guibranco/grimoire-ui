@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.svg" alt="Grimoire logo" width="160" />
+</p>
+
 # 🔮 Grimoire UI
 
 [![Build and Test](https://github.com/guibranco/grimoire-ui/actions/workflows/build.yml/badge.svg)](https://github.com/guibranco/grimoire-ui/actions/workflows/build.yml)

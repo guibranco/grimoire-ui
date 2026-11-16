@@ -3,6 +3,7 @@ import { Key, ArrowRight, Loader2, Globe, Eye, EyeOff } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import { UI_VERSION } from '@/lib/api';
 import toast from 'react-hot-toast';
+import logoMark from '@/assets/logo-mark.svg';
 
 export const SetupScreen: React.FC = () => {
   const [url, setUrl] = useState('http://localhost:5000');
@@ -54,7 +55,7 @@ export const SetupScreen: React.FC = () => {
       <div className="w-full max-w-md border border-zinc-800 bg-[#080809] shadow-2xl">
         <div className="p-8 border-b border-zinc-800">
           <div className="flex items-center gap-3 mb-6">
-            <div className="w-8 h-8 bg-grimoire shrink-0" />
+            <img src={logoMark} alt="" aria-hidden="true" className="w-10 h-10 shrink-0" />
             <span className="text-2xl font-bold tracking-tight uppercase text-zinc-100">Grimoire</span>
           </div>
           <h2 className="text-lg font-semibold text-zinc-300">Connect to Grimoire</h2>

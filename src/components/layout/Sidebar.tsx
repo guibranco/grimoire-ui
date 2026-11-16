@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import logoMark from '@/assets/logo-mark.svg';
 
 export const Sidebar: React.FC<{ onCreateApp: () => void }> = ({ onCreateApp }) => {
   const {
@@ -68,7 +69,7 @@ export const Sidebar: React.FC<{ onCreateApp: () => void }> = ({ onCreateApp }) 
     <aside className="w-[220px] border-r border-border bg-sidebar flex flex-col h-screen fixed left-0 top-0 z-20">
       <div className="p-5 border-b border-border">
         <div className="flex items-center gap-2">
-          <div className="w-5 h-5 bg-grimoire shrink-0" />
+          <img src={logoMark} alt="" aria-hidden="true" className="w-6 h-6 shrink-0" />
           <h1 className="text-base font-bold tracking-tight text-foreground uppercase">Grimoire</h1>
         </div>
         <div className="text-[10px] text-zinc-600 font-mono mt-1 uppercase tracking-widest">v{UI_VERSION}-STABLE</div>
