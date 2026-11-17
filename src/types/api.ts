@@ -6,6 +6,17 @@ export interface Application {
   createdAt?: string;
 }
 
+/** Response of POST /management/applications — includes the one-time plain API key. */
+export interface CreateApplicationResponse extends Application {
+  id?: string;
+  plainApiKey: string;
+}
+
+/** Response of POST /management/applications/{slug}/rotate-key. */
+export interface RotateKeyResponse {
+  plainApiKey: string;
+}
+
 export interface Environment {
   name: string;
   slug: string;

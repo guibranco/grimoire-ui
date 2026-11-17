@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useStore } from '@/store/useStore';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api';
-import { Application } from '@/types/api';
+import { api, extractPlainApiKey } from '@/lib/api';
+import { Application, RotateKeyResponse } from '@/types/api';
 import { ApplicationHeader } from '@/components/layout/ApplicationHeader';
 import { GrimoireTab } from '@/components/grimoire/GrimoireTab';
 import { ConfigTab } from '@/components/config/ConfigTab';
@@ -63,8 +63,8 @@ export const AppDetailView: React.FC = () => {
 
   const handleRotateKey = async () => {
     try {
-      const res = await api.post(`/applications/${app.slug}/rotate-key`);
-      const rotatedKey = res.data?.apiKey ?? res.data?.key;
+      const res = await api.post<RotateKeyResponse>(`/applications/${app.slug}/rotate-key`);
+      const rotatedKey = extractPlainApiKey(res.data);
       if (!rotatedKey) {
         toast.error('Rotated API key was not returned by the server');
         return;

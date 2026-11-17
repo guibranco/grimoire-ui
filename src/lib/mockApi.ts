@@ -333,8 +333,8 @@ export function mockApiAdapter(config: AxiosRequestConfig): Promise<AxiosRespons
     ];
     saveStored('environments', environments);
 
-    const apiKey = `grm_sec_key_${Math.random().toString(36).substring(2, 12)}`;
-    return makeResponse(201, { ...newApp, apiKey }, config);
+    const plainApiKey = `grm_sec_key_${Math.random().toString(36).substring(2, 12)}`;
+    return makeResponse(201, { ...newApp, plainApiKey }, config);
   }
 
   // 3. GET /applications/:appSlug
@@ -387,11 +387,7 @@ export function mockApiAdapter(config: AxiosRequestConfig): Promise<AxiosRespons
   match = cleanPath.match(/^\/applications\/([^\/]+)\/rotate-key$/);
   if (match && method === 'POST') {
     const newKey = `grm_sec_key_${Math.random().toString(36).substring(2, 12)}`;
-    return makeResponse(200, { 
-      message: "Security key rotated successfully", 
-      apiKey: newKey,
-      key: newKey
-    }, config);
+    return makeResponse(200, { plainApiKey: newKey }, config);
   }
 
   // 6. GET /applications/:appSlug/environments

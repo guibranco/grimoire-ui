@@ -31,8 +31,8 @@ describe('Grimoire Mock API Integration Tests', () => {
       expect(res.status).toBe(201);
       expect(res.data).toHaveProperty('name', 'Billing Microservice');
       expect(res.data).toHaveProperty('slug', 'billing-microservice');
-      expect(res.data).toHaveProperty('apiKey');
-      expect(res.data.apiKey.startsWith('grm_')).toBe(true);
+      expect(res.data).toHaveProperty('plainApiKey');
+      expect(res.data.plainApiKey.startsWith('grm_')).toBe(true);
 
       // Verify it was persisted by calling list
       const listRes = await api.get('/applications');
@@ -51,11 +51,8 @@ describe('Grimoire Mock API Integration Tests', () => {
     it('should rotate keys for an application', async () => {
       const res = await api.post('/applications/production-gateway/rotate-key');
       expect(res.status).toBe(200);
-      expect(res.data).toHaveProperty('message');
-      expect(res.data).toHaveProperty('apiKey');
-      expect(res.data).toHaveProperty('key');
-      expect(res.data.apiKey).toBe(res.data.key);
-      expect(res.data.key.startsWith('grm_')).toBe(true);
+      expect(res.data).toHaveProperty('plainApiKey');
+      expect(res.data.plainApiKey.startsWith('grm_')).toBe(true);
     });
 
     it('should delete an application', async () => {
