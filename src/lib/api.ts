@@ -17,6 +17,17 @@ export function clearDetectedApiVersion() {
   detectedHeaderApiVersion = null;
 }
 
+/**
+ * Extracts the one-time plain API key from a create-application or rotate-key response.
+ * The Grimoire API returns it as `plainApiKey`; `apiKey`/`key` are accepted for backwards compatibility.
+ */
+export function extractPlainApiKey(data: unknown): string | null {
+  if (!data || typeof data !== 'object') return null;
+  const payload = data as Record<string, unknown>;
+  const candidate = payload.plainApiKey ?? payload.apiKey ?? payload.key;
+  return typeof candidate === 'string' && candidate.trim() !== '' ? candidate : null;
+}
+
 export function toApiDateTime(value?: string | null): string | null {
   if (!value || !value.trim()) return null;
   const trimmed = value.trim();

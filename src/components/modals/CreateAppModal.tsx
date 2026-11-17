@@ -15,7 +15,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
-import { api } from '@/lib/api';
+import { api, extractPlainApiKey } from '@/lib/api';
+import type { CreateApplicationResponse } from '@/types/api';
 import { useQueryClient } from '@tanstack/react-query';
 import { APIKeyRevealModal } from './APIKeyRevealModal';
 import { Loader2, Box } from 'lucide-react';
@@ -56,16 +57,21 @@ export const CreateAppModal: React.FC<CreateAppModalProps> = ({ open, onOpenChan
     const formData = data as FormData;
     setLoading(true);
     try {
-      const res = await api.post('/applications', {
+      const res = await api.post<CreateApplicationResponse>('/applications', {
         name: formData.name,
         description: formData.description,
         inheritGlobals: formData.inheritGlobals ?? true,
       });
-      setRevealKey(res.data.apiKey);
+      const createdKey = extractPlainApiKey(res.data);
       queryClient.invalidateQueries({ queryKey: ['applications'] });
       reset({ name: '', description: '', inheritGlobals: true });
       onOpenChange(false);
       toast.success('Application created');
+      if (createdKey) {
+        setRevealKey(createdKey);
+      } else {
+        toast.error('Application created, but the API key was not returned by the server. Rotate the key to generate a new one.');
+      }
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Failed to create application');
     } finally {
