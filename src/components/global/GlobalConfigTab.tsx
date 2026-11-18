@@ -1,7 +1,7 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { ConfigValueType, GlobalConfiguration, GlobalEnvironment } from '@/types/api';
+import { GlobalConfiguration, GlobalEnvironment } from '@/types/api';
 import {
   Search,
   Globe,
@@ -15,17 +15,8 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ConfigValueCell, ConfigValueEditor, ValueTypeSelect } from '@/components/shared/ConfigValueEditor';
-import {
-  convertValue,
-  exportValue,
-  importEntry,
-  saveErrorMessage,
-  toEditorValue,
-  toSubmitValue,
-  validateConfigValue,
-  valueTypeOf,
-} from '@/lib/configValue';
+import { ConfigValueCell, ConfigValueField, useConfigValue } from '@/components/shared/ConfigValueEditor';
+import { exportValue, importEntry, saveErrorMessage, valueTypeOf } from '@/lib/configValue';
 import { Badge } from '@/components/ui/badge';
 import {
   Table,
@@ -490,29 +481,19 @@ const GlobalConfigRow: React.FC<GlobalConfigRowProps> = ({
 }) => {
   const [environmentSlug, setEnvironmentSlug] = useState(initialData?.environmentSlug || defaultEnvSlug || '*');
   const [key, setKey] = useState(initialData?.key || '');
-  const initialType = initialData ? valueTypeOf(initialData) : 'string';
-  const [valueType, setValueType] = useState<ConfigValueType>(initialType);
-  const [value, setValue] = useState(toEditorValue(initialType, initialData?.value || ''));
+  const valueState = useConfigValue(initialData ? valueTypeOf(initialData) : 'string', initialData?.value || '');
+  const { valueType } = valueState;
   const [description, setDescription] = useState(initialData?.description || '');
   const [loading, setLoading] = useState(false);
   const queryClient = useQueryClient();
 
-  const handleTypeChange = (next: ConfigValueType) => {
-    setValue(convertValue(valueType, next, value));
-    setValueType(next);
-  };
-
   const handleSave = async () => {
-    const submitValue = toSubmitValue(valueType, value);
-    if (!key.trim() || (valueType !== 'array' && !value.trim())) {
-      toast.error('Key and value are required');
+    const prepared = valueState.prepare(key);
+    if (!prepared.ok) {
+      toast.error(prepared.error);
       return;
     }
-    const invalid = validateConfigValue(valueType, submitValue);
-    if (invalid) {
-      toast.error(invalid);
-      return;
-    }
+    const submitValue = prepared.value;
 
     setLoading(true);
     try {
@@ -591,16 +572,7 @@ const GlobalConfigRow: React.FC<GlobalConfigRowProps> = ({
         />
       </TableCell>
       <TableCell className="py-2 min-w-[280px]">
-        <div className="space-y-1.5">
-          <ValueTypeSelect value={valueType} onChange={handleTypeChange} accent="global" />
-          <ConfigValueEditor
-            type={valueType}
-            value={value}
-            onChange={setValue}
-            accent="global"
-            autoFocus={!!initialData}
-          />
-        </div>
+        <ConfigValueField state={valueState} accent="global" autoFocus={!!initialData} />
       </TableCell>
       <TableCell className="py-2 hidden lg:table-cell">
         <Input

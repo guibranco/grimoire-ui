@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, ListPlus, Plus, Wand2, X } from 'lucide-react';
 import type { ConfigValueType } from '@/types/api';
 import { Input } from '@/components/ui/input';
@@ -7,9 +7,12 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import {
   CONFIG_VALUE_TYPES,
+  convertValue,
   parseArrayItems,
   prettyJson,
   previewValue,
+  toEditorValue,
+  toSubmitValue,
   validateConfigValue,
 } from '@/lib/configValue';
 
@@ -20,6 +23,62 @@ const textFor = (accent: Accent) =>
 
 const ringFor = (accent: Accent) =>
   accent === 'global' ? 'focus-visible:ring-global' : 'focus-visible:ring-config';
+
+export interface ConfigValueState {
+  valueType: ConfigValueType;
+  value: string;
+  setValue: (value: string) => void;
+  /** Switches type, converting what was typed (e.g. lines become array items). */
+  changeType: (next: ConfigValueType) => void;
+  /** Replaces type and value, e.g. when the row is reseeded. */
+  reset: (type: ConfigValueType, raw: string) => void;
+  /** The value to send to the API, or the error to show. */
+  prepare: (key: string) => { ok: true; value: string } | { ok: false; error: string };
+}
+
+/** Value-type and value state for an add/edit row. */
+export const useConfigValue = (seedType: ConfigValueType, seedValue: string): ConfigValueState => {
+  const [valueType, setValueType] = useState<ConfigValueType>(seedType);
+  const [value, setValue] = useState(() => toEditorValue(seedType, seedValue));
+
+  const reset = useCallback((type: ConfigValueType, raw: string) => {
+    setValueType(type);
+    setValue(toEditorValue(type, raw));
+  }, []);
+
+  const changeType = (next: ConfigValueType) => {
+    setValue(convertValue(valueType, next, value));
+    setValueType(next);
+  };
+
+  const prepare = (key: string) => {
+    if (!key.trim() || (valueType !== 'array' && !value.trim()))
+      return { ok: false as const, error: 'Key and value are required' };
+    const submit = toSubmitValue(valueType, value);
+    const error = validateConfigValue(valueType, submit);
+    return error ? { ok: false as const, error } : { ok: true as const, value: submit };
+  };
+
+  return { valueType, value, setValue, changeType, reset, prepare };
+};
+
+/** Type selector plus the matching editor, for an add/edit row. */
+export const ConfigValueField: React.FC<{ state: ConfigValueState; accent?: Accent; autoFocus?: boolean }> = ({
+  state,
+  accent = 'config',
+  autoFocus,
+}) => (
+  <div className="space-y-1.5">
+    <ValueTypeSelect value={state.valueType} onChange={state.changeType} accent={accent} />
+    <ConfigValueEditor
+      type={state.valueType}
+      value={state.value}
+      onChange={state.setValue}
+      accent={accent}
+      autoFocus={autoFocus}
+    />
+  </div>
+);
 
 export const ValueTypeSelect: React.FC<{
   value: ConfigValueType;

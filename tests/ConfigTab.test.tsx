@@ -209,40 +209,21 @@ describe('ConfigTab', () => {
   });
 
   it('shows array values with a type badge and sends valueType when saving an array', async () => {
-    const mockGet = api.get as ReturnType<typeof vi.fn>;
     const mockPost = api.post as ReturnType<typeof vi.fn>;
     mockPost.mockResolvedValue({ status: 201, data: {} });
-    mockGet.mockImplementation((url: string) => {
-      if (url === '/applications/my-app') {
-        return Promise.resolve({ data: { id: '1', name: 'My App', slug: 'my-app', inheritGlobals: true } });
-      }
-      if (url === '/applications/my-app/environments') {
-        return Promise.resolve({ data: [{ name: 'Production', slug: 'production' }] });
-      }
-      if (url === '/applications/my-app/configurations/effective?environment=production') {
-        return Promise.resolve({
-          data: [
-            {
-              key: 'AllowedIps',
-              value: '["10.0.0.1","10.0.0.2"]',
-              valueType: 'array',
-              description: null,
-              source: 'application',
-              overridesGlobal: false,
-            },
-          ],
-        });
-      }
-      return Promise.resolve({ data: [] });
-    });
+    const responses: Record<string, unknown> = {
+      '/applications/my-app': { id: '1', name: 'My App', slug: 'my-app', inheritGlobals: true },
+      '/applications/my-app/environments': [{ name: 'Production', slug: 'production' }],
+      '/applications/my-app/configurations/effective?environment=production': [
+        { key: 'AllowedIps', value: '["10.0.0.1","10.0.0.2"]', valueType: 'array', source: 'application', overridesGlobal: false },
+      ],
+    };
+    (api.get as ReturnType<typeof vi.fn>).mockImplementation((url: string) =>
+      Promise.resolve({ data: responses[url] ?? [] })
+    );
 
     const { fireEvent } = await import('@testing-library/react');
-
-    render(
-      <QueryClientProvider client={queryClient}>
-        <ConfigTab appSlug="my-app" />
-      </QueryClientProvider>
-    );
+    render(<QueryClientProvider client={queryClient}><ConfigTab appSlug="my-app" /></QueryClientProvider>);
 
     await waitFor(() => {
       expect(screen.getByText('AllowedIps')).toBeDefined();

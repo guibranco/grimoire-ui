@@ -37,17 +37,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ConfirmationModal } from '@/components/shared/ConfirmationModal';
-import { ConfigValueCell, ConfigValueEditor, ValueTypeSelect } from '@/components/shared/ConfigValueEditor';
-import {
-  convertValue,
-  exportValue,
-  importEntry,
-  saveErrorMessage,
-  toEditorValue,
-  toSubmitValue,
-  validateConfigValue,
-  valueTypeOf,
-} from '@/lib/configValue';
+import { ConfigValueCell, ConfigValueField, useConfigValue } from '@/components/shared/ConfigValueEditor';
+import { exportValue, importEntry, saveErrorMessage, valueTypeOf } from '@/lib/configValue';
 import { cn } from '@/lib/utils';
 import toast from 'react-hot-toast';
 
@@ -575,39 +566,27 @@ const ConfigRow: React.FC<ConfigRowProps> = ({
   onSave,
 }) => {
   const seed = initialData || prefillData;
-  const seedType = seed?.valueType ?? 'string';
   const [key, setKey] = useState(seed?.key || '');
-  const [valueType, setValueType] = useState<ConfigValueType>(seedType);
-  const [value, setValue] = useState(toEditorValue(seedType, seed?.value || ''));
+  const valueState = useConfigValue(seed?.valueType ?? 'string', seed?.value || '');
+  const { valueType, reset: resetValue } = valueState;
   const [description, setDescription] = useState(seed?.description || '');
   const [loading, setLoading] = useState(false);
   const queryClient = useQueryClient();
 
   useEffect(() => {
     const nextSeed = initialData || prefillData;
-    const nextType = nextSeed?.valueType ?? 'string';
     setKey(nextSeed?.key || '');
-    setValueType(nextType);
-    setValue(toEditorValue(nextType, nextSeed?.value || ''));
+    resetValue(nextSeed?.valueType ?? 'string', nextSeed?.value || '');
     setDescription(nextSeed?.description || '');
-  }, [initialData, prefillData]);
-
-  const handleTypeChange = (next: ConfigValueType) => {
-    setValue(convertValue(valueType, next, value));
-    setValueType(next);
-  };
+  }, [initialData, prefillData, resetValue]);
 
   const handleSave = async () => {
-    const submitValue = toSubmitValue(valueType, value);
-    if (!key.trim() || (valueType !== 'array' && !value.trim())) {
-      toast.error('Key and value are required');
+    const prepared = valueState.prepare(key);
+    if (!prepared.ok) {
+      toast.error(prepared.error);
       return;
     }
-    const invalid = validateConfigValue(valueType, submitValue);
-    if (invalid) {
-      toast.error(invalid);
-      return;
-    }
+    const submitValue = prepared.value;
 
     setLoading(true);
     try {
@@ -649,15 +628,7 @@ const ConfigRow: React.FC<ConfigRowProps> = ({
         />
       </TableCell>
       <TableCell className="py-2 min-w-[280px]">
-        <div className="space-y-1.5">
-          <ValueTypeSelect value={valueType} onChange={handleTypeChange} />
-          <ConfigValueEditor
-            type={valueType}
-            value={value}
-            onChange={setValue}
-            autoFocus={!!initialData || !!prefillData}
-          />
-        </div>
+        <ConfigValueField state={valueState} autoFocus={!!initialData || !!prefillData} />
       </TableCell>
       <TableCell className="py-2 hidden lg:table-cell">
         <Input
