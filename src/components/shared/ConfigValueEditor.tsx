@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, ListPlus, Plus, Wand2, X } from 'lucide-react';
 import type { ConfigValueType } from '@/types/api';
 import { Input } from '@/components/ui/input';
@@ -145,6 +145,11 @@ export const ConfigValueEditor: React.FC<ConfigValueEditorProps> = ({
   );
 };
 
+interface Row {
+  id: number;
+  text: string;
+}
+
 const ArrayEditor: React.FC<{ value: string; onChange: (value: string) => void; accent: Accent }> = ({
   value,
   onChange,
@@ -154,12 +159,22 @@ const ArrayEditor: React.FC<{ value: string; onChange: (value: string) => void; 
   const [pasting, setPasting] = useState(false);
   const [pasteText, setPasteText] = useState('');
 
-  const update = (next: string[]) => onChange(JSON.stringify(next));
+  // Stable row keys, so focus stays in the right input when rows move or are removed.
+  const nextId = useRef(0);
+  const ids = useRef<number[]>([]);
+  if (ids.current.length !== items.length) ids.current = items.map(() => nextId.current++);
+  const rows: Row[] = items.map((text, i) => ({ id: ids.current[i], text }));
+
+  const update = (next: Row[]) => {
+    ids.current = next.map((r) => r.id);
+    onChange(JSON.stringify(next.map((r) => r.text)));
+  };
+  const newRows = (texts: string[]): Row[] => texts.map((text) => ({ id: nextId.current++, text }));
   const move = (from: number, to: number) => {
-    if (to < 0 || to >= items.length) return;
-    const next = [...items];
-    const [item] = next.splice(from, 1);
-    next.splice(to, 0, item);
+    if (to < 0 || to >= rows.length) return;
+    const next = [...rows];
+    const [row] = next.splice(from, 1);
+    next.splice(to, 0, row);
     update(next);
   };
 
@@ -179,7 +194,7 @@ const ArrayEditor: React.FC<{ value: string; onChange: (value: string) => void; 
           <button
             type="button"
             onClick={() => {
-              update(parseArrayItems(pasteText));
+              update(newRows(parseArrayItems(pasteText)));
               setPasting(false);
             }}
             className={cn('text-[10px] font-bold uppercase tracking-widest', textFor(accent))}
@@ -189,7 +204,7 @@ const ArrayEditor: React.FC<{ value: string; onChange: (value: string) => void; 
           <button
             type="button"
             onClick={() => {
-              update([...items.filter((i) => i.trim() !== ''), ...parseArrayItems(pasteText)]);
+              update([...rows.filter((r) => r.text.trim() !== ''), ...newRows(parseArrayItems(pasteText))]);
               setPasting(false);
             }}
             className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 hover:text-zinc-200"
@@ -210,25 +225,25 @@ const ArrayEditor: React.FC<{ value: string; onChange: (value: string) => void; 
 
   return (
     <div className="space-y-1">
-      {items.length === 0 && (
+      {rows.length === 0 && (
         <p className="text-[10px] uppercase tracking-widest text-zinc-600 py-1">Empty list</p>
       )}
-      {items.map((item, index) => (
-        <div key={index} className="flex items-center gap-1">
+      {rows.map((row, index) => (
+        <div key={row.id} className="flex items-center gap-1">
           <span className="w-5 text-right text-[10px] font-mono text-zinc-600 shrink-0">{index}</span>
           <Input
             aria-label={`Item ${index + 1}`}
-            value={item}
+            value={row.text}
             onChange={(e) => {
-              const next = [...items];
-              next[index] = e.target.value;
+              const next = [...rows];
+              next[index] = { ...row, text: e.target.value };
               update(next);
             }}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 e.preventDefault();
-                const next = [...items];
-                next.splice(index + 1, 0, '');
+                const next = [...rows];
+                next.splice(index + 1, 0, ...newRows(['']));
                 update(next);
               }
             }}
@@ -239,12 +254,12 @@ const ArrayEditor: React.FC<{ value: string; onChange: (value: string) => void; 
           </IconButton>
           <IconButton
             label={`Move item ${index + 1} down`}
-            disabled={index === items.length - 1}
+            disabled={index === rows.length - 1}
             onClick={() => move(index, index + 1)}
           >
             <ArrowDown className="w-3 h-3" />
           </IconButton>
-          <IconButton label={`Remove item ${index + 1}`} onClick={() => update(items.filter((_, i) => i !== index))}>
+          <IconButton label={`Remove item ${index + 1}`} onClick={() => update(rows.filter((r) => r.id !== row.id))}>
             <X className="w-3 h-3" />
           </IconButton>
         </div>
@@ -252,7 +267,7 @@ const ArrayEditor: React.FC<{ value: string; onChange: (value: string) => void; 
       <div className="flex gap-3 pt-1 pl-6">
         <button
           type="button"
-          onClick={() => update([...items, ''])}
+          onClick={() => update([...rows, ...newRows([''])])}
           className={cn(
             'inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest',
             textFor(accent)
@@ -361,6 +376,12 @@ export const ValueTypeBadge: React.FC<{ type: ConfigValueType }> = ({ type }) =>
     </Badge>
   );
 
+const fullValue = (type: ConfigValueType, value: string): string => {
+  if (type === 'array') return parseArrayItems(value).join('\n');
+  if (type === 'json') return prettyJson(value);
+  return value;
+};
+
 /** List-view value: type badge plus a one-line preview that expands to the full value. */
 export const ConfigValueCell: React.FC<{ type: ConfigValueType; value: string; className?: string }> = ({
   type,
@@ -370,8 +391,7 @@ export const ConfigValueCell: React.FC<{ type: ConfigValueType; value: string; c
   const [expanded, setExpanded] = useState(false);
   if (type === 'string') return <span className={className}>{value}</span>;
 
-  const full =
-    type === 'array' ? parseArrayItems(value).join('\n') : type === 'json' ? prettyJson(value) : value;
+  const full = fullValue(type, value);
 
   return (
     <div className={cn('min-w-0', className)}>

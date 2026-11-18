@@ -45,31 +45,33 @@ export const prettyJson = (value: string): string => {
  * Mirrors the server rules so the user sees the problem before saving.
  */
 export const validateConfigValue = (type: ConfigValueType, value: string): string | null => {
-  switch (type) {
-    case 'array': {
-      const trimmed = value.trim();
-      if (!trimmed.startsWith('[')) return null;
-      try {
-        const parsed = JSON.parse(trimmed);
-        if (!Array.isArray(parsed)) return 'Must be a JSON array of strings';
-        if (parsed.some((item) => typeof item !== 'string')) return 'Every item must be a string';
-        return null;
-      } catch {
-        return 'Not a valid JSON array';
-      }
-    }
-    case 'json': {
-      try {
-        const parsed = JSON.parse(value);
-        if (parsed === null || typeof parsed !== 'object') return 'Must be a JSON object or array';
-        return null;
-      } catch (e) {
-        return e instanceof Error ? `Invalid JSON: ${e.message}` : 'Invalid JSON';
-      }
-    }
-    default:
-      return null;
+  if (type === 'array') return validateArray(value);
+  if (type === 'json') return validateJson(value);
+  return null;
+};
+
+const validateArray = (value: string): string | null => {
+  const trimmed = value.trim();
+  // Anything not starting with "[" is one item per line, which is always valid.
+  if (!trimmed.startsWith('[')) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    return 'Not a valid JSON array';
   }
+  if (!Array.isArray(parsed)) return 'Must be a JSON array of strings';
+  return parsed.every((item) => typeof item === 'string') ? null : 'Every item must be a string';
+};
+
+const validateJson = (value: string): string | null => {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch (e) {
+    return e instanceof Error ? `Invalid JSON: ${e.message}` : 'Invalid JSON';
+  }
+  return parsed !== null && typeof parsed === 'object' ? null : 'Must be a JSON object or array';
 };
 
 /** Value to send to the API: arrays go as a JSON array of their non-blank items. */
@@ -81,25 +83,16 @@ export const toSubmitValue = (type: ConfigValueType, value: string): string =>
 /** Converts the value being edited when the user switches value type, keeping what they typed. */
 export const convertValue = (from: ConfigValueType, to: ConfigValueType, value: string): string => {
   if (from === to) return value;
-  if (to === 'array') {
-    if (from === 'json') {
-      try {
-        const parsed = JSON.parse(value);
-        if (Array.isArray(parsed)) return JSON.stringify(parsed.map((i) => (typeof i === 'string' ? i : JSON.stringify(i))));
-      } catch {
-        // Treat as text below.
-      }
-    }
-    return JSON.stringify(parseArrayItems(value));
-  }
-  if (from === 'array') {
-    const items = parseArrayItems(value);
-    if (to === 'json') return JSON.stringify(items, null, 2);
-    return items.join(to === 'multiline' ? '\n' : ',');
-  }
+  if (to === 'array') return JSON.stringify(parseArrayItems(value));
+  if (from === 'array') return fromArray(to, parseArrayItems(value));
   if (to === 'json') return prettyJson(value);
   if (to === 'string') return value.replace(/\r?\n/g, ' ');
   return value;
+};
+
+const fromArray = (to: ConfigValueType, items: string[]): string => {
+  if (to === 'json') return JSON.stringify(items, null, 2);
+  return items.join(to === 'multiline' ? '\n' : ',');
 };
 
 /** One-line preview for list views. */
@@ -143,8 +136,8 @@ export const importEntry = (raw: unknown): { value: string; valueType: ConfigVal
   if (Array.isArray(raw) && raw.every((item) => typeof item === 'string'))
     return { value: JSON.stringify(raw), valueType: 'array' };
   if (raw !== null && typeof raw === 'object') return { value: JSON.stringify(raw), valueType: 'json' };
-  const text = String(raw ?? '');
-  return { value: text, valueType: /\r|\n/.test(text) ? 'multiline' : 'string' };
+  const text = raw === null || raw === undefined ? '' : String(raw as string | number | boolean);
+  return { value: text, valueType: /[\r\n]/.test(text) ? 'multiline' : 'string' };
 };
 
 /** First validation message from an API error response, or the fallback. */
