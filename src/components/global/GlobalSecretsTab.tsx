@@ -424,7 +424,12 @@ export const GlobalSecretsTab: React.FC<GlobalSecretsTabProps> = ({
                           <DropdownMenuContent align="end" className="bg-[#0A0A0B] border-border p-0">
                             <DropdownMenuItem
                               className="text-[10px] uppercase font-bold tracking-widest p-2 hover:bg-zinc-900 cursor-pointer"
-                              onClick={() => setExpandedSecret(isExpanded ? null : secret.name)}
+                              onClick={(e) => {
+                                // Menu content is portalled, but React still bubbles the click
+                                // to the row's onClick, which would toggle it straight back.
+                                e.stopPropagation();
+                                setExpandedSecret(isExpanded ? null : secret.name);
+                              }}
                             >
                               {isExpanded ? 'Collapse' : 'Show Details'}
                             </DropdownMenuItem>

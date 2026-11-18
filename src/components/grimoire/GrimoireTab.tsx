@@ -528,11 +528,14 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
                               <DropdownMenuContent align="end" className="bg-[#0A0A0B] border-border p-0">
                                 <DropdownMenuItem
                                   className="text-[10px] uppercase font-bold tracking-widest p-2 hover:bg-zinc-900 cursor-pointer"
-                                  onClick={() =>
+                                  onClick={(e) => {
+                                    // Menu content is portalled, but React still bubbles the click
+                                    // to the row's onClick, which would toggle it straight back.
+                                    e.stopPropagation();
                                     setExpandedSecret(
                                       isExpanded ? null : { name: secret.name, source: secret.source }
-                                    )
-                                  }
+                                    );
+                                  }}
                                 >
                                   {isExpanded ? 'Collapse' : 'Show Details'}
                                 </DropdownMenuItem>
