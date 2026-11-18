@@ -40,9 +40,13 @@ export interface Secret {
   updatedAt?: string;
 }
 
+/** How a configuration value is shaped. Array and JSON values are JSON text in `value`. */
+export type ConfigValueType = 'string' | 'multiline' | 'array' | 'json';
+
 export interface Configuration {
   key: string;
   value: string;
+  valueType?: ConfigValueType;
   description?: string | null;
   environmentSlug: string;
   updatedAt?: string;
@@ -53,6 +57,7 @@ export interface GlobalConfiguration {
   environmentSlug: string; // "*" = all environments
   key: string;
   value: string;
+  valueType?: ConfigValueType;
   description?: string | null;
   createdAt?: string;
   updatedAt?: string;
@@ -69,6 +74,7 @@ export type ValueSource = 'application' | 'global';
 export interface EffectiveConfiguration {
   key: string;
   value: string;
+  valueType?: ConfigValueType;
   description?: string | null;
   source: ValueSource;
   globalEnvironmentSlug?: string | null;

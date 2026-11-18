@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { Application, EffectiveConfiguration, Environment } from '@/types/api';
+import { Application, ConfigValueType, EffectiveConfiguration, Environment } from '@/types/api';
 import { useStore } from '@/store/useStore';
 import {
   Search,
@@ -37,6 +37,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ConfirmationModal } from '@/components/shared/ConfirmationModal';
+import { ConfigValueCell, ConfigValueField, useConfigValue } from '@/components/shared/ConfigValueEditor';
+import { exportValue, importEntry, saveErrorMessage, valueTypeOf } from '@/lib/configValue';
 import { cn } from '@/lib/utils';
 import toast from 'react-hot-toast';
 
@@ -46,7 +48,12 @@ export const ConfigTab: React.FC<{ appSlug: string; onAddEnv?: () => void }> = (
   const [showInherited, setShowInherited] = useState(true);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
-  const [overridePrefill, setOverridePrefill] = useState<{ key: string; value: string; description: string } | null>(null);
+  const [overridePrefill, setOverridePrefill] = useState<{
+    key: string;
+    value: string;
+    description: string;
+    valueType: ConfigValueType;
+  } | null>(null);
   const [deletingConfig, setDeletingConfig] = useState<EffectiveConfiguration | null>(null);
   const [deletingEnv, setDeletingEnv] = useState<Environment | null>(null);
   const [enablingInheritance, setEnablingInheritance] = useState(false);
@@ -130,7 +137,10 @@ export const ConfigTab: React.FC<{ appSlug: string; onAddEnv?: () => void }> = (
     if (!activeEnvironmentSlug) return;
     // Export app-level entries only
     const appEntries = safeConfigs.filter(c => c.source === 'application');
-    const exportData = appEntries.reduce((acc, curr) => ({ ...acc, [curr.key]: curr.value }), {});
+    const exportData = appEntries.reduce(
+      (acc, curr) => ({ ...acc, [curr.key]: exportValue(valueTypeOf(curr), curr.value) }),
+      {}
+    );
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -151,11 +161,11 @@ export const ConfigTab: React.FC<{ appSlug: string; onAddEnv?: () => void }> = (
         const content = event.target?.result as string;
         const data = JSON.parse(content);
 
-        const promises = Object.entries(data).map(([key, value]) =>
+        const promises = Object.entries(data).map(([key, raw]) =>
           api.post(`/applications/${appSlug}/configurations`, {
             environmentSlug: activeEnvironmentSlug,
             key,
-            value: String(value),
+            ...importEntry(raw),
             description: 'Imported configuration'
           })
         );
@@ -382,6 +392,7 @@ export const ConfigTab: React.FC<{ appSlug: string; onAddEnv?: () => void }> = (
                             key: config.key,
                             value: config.value,
                             description: config.description,
+                            valueType: valueTypeOf(config),
                           }}
                           onCancel={() => setEditingKey(null)}
                           onSave={() => setEditingKey(null)}
@@ -438,7 +449,7 @@ export const ConfigTab: React.FC<{ appSlug: string; onAddEnv?: () => void }> = (
                           </div>
                         </TableCell>
                         <TableCell className={cn("font-mono text-xs", isGlobal ? "text-zinc-400" : "text-zinc-300")}>
-                          {config.value}
+                          <ConfigValueCell type={valueTypeOf(config)} value={config.value} />
                         </TableCell>
                         <TableCell className="text-xs text-zinc-500 hidden lg:table-cell font-sans">
                           {config.description || '—'}
@@ -454,6 +465,7 @@ export const ConfigTab: React.FC<{ appSlug: string; onAddEnv?: () => void }> = (
                                     key: config.key,
                                     value: config.value,
                                     description: config.description || '',
+                                    valueType: valueTypeOf(config),
                                   });
                                   setIsAdding(true);
                                 }}
@@ -529,11 +541,18 @@ export const ConfigTab: React.FC<{ appSlug: string; onAddEnv?: () => void }> = (
   );
 };
 
+interface RowSeed {
+  key: string;
+  value: string;
+  description?: string | null;
+  valueType?: ConfigValueType;
+}
+
 interface ConfigRowProps {
   appSlug: string;
   envSlug: string;
-  initialData?: { key: string; value: string; description?: string | null };
-  prefillData?: { key: string; value: string; description?: string | null };
+  initialData?: RowSeed;
+  prefillData?: RowSeed;
   onCancel: () => void;
   onSave: () => void;
 }
@@ -548,7 +567,8 @@ const ConfigRow: React.FC<ConfigRowProps> = ({
 }) => {
   const seed = initialData || prefillData;
   const [key, setKey] = useState(seed?.key || '');
-  const [value, setValue] = useState(seed?.value || '');
+  const valueState = useConfigValue(seed?.valueType ?? 'string', seed?.value || '');
+  const { valueType, reset: resetValue } = valueState;
   const [description, setDescription] = useState(seed?.description || '');
   const [loading, setLoading] = useState(false);
   const queryClient = useQueryClient();
@@ -556,44 +576,47 @@ const ConfigRow: React.FC<ConfigRowProps> = ({
   useEffect(() => {
     const nextSeed = initialData || prefillData;
     setKey(nextSeed?.key || '');
-    setValue(nextSeed?.value || '');
+    resetValue(nextSeed?.valueType ?? 'string', nextSeed?.value || '');
     setDescription(nextSeed?.description || '');
-  }, [initialData, prefillData]);
+  }, [initialData, prefillData, resetValue]);
 
   const handleSave = async () => {
-    if (!key.trim() || !value.trim()) {
-      toast.error('Key and value are required');
+    const prepared = valueState.prepare(key);
+    if (!prepared.ok) {
+      toast.error(prepared.error);
       return;
     }
+    const submitValue = prepared.value;
 
     setLoading(true);
     try {
       if (initialData) {
         await api.put(
           `/applications/${appSlug}/configurations/${encodeURIComponent(envSlug)}/${encodeURIComponent(key)}`,
-          { value, description }
+          { value: submitValue, description, valueType }
         );
       } else {
         await api.post(`/applications/${appSlug}/configurations`, {
           environmentSlug: envSlug,
           key,
-          value,
+          value: submitValue,
           description,
+          valueType,
         });
       }
       await queryClient.invalidateQueries({ queryKey: ['effective-configurations', appSlug] });
       await queryClient.invalidateQueries({ queryKey: ['configurations', appSlug] });
       toast.success(initialData ? 'Configuration updated' : 'Configuration added');
       onSave();
-    } catch {
-      toast.error('Failed to save configuration');
+    } catch (err) {
+      toast.error(saveErrorMessage(err, 'Failed to save configuration'));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <TableRow className="bg-config/5 border-config/20 border-x-2 border-x-config/30">
+    <TableRow className="bg-config/5 border-config/20 border-x-2 border-x-config/30 align-top">
       <TableCell className="py-2 pl-6">
         <Input
           placeholder="CONFIG_KEY"
@@ -604,14 +627,8 @@ const ConfigRow: React.FC<ConfigRowProps> = ({
           autoFocus={!initialData && !prefillData}
         />
       </TableCell>
-      <TableCell className="py-2">
-        <Input
-          placeholder="Value"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          className="h-8 font-mono text-xs border-border bg-card focus-visible:ring-config"
-          autoFocus={!!initialData || !!prefillData}
-        />
+      <TableCell className="py-2 min-w-[280px]">
+        <ConfigValueField state={valueState} autoFocus={!!initialData || !!prefillData} />
       </TableCell>
       <TableCell className="py-2 hidden lg:table-cell">
         <Input

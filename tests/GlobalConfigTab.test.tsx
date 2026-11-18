@@ -126,6 +126,7 @@ describe('GlobalConfigTab', () => {
         key: 'TimeoutSeconds',
         value: '30',
         description: 'HTTP timeout',
+        valueType: 'string',
       });
     });
 
@@ -140,6 +141,7 @@ describe('GlobalConfigTab', () => {
         {
           value: 'https://logs.v2.internal',
           description: 'Centralized log ingestor',
+          valueType: 'string',
         }
       );
     });
