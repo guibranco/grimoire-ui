@@ -1,7 +1,7 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { GlobalConfiguration, GlobalEnvironment } from '@/types/api';
+import { ConfigValueType, GlobalConfiguration, GlobalEnvironment } from '@/types/api';
 import {
   Search,
   Globe,
@@ -15,6 +15,17 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { ConfigValueCell, ConfigValueEditor, ValueTypeSelect } from '@/components/shared/ConfigValueEditor';
+import {
+  convertValue,
+  exportValue,
+  importEntry,
+  saveErrorMessage,
+  toEditorValue,
+  toSubmitValue,
+  validateConfigValue,
+  valueTypeOf,
+} from '@/lib/configValue';
 import { Badge } from '@/components/ui/badge';
 import {
   Table,
@@ -131,13 +142,13 @@ export const GlobalConfigTab: React.FC<GlobalConfigTabProps> = ({
     try {
       const res = await api.get<GlobalConfiguration[]>('/global/configurations');
       const all = Array.isArray(res.data) ? res.data : safeConfigs;
-      const exportData: Record<string, Record<string, string>> = {};
+      const exportData: Record<string, Record<string, unknown>> = {};
       all.forEach((item) => {
         const envKey = item.environmentSlug || '*';
         if (!exportData[envKey]) {
           exportData[envKey] = {};
         }
-        exportData[envKey][item.key] = item.value;
+        exportData[envKey][item.key] = exportValue(valueTypeOf(item), item.value);
       });
       const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
@@ -168,12 +179,12 @@ export const GlobalConfigTab: React.FC<GlobalConfigTabProps> = ({
         const requests: Promise<any>[] = [];
         Object.entries(data).forEach(([envSlug, entries]) => {
           if (!entries || typeof entries !== 'object' || Array.isArray(entries)) return;
-          Object.entries(entries).forEach(([key, value]) => {
+          Object.entries(entries).forEach(([key, raw]) => {
             requests.push(
               api.post('/global/configurations', {
                 environmentSlug: envSlug,
                 key,
-                value: String(value ?? ''),
+                ...importEntry(raw),
                 description: 'Imported global configuration',
               })
             );
@@ -413,7 +424,9 @@ export const GlobalConfigTab: React.FC<GlobalConfigTabProps> = ({
                         )}
                       </TableCell>
                       <TableCell className="font-mono text-[13px] font-bold text-global tracking-tight">{config.key}</TableCell>
-                      <TableCell className="font-mono text-xs text-zinc-300">{config.value}</TableCell>
+                      <TableCell className="font-mono text-xs text-zinc-300">
+                        <ConfigValueCell type={valueTypeOf(config)} value={config.value} />
+                      </TableCell>
                       <TableCell className="text-xs text-zinc-500 hidden lg:table-cell font-sans">{config.description || '—'}</TableCell>
                       <TableCell className="text-[9px] font-mono text-zinc-600 hidden xl:table-cell">
                         {formatTimestamp(config.updatedAt || config.createdAt)}
@@ -477,14 +490,27 @@ const GlobalConfigRow: React.FC<GlobalConfigRowProps> = ({
 }) => {
   const [environmentSlug, setEnvironmentSlug] = useState(initialData?.environmentSlug || defaultEnvSlug || '*');
   const [key, setKey] = useState(initialData?.key || '');
-  const [value, setValue] = useState(initialData?.value || '');
+  const initialType = initialData ? valueTypeOf(initialData) : 'string';
+  const [valueType, setValueType] = useState<ConfigValueType>(initialType);
+  const [value, setValue] = useState(toEditorValue(initialType, initialData?.value || ''));
   const [description, setDescription] = useState(initialData?.description || '');
   const [loading, setLoading] = useState(false);
   const queryClient = useQueryClient();
 
+  const handleTypeChange = (next: ConfigValueType) => {
+    setValue(convertValue(valueType, next, value));
+    setValueType(next);
+  };
+
   const handleSave = async () => {
-    if (!key.trim() || !value.trim()) {
+    const submitValue = toSubmitValue(valueType, value);
+    if (!key.trim() || (valueType !== 'array' && !value.trim())) {
       toast.error('Key and value are required');
+      return;
+    }
+    const invalid = validateConfigValue(valueType, submitValue);
+    if (invalid) {
+      toast.error(invalid);
       return;
     }
 
@@ -493,7 +519,7 @@ const GlobalConfigRow: React.FC<GlobalConfigRowProps> = ({
       if (initialData) {
         const res = await api.put(
           `/global/configurations/${encodeURIComponent(initialData.environmentSlug)}/${encodeURIComponent(initialData.key)}`,
-          { value, description }
+          { value: submitValue, description, valueType }
         );
         if (res?.status >= 400) {
           throw Object.assign(new Error(res.data?.message || 'Failed to update global configuration'), { response: res });
@@ -502,8 +528,9 @@ const GlobalConfigRow: React.FC<GlobalConfigRowProps> = ({
         const res = await api.post('/global/configurations', {
           environmentSlug,
           key,
-          value,
+          value: submitValue,
           description,
+          valueType,
         });
         if (res?.status >= 400) {
           throw Object.assign(new Error(res.data?.message || 'Failed to create global configuration'), { response: res });
@@ -517,7 +544,7 @@ const GlobalConfigRow: React.FC<GlobalConfigRowProps> = ({
       if (err?.response?.status === 409) {
         toast.error('Global configuration key already exists for this environment');
       } else {
-        toast.error(err?.response?.data?.message || 'Failed to save global configuration');
+        toast.error(err?.response?.data?.message || saveErrorMessage(err, 'Failed to save global configuration'));
       }
     } finally {
       setLoading(false);
@@ -525,7 +552,7 @@ const GlobalConfigRow: React.FC<GlobalConfigRowProps> = ({
   };
 
   return (
-    <TableRow className="bg-global/5 border-global/20 border-x-2 border-x-global/30">
+    <TableRow className="bg-global/5 border-global/20 border-x-2 border-x-global/30 align-top">
       <TableCell className="py-2 pl-6">
         {initialData ? (
           initialData.environmentSlug === '*' ? (
@@ -563,14 +590,17 @@ const GlobalConfigRow: React.FC<GlobalConfigRowProps> = ({
           autoFocus={!initialData}
         />
       </TableCell>
-      <TableCell className="py-2">
-        <Input
-          placeholder="Value"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          className="h-8 font-mono text-xs border-border bg-card focus-visible:ring-global"
-          autoFocus={!!initialData}
-        />
+      <TableCell className="py-2 min-w-[280px]">
+        <div className="space-y-1.5">
+          <ValueTypeSelect value={valueType} onChange={handleTypeChange} accent="global" />
+          <ConfigValueEditor
+            type={valueType}
+            value={value}
+            onChange={setValue}
+            accent="global"
+            autoFocus={!!initialData}
+          />
+        </div>
       </TableCell>
       <TableCell className="py-2 hidden lg:table-cell">
         <Input

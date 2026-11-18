@@ -207,4 +207,67 @@ describe('ConfigTab', () => {
       });
     });
   });
+
+  it('shows array values with a type badge and sends valueType when saving an array', async () => {
+    const mockGet = api.get as ReturnType<typeof vi.fn>;
+    const mockPost = api.post as ReturnType<typeof vi.fn>;
+    mockPost.mockResolvedValue({ status: 201, data: {} });
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/applications/my-app') {
+        return Promise.resolve({ data: { id: '1', name: 'My App', slug: 'my-app', inheritGlobals: true } });
+      }
+      if (url === '/applications/my-app/environments') {
+        return Promise.resolve({ data: [{ name: 'Production', slug: 'production' }] });
+      }
+      if (url === '/applications/my-app/configurations/effective?environment=production') {
+        return Promise.resolve({
+          data: [
+            {
+              key: 'AllowedIps',
+              value: '["10.0.0.1","10.0.0.2"]',
+              valueType: 'array',
+              description: null,
+              source: 'application',
+              overridesGlobal: false,
+            },
+          ],
+        });
+      }
+      return Promise.resolve({ data: [] });
+    });
+
+    const { fireEvent } = await import('@testing-library/react');
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ConfigTab appSlug="my-app" />
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('AllowedIps')).toBeDefined();
+      expect(screen.getByText('array')).toBeDefined();
+      expect(screen.getByText('10.0.0.1, 10.0.0.2')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Add Config/i }));
+    fireEvent.change(screen.getByPlaceholderText('CONFIG_KEY'), { target: { value: 'BlockedIps' } });
+    // Type the list as multiline text, then switch to array: each line becomes an item.
+    fireEvent.change(screen.getByLabelText('Value type'), { target: { value: 'multiline' } });
+    fireEvent.change(screen.getByLabelText('Value'), { target: { value: '1.1.1.1\n2.2.2.2' } });
+    fireEvent.change(screen.getByLabelText('Value type'), { target: { value: 'array' } });
+    expect((screen.getByLabelText('Item 2') as HTMLInputElement).value).toBe('2.2.2.2');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith('/applications/my-app/configurations', {
+        environmentSlug: 'production',
+        key: 'BlockedIps',
+        value: '["1.1.1.1","2.2.2.2"]',
+        description: '',
+        valueType: 'array',
+      });
+    });
+  });
 });

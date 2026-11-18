@@ -1,4 +1,5 @@
 import { AxiosResponse, AxiosRequestConfig } from 'axios';
+import { parseArrayItems } from './configValue';
 
 // Mock Database Initial State
 const DEFAULT_APPLICATIONS = [
@@ -125,6 +126,10 @@ const DEFAULT_SECRET_VERSIONS: Record<string, any[]> = {
   ]
 };
 
+// Mirrors the API: arrays are stored as a JSON array of their non-blank items.
+const storedValue = (valueType: string | undefined, value: string): string =>
+  valueType === 'array' ? JSON.stringify(parseArrayItems(value)) : value;
+
 const DEFAULT_CONFIGURATIONS: Record<string, any[]> = {
   "production-gateway": [
     {
@@ -192,6 +197,26 @@ const DEFAULT_GLOBAL_CONFIGURATIONS = [
     description: "Enable redesigned dashboard in production environments.",
     createdAt: "2026-06-20T09:05:00.000Z",
     updatedAt: "2026-06-20T09:05:00.000Z"
+  },
+  {
+    id: "gcfg-3333-4333-8333-333333333333",
+    environmentSlug: "*",
+    key: "Network:AllowedIps",
+    value: "[\"10.0.0.1\",\"10.0.0.2\",\"192.168.1.0/24\"]",
+    valueType: "array",
+    description: "IP allow-list shared by every application.",
+    createdAt: "2026-06-20T09:06:00.000Z",
+    updatedAt: "2026-06-20T09:06:00.000Z"
+  },
+  {
+    id: "gcfg-4444-4444-8444-444444444444",
+    environmentSlug: "*",
+    key: "Smtp",
+    value: "{\"host\":\"smtp.internal.grimoire.dev\",\"port\":587,\"useTls\":true}",
+    valueType: "json",
+    description: "Shared SMTP relay settings.",
+    createdAt: "2026-06-20T09:07:00.000Z",
+    updatedAt: "2026-06-20T09:07:00.000Z"
   }
 ];
 
@@ -531,6 +556,7 @@ export function mockApiAdapter(config: AxiosRequestConfig): Promise<AxiosRespons
       const appOnly = appConfigs.map(c => ({
         key: c.key,
         value: c.value,
+        valueType: c.valueType ?? 'string',
         description: c.description,
         source: 'application',
         globalEnvironmentSlug: null,
@@ -568,6 +594,7 @@ export function mockApiAdapter(config: AxiosRequestConfig): Promise<AxiosRespons
         return {
           key: appItem.key,
           value: appItem.value,
+          valueType: appItem.valueType ?? 'string',
           description: appItem.description,
           source: 'application',
           globalEnvironmentSlug: null,
@@ -579,6 +606,7 @@ export function mockApiAdapter(config: AxiosRequestConfig): Promise<AxiosRespons
         return {
           key: envGlobal.key,
           value: envGlobal.value,
+          valueType: envGlobal.valueType ?? 'string',
           description: envGlobal.description,
           source: 'global',
           globalEnvironmentSlug: envGlobal.environmentSlug,
@@ -589,6 +617,7 @@ export function mockApiAdapter(config: AxiosRequestConfig): Promise<AxiosRespons
       return {
         key: starGlobal.key,
         value: starGlobal.value,
+        valueType: starGlobal.valueType ?? 'string',
         description: starGlobal.description,
         source: 'global',
         globalEnvironmentSlug: '*',
@@ -721,9 +750,11 @@ export function mockApiAdapter(config: AxiosRequestConfig): Promise<AxiosRespons
       c => c.key === newConfigKey && c.environmentSlug === envSlug
     );
     
+    const newConfigType = body.valueType || 'string';
     const newConfig = {
       key: newConfigKey,
-      value: body.value || '',
+      value: storedValue(newConfigType, body.value || ''),
+      valueType: newConfigType,
       description: body.description || '',
       environmentSlug: envSlug,
       updatedAt: new Date().toISOString()
@@ -753,7 +784,9 @@ export function mockApiAdapter(config: AxiosRequestConfig): Promise<AxiosRespons
       return makeResponse(404, { message: `Configuration for key ${key} in environment ${envSlug} not found` }, config);
     }
     
-    configItem.value = body.value !== undefined ? body.value : configItem.value;
+    if (body.valueType !== undefined) configItem.valueType = body.valueType;
+    configItem.value =
+      body.value !== undefined ? storedValue(configItem.valueType, body.value) : configItem.value;
     configItem.description = body.description !== undefined ? body.description : configItem.description;
     configItem.updatedAt = new Date().toISOString();
     
@@ -830,7 +863,8 @@ export function mockApiAdapter(config: AxiosRequestConfig): Promise<AxiosRespons
       id: `gcfg-${Date.now()}`,
       environmentSlug: envSlug,
       key,
-      value: body.value ?? '',
+      value: storedValue(body.valueType, body.value ?? ''),
+      valueType: body.valueType || 'string',
       description: body.description || '',
       createdAt: nowIso,
       updatedAt: nowIso,
@@ -851,7 +885,8 @@ export function mockApiAdapter(config: AxiosRequestConfig): Promise<AxiosRespons
     if (!item) {
       return makeResponse(404, { message: `Global configuration ${key} not found` }, config);
     }
-    if (body.value !== undefined) item.value = body.value;
+    if (body.valueType !== undefined) item.valueType = body.valueType;
+    if (body.value !== undefined) item.value = storedValue(item.valueType, body.value);
     if (body.description !== undefined) item.description = body.description;
     item.updatedAt = new Date().toISOString();
     saveStored('global_configurations', globalConfigurations);
