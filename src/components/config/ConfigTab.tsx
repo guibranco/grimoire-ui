@@ -2,7 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Application, ConfigValueType, EffectiveConfiguration, Environment } from '@/types/api';
-import { useStore } from '@/store/useStore';
+import { useNavigate } from 'react-router-dom';
+import { globalPath } from '@/lib/routes';
 import {
   Search,
   Edit2,
@@ -42,8 +43,20 @@ import { exportValue, importEntry, saveErrorMessage, valueTypeOf } from '@/lib/c
 import { cn } from '@/lib/utils';
 import toast from 'react-hot-toast';
 
-export const ConfigTab: React.FC<{ appSlug: string; onAddEnv?: () => void }> = ({ appSlug, onAddEnv }) => {
-  const { selectedEnvironmentSlug, setSelectedEnvironmentSlug, openGlobalEntry } = useStore();
+interface ConfigTabProps {
+  appSlug: string;
+  /** Environment shown, usually taken from the URL. Falls back to the first environment. */
+  environmentSlug?: string | null;
+  /** Called when the user picks (or deletes) an environment. Uncontrolled when omitted. */
+  onEnvironmentChange?: (slug: string | null) => void;
+  onAddEnv?: () => void;
+}
+
+export const ConfigTab: React.FC<ConfigTabProps> = ({ appSlug, environmentSlug, onEnvironmentChange, onAddEnv }) => {
+  const navigate = useNavigate();
+  const [localEnvironmentSlug, setLocalEnvironmentSlug] = useState<string | null>(null);
+  const selectedEnvironmentSlug = onEnvironmentChange ? environmentSlug ?? null : localEnvironmentSlug;
+  const setSelectedEnvironmentSlug = onEnvironmentChange ?? setLocalEnvironmentSlug;
   const [search, setSearch] = useState('');
   const [showInherited, setShowInherited] = useState(true);
   const [editingKey, setEditingKey] = useState<string | null>(null);
@@ -54,7 +67,8 @@ export const ConfigTab: React.FC<{ appSlug: string; onAddEnv?: () => void }> = (
     description: string;
     valueType: ConfigValueType;
   } | null>(null);
-  const [deletingConfig, setDeletingConfig] = useState<EffectiveConfiguration | null>(null);
+  // The environment is captured when the dialog opens so a route change (e.g. Back) can't retarget the delete.
+  const [deletingConfig, setDeletingConfig] = useState<{ config: EffectiveConfiguration; envSlug: string } | null>(null);
   const [deletingEnv, setDeletingEnv] = useState<Environment | null>(null);
   const [enablingInheritance, setEnablingInheritance] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -82,12 +96,6 @@ export const ConfigTab: React.FC<{ appSlug: string; onAddEnv?: () => void }> = (
   const safeEnvs = Array.isArray(envs) ? envs : [];
   const selectedEnv = safeEnvs.find(e => e.slug === selectedEnvironmentSlug) || safeEnvs[0];
   const activeEnvironmentSlug = selectedEnv?.slug || null;
-
-  useEffect(() => {
-    if (safeEnvs.length && (!selectedEnvironmentSlug || !safeEnvs.some(e => e.slug === selectedEnvironmentSlug))) {
-      setSelectedEnvironmentSlug(safeEnvs[0].slug);
-    }
-  }, [safeEnvs, selectedEnvironmentSlug, setSelectedEnvironmentSlug]);
 
   const { data: effectiveConfigs, isLoading: configsLoading } = useQuery({
     queryKey: ['effective-configurations', appSlug, activeEnvironmentSlug],
@@ -183,11 +191,12 @@ export const ConfigTab: React.FC<{ appSlug: string; onAddEnv?: () => void }> = (
   };
 
   const handleDelete = async () => {
-    if (!deletingConfig || !activeEnvironmentSlug) return;
-    const wasOverride = deletingConfig.overridesGlobal;
+    if (!deletingConfig) return;
+    const { config, envSlug } = deletingConfig;
+    const wasOverride = config.overridesGlobal;
     try {
       await api.delete(
-        `/applications/${appSlug}/configurations/${encodeURIComponent(activeEnvironmentSlug)}/${encodeURIComponent(deletingConfig.key)}`
+        `/applications/${appSlug}/configurations/${encodeURIComponent(envSlug)}/${encodeURIComponent(config.key)}`
       );
       await queryClient.invalidateQueries({ queryKey: ['effective-configurations', appSlug] });
       await queryClient.invalidateQueries({ queryKey: ['configurations', appSlug] });
@@ -205,7 +214,7 @@ export const ConfigTab: React.FC<{ appSlug: string; onAddEnv?: () => void }> = (
       await queryClient.invalidateQueries({ queryKey: ['effective-configurations', appSlug] });
       await queryClient.invalidateQueries({ queryKey: ['configurations', appSlug] });
       await queryClient.invalidateQueries({ queryKey: ['global-environments'] });
-      if (selectedEnvironmentSlug === deletingEnv.slug) {
+      if (activeEnvironmentSlug === deletingEnv.slug) {
         const remaining = safeEnvs.filter(e => e.slug !== deletingEnv.slug);
         setSelectedEnvironmentSlug(remaining[0]?.slug || null);
       }
@@ -476,7 +485,7 @@ export const ConfigTab: React.FC<{ appSlug: string; onAddEnv?: () => void }> = (
                               </button>
                               <button
                                 type="button"
-                                onClick={() => openGlobalEntry('config', config.key)}
+                                onClick={() => navigate(globalPath('config', config.key))}
                                 className="px-2 py-0.5 border border-global/30 text-[10px] font-bold uppercase tracking-widest text-global hover:bg-global/10 transition-colors inline-flex items-center gap-1"
                               >
                                 <ExternalLink className="w-3 h-3" />
@@ -500,7 +509,7 @@ export const ConfigTab: React.FC<{ appSlug: string; onAddEnv?: () => void }> = (
                                 type="button"
                                 aria-label={`Delete ${config.key}`}
                                 className="text-zinc-700 hover:text-destructive transition-colors"
-                                onClick={() => setDeletingConfig(config)}
+                                onClick={() => activeEnvironmentSlug && setDeletingConfig({ config, envSlug: activeEnvironmentSlug })}
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -523,9 +532,9 @@ export const ConfigTab: React.FC<{ appSlug: string; onAddEnv?: () => void }> = (
         onConfirm={handleDelete}
         title="Delete Configuration"
         description={
-          deletingConfig?.overridesGlobal
-            ? `Are you sure you want to delete the override "${deletingConfig?.key}" from ${activeEnvironmentSlug}? The inherited global value will become active again.`
-            : `Are you sure you want to delete the configuration key "${deletingConfig?.key}" from ${activeEnvironmentSlug}?`
+          deletingConfig?.config.overridesGlobal
+            ? `Are you sure you want to delete the override "${deletingConfig.config.key}" from ${deletingConfig.envSlug}? The inherited global value will become active again.`
+            : `Are you sure you want to delete the configuration key "${deletingConfig?.config.key}" from ${deletingConfig?.envSlug}?`
         }
         confirmText="Remove Entry"
         variant="destructive"

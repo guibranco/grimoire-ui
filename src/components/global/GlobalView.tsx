@@ -1,24 +1,33 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Application } from '@/types/api';
-import { useStore } from '@/store/useStore';
+import { DEFAULT_GLOBAL_TAB, globalPath, isGlobalTab } from '@/lib/routes';
+import { NotFoundView } from '@/components/shared/NotFoundView';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Flag, Globe, Lock, Settings } from 'lucide-react';
 import { GlobalConfigTab } from './GlobalConfigTab';
 import { GlobalSecretsTab } from './GlobalSecretsTab';
 
+/**
+ * Route element for `/global/:tab?`. `?key=` highlights (and, for secrets,
+ * expands) a configuration key or secret name.
+ */
 export const GlobalView: React.FC = () => {
-  const { globalTargetTab, globalHighlightedKey, clearGlobalHighlight } = useStore();
-  const [activeTab, setActiveTab] = useState<'config' | 'secrets'>(globalTargetTab || 'config');
-  const [customSlugs, setCustomSlugs] = useState<string[]>([]);
+  const { tab } = useParams();
+  if (tab !== undefined && !isGlobalTab(tab)) return <NotFoundView />;
+  return <GlobalViewContent />;
+};
 
-  useEffect(() => {
-    if (globalTargetTab) {
-      setActiveTab(globalTargetTab);
-    }
-  }, [globalTargetTab]);
+const GlobalViewContent: React.FC = () => {
+  const { tab } = useParams();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const activeTab = isGlobalTab(tab) ? tab : DEFAULT_GLOBAL_TAB;
+  const highlightedKey = searchParams.get('key');
+  const [customSlugs, setCustomSlugs] = useState<string[]>([]);
 
   const { data: apps } = useQuery({
     queryKey: ['applications'],
@@ -62,10 +71,8 @@ export const GlobalView: React.FC = () => {
       <Tabs
         value={activeTab}
         onValueChange={(val) => {
-          setActiveTab(val as 'config' | 'secrets');
-          if (globalHighlightedKey) {
-            clearGlobalHighlight();
-          }
+          // Switching tabs drops the ?key= highlight.
+          if (isGlobalTab(val)) navigate(globalPath(val));
         }}
         className="flex-1 flex flex-col"
       >
@@ -102,14 +109,14 @@ export const GlobalView: React.FC = () => {
         <div className="flex-1 overflow-auto bg-[#0A0A0B]">
           <TabsContent value="config" className="m-0 min-h-full">
             <GlobalConfigTab
-              highlightedKey={globalHighlightedKey}
+              highlightedKey={activeTab === 'config' ? highlightedKey : null}
               customSlugs={customSlugs}
               onAddCustomSlug={handleAddCustomSlug}
             />
           </TabsContent>
           <TabsContent value="secrets" className="m-0 min-h-full">
             <GlobalSecretsTab
-              highlightedName={globalHighlightedKey}
+              highlightedName={activeTab === 'secrets' ? highlightedKey : null}
               customSlugs={customSlugs}
               onAddCustomSlug={handleAddCustomSlug}
             />

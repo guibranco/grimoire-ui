@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useQueries, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Secret, SecretStatus, SecretVersion, GlobalEnvironment } from '@/types/api';
@@ -52,6 +52,11 @@ export const GlobalSecretsTab: React.FC<GlobalSecretsTabProps> = ({
   const [search, setSearch] = useState('');
   const [isAddSecretOpen, setIsAddSecretOpen] = useState(false);
   const [expandedSecret, setExpandedSecret] = useState<string | null>(highlightedName);
+
+  // Expand the highlighted secret when deep-linked to it (e.g. /global/secrets?key=NAME).
+  useEffect(() => {
+    if (highlightedName) setExpandedSecret(highlightedName);
+  }, [highlightedName]);
   const [editingValue, setEditingValue] = useState<{ secretName: string; envSlug: string } | null>(null);
   const [viewingVersions, setViewingVersions] = useState<{ secretName: string; envSlug: string } | null>(null);
   const [deletingSecret, setDeletingSecret] = useState<string | null>(null);
