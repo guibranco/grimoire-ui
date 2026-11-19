@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
 import { GrimoireTab } from '../src/components/grimoire/GrimoireTab';
 import { api } from '../src/lib/api';
 
@@ -89,9 +90,9 @@ describe('GrimoireTab', () => {
     });
 
     render(
-      <QueryClientProvider client={queryClient}>
+      <QueryClientProvider client={queryClient}><MemoryRouter>
         <GrimoireTab appSlug="my-app" />
-      </QueryClientProvider>
+      </MemoryRouter></QueryClientProvider>
     );
 
     await waitFor(() => {
@@ -179,9 +180,9 @@ describe('GrimoireTab', () => {
     });
 
     render(
-      <QueryClientProvider client={queryClient}>
+      <QueryClientProvider client={queryClient}><MemoryRouter>
         <GrimoireTab appSlug="my-app" />
-      </QueryClientProvider>
+      </MemoryRouter></QueryClientProvider>
     );
 
     await waitFor(() => {
@@ -245,9 +246,9 @@ describe('GrimoireTab', () => {
     });
 
     render(
-      <QueryClientProvider client={queryClient}>
+      <QueryClientProvider client={queryClient}><MemoryRouter>
         <GrimoireTab appSlug="my-app" />
-      </QueryClientProvider>
+      </MemoryRouter></QueryClientProvider>
     );
 
     await waitFor(() => {

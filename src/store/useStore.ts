@@ -2,67 +2,71 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { clearDetectedApiVersion } from '@/lib/api';
 
-export type SelectedView = 'global' | 'app';
-
+/**
+ * Navigation (view, application, environment, tab, highlighted key) lives in
+ * the URL — see `src/lib/routes.ts`. The store only keeps auth state and the
+ * last visited application/environment for the dashboard's "Continue to …".
+ */
 interface AppState {
-  selectedView: SelectedView;
-  selectedAppSlug: string | null;
-  selectedEnvironmentSlug: string | null;
   isAdminAuthenticated: boolean;
-  globalTargetTab: 'config' | 'secrets' | null;
-  globalHighlightedKey: string | null;
+  lastVisitedAppSlug: string | null;
+  lastVisitedEnvironmentSlug: string | null;
 
-  setSelectedView: (view: SelectedView) => void;
-  setSelectedAppSlug: (slug: string | null) => void;
-  setSelectedEnvironmentSlug: (slug: string | null) => void;
   setAdminAuthenticated: (auth: boolean) => void;
-  openGlobalEntry: (tab: 'config' | 'secrets', keyOrName?: string | null) => void;
-  clearGlobalHighlight: () => void;
+  setLastVisited: (appSlug: string | null, environmentSlug?: string | null) => void;
+  /** Forget the last visited app if it matches `appSlug` (e.g. after deleting it). */
+  forgetLastVisited: (appSlug: string) => void;
   disconnect: () => void;
 }
 
 export const useStore = create<AppState>()(
   persist(
     (set) => ({
-      selectedView: 'app',
-      selectedAppSlug: null,
-      selectedEnvironmentSlug: null,
       isAdminAuthenticated: !!(localStorage.getItem('grimoire_api_url') && localStorage.getItem('grimoire_api_key')),
-      globalTargetTab: null,
-      globalHighlightedKey: null,
+      lastVisitedAppSlug: null,
+      lastVisitedEnvironmentSlug: null,
 
-      setSelectedView: (view) => set({ selectedView: view }),
-      setSelectedAppSlug: (slug) => set({ selectedAppSlug: slug, selectedView: 'app' }),
-      setSelectedEnvironmentSlug: (slug) => set({ selectedEnvironmentSlug: slug }),
       setAdminAuthenticated: (auth) => set({ isAdminAuthenticated: auth }),
-      openGlobalEntry: (tab, keyOrName = null) =>
-        set({
-          selectedView: 'global',
-          globalTargetTab: tab,
-          globalHighlightedKey: keyOrName,
-        }),
-      clearGlobalHighlight: () => set({ globalTargetTab: null, globalHighlightedKey: null }),
+      setLastVisited: (appSlug, environmentSlug = null) =>
+        set({ lastVisitedAppSlug: appSlug, lastVisitedEnvironmentSlug: appSlug ? environmentSlug : null }),
+      forgetLastVisited: (appSlug) =>
+        set((state) =>
+          state.lastVisitedAppSlug === appSlug
+            ? { lastVisitedAppSlug: null, lastVisitedEnvironmentSlug: null }
+            : {}
+        ),
       disconnect: () => {
         localStorage.removeItem('grimoire_api_url');
         localStorage.removeItem('grimoire_api_key');
         clearDetectedApiVersion();
         set({
-          selectedView: 'app',
-          selectedAppSlug: null,
-          selectedEnvironmentSlug: null,
           isAdminAuthenticated: false,
-          globalTargetTab: null,
-          globalHighlightedKey: null,
+          lastVisitedAppSlug: null,
+          lastVisitedEnvironmentSlug: null,
         });
       },
     }),
     {
       name: 'grimoire-storage',
+      version: 1,
       partialize: (state) => ({
-        selectedView: state.selectedView,
-        selectedAppSlug: state.selectedAppSlug,
-        selectedEnvironmentSlug: state.selectedEnvironmentSlug,
+        lastVisitedAppSlug: state.lastVisitedAppSlug,
+        lastVisitedEnvironmentSlug: state.lastVisitedEnvironmentSlug,
       }),
+      // v0 persisted the current selection; carry it over as the last visited app.
+      migrate: (persisted, version) => {
+        const old = (persisted ?? {}) as Record<string, unknown>;
+        const str = (v: unknown) => (typeof v === 'string' ? v : null);
+        return version === 0
+          ? {
+              lastVisitedAppSlug: str(old.selectedAppSlug),
+              lastVisitedEnvironmentSlug: str(old.selectedEnvironmentSlug),
+            }
+          : {
+              lastVisitedAppSlug: str(old.lastVisitedAppSlug),
+              lastVisitedEnvironmentSlug: str(old.lastVisitedEnvironmentSlug),
+            };
+      },
     }
   )
 );

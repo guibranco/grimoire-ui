@@ -15,6 +15,7 @@
 
 *   **🛡️ Secure Vaulting**: Manage sensitive credentials with an interface designed for security first.
 *   **🌍 Environment Management**: Switch between Development, Staging, and Production contexts with zero friction.
+*   **🔗 Deep Links**: Every application, environment, tab and Global entry has its own URL — bookmark it, share it, and use the browser's back/forward buttons.
 *   **🧙‍♂️ Elegant UX**: A dark, magical aesthetic built with React 19, Tailwind CSS 4, and Framer Motion.
 *   **🌑 Fluid Animations**: Powered by `motion` for smooth, meaningful transitions.
 *   **📊 Insightful Dashboards**: Keep track of API keys, app configurations, and secret rotations.
@@ -150,6 +151,19 @@ This project is configured for **GitHub Pages**. Every push to the `main` branch
 2.  🧪 Runs all tests.
 3.  🚀 Deploys to [http://guilherme.stracini.com.br/grimoire-ui/](http://guilherme.stracini.com.br/grimoire-ui/)
 4.  🏷️ Creates a new SemVer release automatically.
+
+### 🧭 Routes
+
+| Path | View |
+|---|---|
+| `/` | Dashboard |
+| `/apps/:appSlug` | Application, default environment |
+| `/apps/:appSlug/:envSlug` | Application, given environment |
+| `/apps/:appSlug/:envSlug/secrets` | Application secrets tab |
+| `/global`, `/global/secrets` | Global configuration / secrets |
+| `/global/config?key=KEY` | Global, with an entry highlighted |
+
+GitHub Pages has no SPA fallback, so the deploy workflow copies `index.html` to `404.html`; deep links such as `/grimoire-ui/apps/my-app/production` then boot the client-side router.
 
 ---
 

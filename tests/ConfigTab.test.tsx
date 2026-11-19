@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
 import { ConfigTab } from '../src/components/config/ConfigTab';
 import { api } from '../src/lib/api';
-import { useStore } from '../src/store/useStore';
 
 vi.mock('../src/lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/lib/api')>();
@@ -29,7 +29,6 @@ describe('ConfigTab', () => {
         },
       },
     });
-    useStore.setState({ selectedEnvironmentSlug: null });
     vi.clearAllMocks();
   });
 
@@ -67,9 +66,9 @@ describe('ConfigTab', () => {
     });
 
     const { container } = render(
-      <QueryClientProvider client={queryClient}>
+      <QueryClientProvider client={queryClient}><MemoryRouter>
         <ConfigTab appSlug="my-app" />
-      </QueryClientProvider>
+      </MemoryRouter></QueryClientProvider>
     );
 
     await waitFor(() => {
@@ -138,9 +137,9 @@ describe('ConfigTab', () => {
     const { fireEvent } = await import('@testing-library/react');
 
     render(
-      <QueryClientProvider client={queryClient}>
+      <QueryClientProvider client={queryClient}><MemoryRouter>
         <ConfigTab appSlug="my-app" />
-      </QueryClientProvider>
+      </MemoryRouter></QueryClientProvider>
     );
 
     await waitFor(() => {
@@ -188,9 +187,9 @@ describe('ConfigTab', () => {
     const { fireEvent } = await import('@testing-library/react');
 
     render(
-      <QueryClientProvider client={queryClient}>
+      <QueryClientProvider client={queryClient}><MemoryRouter>
         <ConfigTab appSlug="my-app" />
-      </QueryClientProvider>
+      </MemoryRouter></QueryClientProvider>
     );
 
     await waitFor(() => {
@@ -223,7 +222,7 @@ describe('ConfigTab', () => {
     );
 
     const { fireEvent } = await import('@testing-library/react');
-    render(<QueryClientProvider client={queryClient}><ConfigTab appSlug="my-app" /></QueryClientProvider>);
+    render(<QueryClientProvider client={queryClient}><MemoryRouter><ConfigTab appSlug="my-app" /></MemoryRouter></QueryClientProvider>);
 
     await waitFor(() => {
       expect(screen.getByText('AllowedIps')).toBeDefined();

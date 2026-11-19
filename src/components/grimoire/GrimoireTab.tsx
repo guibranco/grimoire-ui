@@ -9,7 +9,8 @@ import {
   SecretVersion,
   Environment,
 } from '@/types/api';
-import { useStore } from '@/store/useStore';
+import { useNavigate } from 'react-router-dom';
+import { globalPath } from '@/lib/routes';
 import {
   Search,
   Lock,
@@ -48,7 +49,7 @@ import { cn } from '@/lib/utils';
 import toast from 'react-hot-toast';
 
 export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
-  const { openGlobalEntry } = useStore();
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [showInherited, setShowInherited] = useState(true);
   const [isAddSecretOpen, setIsAddSecretOpen] = useState(false);
@@ -510,7 +511,7 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
                               </button>
                               <button
                                 type="button"
-                                onClick={() => openGlobalEntry('secrets', secret.name)}
+                                onClick={() => navigate(globalPath('secrets', secret.name))}
                                 className="px-2 py-0.5 border border-global/30 text-[10px] font-bold uppercase tracking-widest text-global hover:bg-global/10 transition-colors inline-flex items-center gap-1"
                               >
                                 <ExternalLink className="w-3 h-3" />

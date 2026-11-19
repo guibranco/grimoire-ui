@@ -1,23 +1,44 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { useStore } from '@/store/useStore';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, extractPlainApiKey } from '@/lib/api';
-import { Application, RotateKeyResponse } from '@/types/api';
+import { appPath, AppTab, DEFAULT_APP_TAB, dashboardPath, isAppTab } from '@/lib/routes';
+import { Application, Environment, RotateKeyResponse } from '@/types/api';
 import { ApplicationHeader } from '@/components/layout/ApplicationHeader';
 import { GrimoireTab } from '@/components/grimoire/GrimoireTab';
 import { ConfigTab } from '@/components/config/ConfigTab';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Flag, Lock, Settings, Loader2 } from 'lucide-react';
 import { ConfirmationModal } from '@/components/shared/ConfirmationModal';
+import { NotFoundView } from '@/components/shared/NotFoundView';
 import { AddEnvModal } from '@/components/modals/AddEnvModal';
 import { EditAppModal } from '@/components/modals/EditAppModal';
 import { APIKeyRevealModal } from '@/components/modals/APIKeyRevealModal';
 import toast from 'react-hot-toast';
 
+const isNotFound = (err: unknown) =>
+  (err as { response?: { status?: number } } | null)?.response?.status === 404;
+
+/**
+ * Route element for `/apps/:appSlug/:envSlug?/:tab?`. Keyed by slug so local
+ * state (open modals, expanded rows) resets when switching applications.
+ */
 export const AppDetailView: React.FC = () => {
-  const { selectedAppSlug, setSelectedAppSlug } = useStore();
+  const { appSlug, tab } = useParams();
+  if (!appSlug) return <NotFoundView />;
+  if (tab !== undefined && !isAppTab(tab)) return <NotFoundView />;
+  return <AppDetail key={appSlug} appSlug={appSlug} />;
+};
+
+const AppDetail: React.FC<{ appSlug: string }> = ({ appSlug }) => {
+  const { envSlug: envParam, tab: tabParam } = useParams();
+  const navigate = useNavigate();
+  const setLastVisited = useStore((s) => s.setLastVisited);
+  const forgetLastVisited = useStore((s) => s.forgetLastVisited);
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState('config');
+  // Only used for apps without environments, where the tab can't be put in the URL.
+  const [fallbackTab, setFallbackTab] = useState<AppTab>(DEFAULT_APP_TAB);
   const [isEditAppOpen, setIsEditAppOpen] = useState(false);
   const [isAddEnvOpen, setIsAddEnvOpen] = useState(false);
   const [isRotateKeyOpen, setIsRotateKeyOpen] = useState(false);
@@ -25,13 +46,38 @@ export const AppDetailView: React.FC = () => {
   const [revealKey, setRevealKey] = useState<string | null>(null);
 
   const { data: app, isLoading, error } = useQuery({
-    queryKey: ['application', selectedAppSlug],
+    queryKey: ['application', appSlug],
     queryFn: async () => {
-      const res = await api.get<Application>(`/applications/${selectedAppSlug}`);
+      const res = await api.get<Application>(`/applications/${appSlug}`);
+      // The demo mock adapter resolves error statuses instead of rejecting like axios does.
+      if (res.status >= 400) {
+        throw Object.assign(new Error(`Request failed with status ${res.status}`), { response: res });
+      }
       return res.data;
     },
-    enabled: !!selectedAppSlug,
+    retry: (failureCount, err) => !isNotFound(err) && failureCount < 1,
   });
+
+  const { data: envs, isSuccess: envsLoaded } = useQuery({
+    queryKey: ['environments', appSlug],
+    queryFn: async () => {
+      const res = await api.get<Environment[]>(`/applications/${appSlug}/environments`);
+      return res.data;
+    },
+    enabled: !!app,
+  });
+
+  const safeEnvs = Array.isArray(envs) ? envs : [];
+  const paramEnvExists = !!envParam && safeEnvs.some((e) => e.slug === envParam);
+  // Until environments load, trust the URL so the config tab can start fetching.
+  const activeEnvSlug = !envsLoaded
+    ? envParam ?? null
+    : paramEnvExists ? envParam! : safeEnvs[0]?.slug ?? null;
+  const activeTab: AppTab = isAppTab(tabParam) ? tabParam : envParam ? DEFAULT_APP_TAB : fallbackTab;
+
+  useEffect(() => {
+    if (app && envsLoaded) setLastVisited(app.slug, activeEnvSlug);
+  }, [app, envsLoaded, activeEnvSlug, setLastVisited]);
 
   if (isLoading) {
     return (
@@ -46,13 +92,23 @@ export const AppDetailView: React.FC = () => {
     );
   }
 
+  if (isNotFound(error)) {
+    return (
+      <NotFoundView
+        title="Application not found"
+        description={<>There is no application with the slug <code className="font-mono text-zinc-300">{appSlug}</code>.</>}
+      />
+    );
+  }
+
   if (error || !app) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center p-6">
+      <div role="alert" className="flex-1 flex flex-col items-center justify-center p-6">
         <h3 className="text-lg font-bold">Error Loading Application</h3>
         <p className="text-muted-foreground text-sm">Could not find or load application metadata.</p>
-        <button 
-          onClick={() => setSelectedAppSlug(null)}
+        <button
+          type="button"
+          onClick={() => navigate(dashboardPath())}
           className="mt-4 px-4 py-2 border border-border text-xs uppercase font-bold tracking-widest hover:bg-muted"
         >
           Back to Dashboard
@@ -60,6 +116,24 @@ export const AppDetailView: React.FC = () => {
       </div>
     );
   }
+
+  // Unknown environment in the URL: fall back to the default environment.
+  if (envParam && envsLoaded && !paramEnvExists) {
+    return <Navigate to={appPath(app.slug, safeEnvs[0]?.slug, activeTab)} replace />;
+  }
+
+  const handleTabChange = (value: string) => {
+    if (!isAppTab(value)) return;
+    if (activeEnvSlug) {
+      navigate(appPath(app.slug, activeEnvSlug, value));
+    } else {
+      setFallbackTab(value);
+    }
+  };
+
+  const handleEnvironmentChange = (slug: string | null) => {
+    navigate(appPath(app.slug, slug, activeTab));
+  };
 
   const handleRotateKey = async () => {
     try {
@@ -81,7 +155,9 @@ export const AppDetailView: React.FC = () => {
       await api.delete(`/applications/${app.slug}`);
       await queryClient.invalidateQueries({ queryKey: ['applications'] });
       toast.success('Application deleted');
-      setSelectedAppSlug(null);
+      forgetLastVisited(app.slug);
+      navigate(dashboardPath(), { replace: true });
+      queryClient.removeQueries({ queryKey: ['application', app.slug] });
     } catch (err) {
       toast.error('Failed to delete application');
     }
@@ -98,8 +174,8 @@ export const AppDetailView: React.FC = () => {
       />
 
       <Tabs 
-        value={activeTab} 
-        onValueChange={setActiveTab}
+        value={activeTab}
+        onValueChange={handleTabChange}
         className="flex-1 flex flex-col"
       >
         <div className="h-[44px] border-b border-border flex bg-[#121214] sticky top-0 z-10 shrink-0">
@@ -134,7 +210,12 @@ export const AppDetailView: React.FC = () => {
 
         <div className="flex-1 overflow-auto bg-[#0A0A0B]">
           <TabsContent value="config" className="m-0 min-h-full">
-            <ConfigTab appSlug={app.slug} onAddEnv={() => setIsAddEnvOpen(true)} />
+            <ConfigTab
+              appSlug={app.slug}
+              environmentSlug={activeEnvSlug}
+              onEnvironmentChange={handleEnvironmentChange}
+              onAddEnv={() => setIsAddEnvOpen(true)}
+            />
           </TabsContent>
           <TabsContent value="secrets" className="m-0 min-h-full">
             <GrimoireTab appSlug={app.slug} />

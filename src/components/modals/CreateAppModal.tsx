@@ -18,6 +18,8 @@ import { Switch } from '@/components/ui/switch';
 import { api, extractPlainApiKey } from '@/lib/api';
 import type { CreateApplicationResponse } from '@/types/api';
 import { useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
+import { appPath } from '@/lib/routes';
 import { APIKeyRevealModal } from './APIKeyRevealModal';
 import { Loader2, Box } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -43,6 +45,7 @@ export const CreateAppModal: React.FC<CreateAppModalProps> = ({ open, onOpenChan
   const [loading, setLoading] = useState(false);
   const [revealKey, setRevealKey] = useState<string | null>(null);
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<any>({
     resolver: zodResolver(schema),
@@ -67,6 +70,7 @@ export const CreateAppModal: React.FC<CreateAppModalProps> = ({ open, onOpenChan
       reset({ name: '', description: '', inheritGlobals: true });
       onOpenChange(false);
       toast.success('Application created');
+      if (res.data?.slug) navigate(appPath(res.data.slug));
       if (createdKey) {
         setRevealKey(createdKey);
       } else {
