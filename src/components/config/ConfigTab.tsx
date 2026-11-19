@@ -50,9 +50,17 @@ interface ConfigTabProps {
   /** Called when the user picks (or deletes) an environment. Uncontrolled when omitted. */
   onEnvironmentChange?: (slug: string | null) => void;
   onAddEnv?: () => void;
+  /** Configuration key to highlight (from `?key=`). */
+  highlightedKey?: string | null;
 }
 
-export const ConfigTab: React.FC<ConfigTabProps> = ({ appSlug, environmentSlug, onEnvironmentChange, onAddEnv }) => {
+export const ConfigTab: React.FC<ConfigTabProps> = ({
+  appSlug,
+  environmentSlug,
+  onEnvironmentChange,
+  onAddEnv,
+  highlightedKey = null,
+}) => {
   const navigate = useNavigate();
   const [localEnvironmentSlug, setLocalEnvironmentSlug] = useState<string | null>(null);
   const selectedEnvironmentSlug = onEnvironmentChange ? environmentSlug ?? null : localEnvironmentSlug;
@@ -409,12 +417,16 @@ export const ConfigTab: React.FC<ConfigTabProps> = ({ appSlug, environmentSlug, 
                       );
                     }
 
+                    const isHighlighted = !!highlightedKey && config.key === highlightedKey;
+
                     return (
                       <TableRow
                         key={`${config.source}:::${config.key}`}
+                        data-highlighted={isHighlighted || undefined}
                         className={cn(
                           "group border-zinc-900/50 h-12 transition-colors",
-                          isGlobal ? "bg-global/[0.03] hover:bg-global/[0.06]" : "hover:bg-zinc-900/20"
+                          isGlobal ? "bg-global/[0.03] hover:bg-global/[0.06]" : "hover:bg-zinc-900/20",
+                          isHighlighted && "bg-config/10 border-l-2 border-l-config"
                         )}
                       >
                         <TableCell className="pl-6">

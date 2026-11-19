@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { GlobalConfiguration, GlobalEnvironment } from '@/types/api';
@@ -35,16 +35,22 @@ interface GlobalConfigTabProps {
   highlightedKey?: string | null;
   customSlugs?: string[];
   onAddCustomSlug?: (slug: string) => void;
+  /** Open the "add configuration" row (from `?new=1`, e.g. the dashboard's quick action). */
+  startCreating?: boolean;
 }
 
 export const GlobalConfigTab: React.FC<GlobalConfigTabProps> = ({
   highlightedKey = null,
+  startCreating = false,
   customSlugs: externalCustomSlugs,
   onAddCustomSlug,
 }) => {
   const [selectedEnvFilter, setSelectedEnvFilter] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [isAdding, setIsAdding] = useState(false);
+  const [isAdding, setIsAdding] = useState(startCreating);
+  useEffect(() => {
+    if (startCreating) setIsAdding(true);
+  }, [startCreating]);
   const [editingItem, setEditingItem] = useState<{ environmentSlug: string; key: string } | null>(null);
   const [deletingItem, setDeletingItem] = useState<GlobalConfiguration | null>(null);
   const [localCustomSlugs, setLocalCustomSlugs] = useState<string[]>([]);

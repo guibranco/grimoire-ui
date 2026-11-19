@@ -53,13 +53,42 @@ const DEFAULT_SECRETS: Record<string, any[]> = {
       id: "33333333-3333-4333-8333-333333333333",
       name: "JWT_SIGNING_SECRET",
       description: "Symmetric key for JWT validation and encryption tokens.",
+      // Dashboard demo: drives `rotation-due` (rotation policies: guibranco/grimoire-api#78).
+      rotationIntervalDays: 90,
       createdAt: "2026-06-21T12:45:00.000Z",
       updatedAt: "2026-06-21T12:45:00.000Z"
     }
   ]
 };
 
+// Demo dates relative to when the mock loads, so the dashboard always has something to flag.
+const MOCK_LOADED_AT = Date.now();
+const DAY = 24 * 60 * 60 * 1000;
+const daysFromLoad = (days: number) => new Date(MOCK_LOADED_AT + days * DAY).toISOString();
+
 const DEFAULT_SECRET_VERSIONS: Record<string, any[]> = {
+  // Dashboard demo: expired with no other valid version → `secret-expired`.
+  "production-gateway:DATABASE_PASSWORDS:development": [
+    {
+      id: "aaaa3333-3333-4333-8333-333333333333",
+      version: 1,
+      isEnabled: true,
+      expiresAt: daysFromLoad(-2),
+      notBefore: null,
+      createdAt: daysFromLoad(-60)
+    }
+  ],
+  // Dashboard demo: expires soon → `secret-expiring`.
+  "auth-provider-security:JWT_SIGNING_SECRET:staging": [
+    {
+      id: "cccc4444-3333-4333-8333-333333333333",
+      version: 1,
+      isEnabled: true,
+      expiresAt: daysFromLoad(5),
+      notBefore: null,
+      createdAt: daysFromLoad(-25)
+    }
+  ],
   "production-gateway:DATABASE_PASSWORDS:production": [
     {
       id: "aaaa1111-1111-4111-8111-111111111111",
@@ -153,7 +182,35 @@ const DEFAULT_CONFIGURATIONS: Record<string, any[]> = {
       environmentSlug: "production",
       updatedAt: "2026-06-20T10:12:00.000Z"
     }
+  ],
+  "auth-provider-security": [
+    {
+      key: "OAUTH_CALLBACK_URL",
+      value: "https://auth.internal.grimoire.dev/callback",
+      description: "Where the identity provider redirects after sign-in.",
+      environmentSlug: "production",
+      updatedAt: "2026-06-21T13:00:00.000Z"
+    },
+    {
+      // Dashboard demo: blank value → `config-empty-value`.
+      key: "OAUTH_CALLBACK_URL",
+      value: "",
+      description: "Where the identity provider redirects after sign-in.",
+      environmentSlug: "staging",
+      updatedAt: "2026-06-21T13:00:00.000Z"
+    }
   ]
+};
+
+/**
+ * When each environment's consumer last fetched (the real API records this on
+ * consumer requests). Missing entries have never been seen.
+ */
+const MOCK_LAST_SEEN: Record<string, string> = {
+  "production-gateway:production": daysFromLoad(-0.02),
+  "production-gateway:staging": daysFromLoad(-3),
+  "auth-provider-security:production": daysFromLoad(-10),
+  "auth-provider-security:staging": daysFromLoad(-0.1),
 };
 
 // Storage Helpers
@@ -269,6 +326,7 @@ export function resetMockDatabase() {
   globalConfigurations = JSON.parse(JSON.stringify(DEFAULT_GLOBAL_CONFIGURATIONS));
   globalSecrets = JSON.parse(JSON.stringify(DEFAULT_GLOBAL_SECRETS));
   globalSecretVersions = JSON.parse(JSON.stringify(DEFAULT_GLOBAL_SECRET_VERSIONS));
+  activityLog = seedActivity();
   if (isBrowser) {
     localStorage.removeItem('grm_mock_applications');
     localStorage.removeItem('grm_mock_environments');
@@ -292,8 +350,243 @@ function makeResponse(status: number, data: any, config: AxiosRequestConfig): Pr
   } as AxiosResponse);
 }
 
+// ── Dashboard (GET /dashboard) ───────────────────────────────────────────────
+
+interface MockActivity {
+  id: string;
+  occurredAt: string;
+  actor: string;
+  action: string;
+  application: string | null;
+  environment: string | null;
+  target: string | null;
+  targetType: string | null;
+}
+
+const MOCK_ACTOR = 'admin';
+let activityLog: MockActivity[] = [];
+let activitySeq = 0;
+
+function seedActivity(): MockActivity[] {
+  const seed: Omit<MockActivity, 'id'>[] = [
+    { occurredAt: daysFromLoad(-0.01), actor: MOCK_ACTOR, action: 'Updated configuration', application: 'production-gateway', environment: 'production', target: 'MAX_DB_CONNECTIONS', targetType: 'configuration' },
+    { occurredAt: daysFromLoad(-0.2), actor: MOCK_ACTOR, action: 'Added secret version', application: 'auth-provider-security', environment: 'staging', target: 'JWT_SIGNING_SECRET', targetType: 'secret' },
+    { occurredAt: daysFromLoad(-1.5), actor: 'ci-deploy', action: 'Updated global configuration', application: null, environment: null, target: 'LogStream:Url', targetType: 'configuration' },
+    { occurredAt: daysFromLoad(-4), actor: MOCK_ACTOR, action: 'Created application', application: 'auth-provider-security', environment: null, target: null, targetType: null },
+  ];
+  return seed.map((e, i) => ({ id: `seed-${i}`, ...e }));
+}
+activityLog = seedActivity();
+
+/** Human-readable audit entry for a successful mutation, mirroring what the audit log will record. */
+function describeMutation(method: string, path: string, body: any): Omit<MockActivity, 'id' | 'occurredAt' | 'actor'> | null {
+  const verb = method === 'POST' ? 'Created' : method === 'PUT' ? 'Updated' : method === 'DELETE' ? 'Deleted' : null;
+  if (!verb) return null;
+  const d = (s: string) => decodeURIComponent(s);
+  let m: RegExpMatchArray | null;
+  if (path === '/applications') return { action: 'Created application', application: body?.slug ?? null, environment: null, target: null, targetType: null };
+  if ((m = path.match(/^\/applications\/([^/]+)$/))) return { action: `${verb} application`, application: d(m[1]), environment: null, target: null, targetType: null };
+  if ((m = path.match(/^\/applications\/([^/]+)\/rotate-key$/))) return { action: 'Rotated API key', application: d(m[1]), environment: null, target: null, targetType: null };
+  if ((m = path.match(/^\/applications\/([^/]+)\/environments(?:\/([^/]+))?$/))) return { action: `${m[2] ? 'Deleted' : 'Created'} environment`, application: d(m[1]), environment: m[2] ? d(m[2]) : body?.slug ?? null, target: null, targetType: null };
+  if ((m = path.match(/^\/applications\/([^/]+)\/secrets\/([^/]+)\/values$/))) return { action: 'Added secret version', application: d(m[1]), environment: body?.environmentSlug ?? null, target: d(m[2]), targetType: 'secret' };
+  if ((m = path.match(/^\/applications\/([^/]+)\/secrets(?:\/([^/]+))?$/))) return { action: `${verb} secret`, application: d(m[1]), environment: null, target: m[2] ? d(m[2]) : body?.name ?? null, targetType: 'secret' };
+  if ((m = path.match(/^\/applications\/([^/]+)\/configurations(?:\/([^/]+)\/([^/]+))?$/))) return { action: `${verb} configuration`, application: d(m[1]), environment: m[2] ? d(m[2]) : body?.environmentSlug ?? null, target: m[3] ? d(m[3]) : body?.key ?? null, targetType: 'configuration' };
+  if ((m = path.match(/^\/global\/configurations(?:\/([^/]+)\/([^/]+))?$/))) return { action: `${verb} global configuration`, application: null, environment: m[1] ? d(m[1]) : body?.environmentSlug ?? null, target: m[2] ? d(m[2]) : body?.key ?? null, targetType: 'configuration' };
+  if ((m = path.match(/^\/global\/secrets\/([^/]+)\/values$/))) return { action: 'Added global secret version', application: null, environment: body?.environmentSlug ?? null, target: d(m[1]), targetType: 'secret' };
+  if ((m = path.match(/^\/global\/secrets(?:\/([^/]+))?$/))) return { action: `${verb} global secret`, application: null, environment: null, target: m[1] ? d(m[1]) : body?.name ?? null, targetType: 'secret' };
+  return null;
+}
+
+function recordActivity(method: string, path: string, body: any) {
+  const entry = describeMutation(method, path, body);
+  if (!entry) return;
+  activityLog.unshift({ id: `act-${++activitySeq}`, occurredAt: new Date().toISOString(), actor: MOCK_ACTOR, ...entry });
+  activityLog = activityLog.slice(0, 50);
+}
+
+const maxIso = (...values: (string | null | undefined)[]): string | null => {
+  let best: number | null = null;
+  for (const v of values) {
+    if (!v) continue;
+    const t = new Date(v).getTime();
+    if (!Number.isNaN(t) && (best === null || t > best)) best = t;
+  }
+  return best === null ? null : new Date(best).toISOString();
+};
+
+type SecretState =
+  | { kind: 'secret-expired'; dueAt: string | null }
+  | { kind: 'secret-no-valid-version' }
+  | { kind: 'secret-expiring'; dueAt: string }
+  | { kind: 'ok'; current: any };
+
+/** Mirrors the API rules for a secret's versions in one environment. */
+function evaluateVersions(versions: any[], now: number, expiringWithinDays: number): SecretState {
+  const t = (v: string | null | undefined) => (v ? new Date(v).getTime() : null);
+  const valid = versions
+    .filter((v) => v.isEnabled && (t(v.notBefore) ?? -Infinity) <= now && (t(v.expiresAt) ?? Infinity) > now)
+    .sort((a, b) => b.version - a.version);
+  if (valid.length === 0) {
+    const expired = versions.filter((v) => v.isEnabled && (t(v.expiresAt) ?? Infinity) <= now);
+    return expired.length > 0
+      ? { kind: 'secret-expired', dueAt: maxIso(...expired.map((v) => v.expiresAt)) }
+      : { kind: 'secret-no-valid-version' };
+  }
+  const current = valid[0];
+  const exp = t(current.expiresAt);
+  if (exp !== null && exp - now <= expiringWithinDays * DAY) {
+    return { kind: 'secret-expiring', dueAt: current.expiresAt };
+  }
+  return { kind: 'ok', current };
+}
+
+const SEVERITY: Record<string, 'error' | 'warning' | 'info'> = {
+  'secret-expired': 'error',
+  'secret-no-valid-version': 'error',
+  'secret-expiring': 'warning',
+  'consumer-stale': 'warning',
+  'rotation-due': 'warning',
+  'consumer-never-seen': 'info',
+  'config-empty-value': 'info',
+};
+
+function buildDashboard(expiringWithinDays: number, staleAfterDays: number) {
+  const now = Date.now();
+  const attention: any[] = [];
+  const add = (kind: string, fields: Record<string, unknown>) =>
+    attention.push({ kind, severity: SEVERITY[kind], application: null, environment: null, target: null, dueAt: null, lastSeenAt: null, ...fields });
+
+  const evaluateSecret = (application: string | null, environment: string | null, secret: any, versions: any[]) => {
+    const state = evaluateVersions(versions, now, expiringWithinDays);
+    const base = { application, environment, target: secret.name };
+    if (state.kind === 'ok') {
+      const interval = Number(secret.rotationIntervalDays);
+      if (interval > 0 && state.current.createdAt) {
+        const due = new Date(state.current.createdAt).getTime() + interval * DAY;
+        if (due <= now) add('rotation-due', { ...base, dueAt: new Date(due).toISOString() });
+      }
+    } else if (state.kind === 'secret-no-valid-version') {
+      add(state.kind, base);
+    } else {
+      add(state.kind, { ...base, dueAt: state.dueAt });
+    }
+  };
+
+  const apps = applications.map((app: any) => {
+    const appEnvs: any[] = environments[app.slug] || [];
+    const appSecrets: any[] = secrets[app.slug] || [];
+    const appConfigs: any[] = configurations[app.slug] || [];
+
+    const envs = appEnvs.map((env: any) => {
+      const envConfigs = appConfigs.filter((c) => c.environmentSlug === env.slug);
+      const envSecrets = appSecrets.filter((s) => (secretVersions[`${app.slug}:${s.name}:${env.slug}`] || []).length > 0);
+      const envVersions = envSecrets.flatMap((s) => secretVersions[`${app.slug}:${s.name}:${env.slug}`] || []);
+      const lastSeenAt = MOCK_LAST_SEEN[`${app.slug}:${env.slug}`] ?? null;
+
+      envSecrets.forEach((s) => evaluateSecret(app.slug, env.slug, s, secretVersions[`${app.slug}:${s.name}:${env.slug}`]));
+      envConfigs
+        .filter((c) => !String(c.value ?? '').trim())
+        .forEach((c) => add('config-empty-value', { application: app.slug, environment: env.slug, target: c.key }));
+      if (lastSeenAt === null) {
+        if (envSecrets.length > 0 || envConfigs.length > 0) {
+          add('consumer-never-seen', { application: app.slug, environment: env.slug });
+        }
+      } else if (now - new Date(lastSeenAt).getTime() >= staleAfterDays * DAY) {
+        add('consumer-stale', { application: app.slug, environment: env.slug, lastSeenAt });
+      }
+
+      return {
+        slug: env.slug,
+        name: env.name || env.slug,
+        secretCount: envSecrets.length,
+        configurationCount: envConfigs.length,
+        lastChangedAt: maxIso(
+          ...envConfigs.map((c) => c.updatedAt),
+          ...envVersions.map((v) => v.updatedAt ?? v.createdAt)
+        ),
+        lastSeenAt,
+      };
+    });
+
+    return {
+      slug: app.slug,
+      name: app.name,
+      inheritGlobals: app.inheritGlobals !== false,
+      environments: envs,
+      secretCount: appSecrets.length,
+      configurationCount: appConfigs.length,
+      lastChangedAt: maxIso(
+        app.createdAt,
+        ...appSecrets.map((s) => s.updatedAt),
+        ...envs.map((e) => e.lastChangedAt)
+      ),
+      lastSeenAt: maxIso(...envs.map((e) => e.lastSeenAt)),
+    };
+  });
+
+  globalSecrets.forEach((s: any) => {
+    Object.keys(globalSecretVersions)
+      .filter((k) => k.startsWith(`${s.name}:`))
+      .forEach((k) => {
+        const env = k.slice(s.name.length + 1);
+        evaluateSecret(null, env === '*' ? null : env, s, globalSecretVersions[k]);
+      });
+  });
+  globalConfigurations
+    .filter((c: any) => !String(c.value ?? '').trim())
+    .forEach((c: any) =>
+      add('config-empty-value', { environment: c.environmentSlug === '*' ? null : c.environmentSlug, target: c.key })
+    );
+
+  return {
+    generatedAt: new Date(now).toISOString(),
+    totals: {
+      applications: apps.length,
+      environments: apps.reduce((n, a) => n + a.environments.length, 0),
+      secrets: apps.reduce((n, a) => n + a.secretCount, 0),
+      configurations: apps.reduce((n, a) => n + a.configurationCount, 0),
+    },
+    applications: apps,
+    global: {
+      secretCount: globalSecrets.length,
+      configurationCount: globalConfigurations.length,
+      lastChangedAt: maxIso(
+        ...globalConfigurations.map((c: any) => c.updatedAt),
+        ...globalSecrets.map((s: any) => s.updatedAt),
+        ...Object.values(globalSecretVersions).flat().map((v: any) => v.createdAt)
+      ),
+    },
+    // Feature flags aren't in the mock yet (guibranco/grimoire-api#90).
+    featureFlags: null,
+    recentActivity: activityLog.slice(0, 20),
+    attention,
+  };
+}
+
+const parseDays = (raw: unknown, fallback: number, min: number) => {
+  const n = Number(raw);
+  return raw === undefined || raw === null || raw === '' || !Number.isInteger(n) ? fallback : Math.max(min, Math.min(3650, n));
+};
+
 // Custom Axios Adapter
-export function mockApiAdapter(config: AxiosRequestConfig): Promise<AxiosResponse> {
+export async function mockApiAdapter(config: AxiosRequestConfig): Promise<AxiosResponse> {
+  const response = await handleMockRequest(config);
+  const method = (config.method || 'GET').toUpperCase();
+  if (method !== 'GET' && response.status >= 200 && response.status < 300) {
+    const path = new URL(
+      (config.url || '').replace(/^(https?:\/\/[^\/]+)?\/?/, '/').replace(/^\/management\//, '/'),
+      'http://localhost'
+    ).pathname;
+    let body: any = config.data;
+    if (typeof body === 'string') {
+      try { body = JSON.parse(body); } catch { body = {}; }
+    }
+    recordActivity(method, path, body ?? {});
+  }
+  return response;
+}
+
+function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
   // Parse clean path
   let path = config.url || '';
   if (config.baseURL && path.startsWith(config.baseURL)) {
@@ -332,6 +625,13 @@ export function mockApiAdapter(config: AxiosRequestConfig): Promise<AxiosRespons
   // 0. GET /version or /health
   if ((cleanPath === '/version' || cleanPath === '/health') && method === 'GET') {
     return makeResponse(200, { status: 'Healthy', version: '1.2.0-mock' }, config);
+  }
+
+  // GET /dashboard?expiringWithinDays=&staleAfterDays=
+  if (cleanPath === '/dashboard' && method === 'GET') {
+    const expiring = parseDays(searchParams.get('expiringWithinDays') ?? config.params?.expiringWithinDays, 14, 0);
+    const stale = parseDays(searchParams.get('staleAfterDays') ?? config.params?.staleAfterDays, 7, 1);
+    return makeResponse(200, buildDashboard(expiring, stale), config);
   }
 
   // 1. GET /applications

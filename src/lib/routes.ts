@@ -26,15 +26,22 @@ const seg = (value: string) => encodeURIComponent(value);
 export const dashboardPath = () => '/';
 
 /**
- * `/apps/:appSlug[/:envSlug[/:tab]]`. The default tab is omitted, and a tab can
- * only be expressed when an environment is known.
+ * `/apps/:appSlug[/:envSlug[/:tab]][?key=...]`. The default tab is omitted
+ * unless a key is highlighted, and a tab can only be expressed when an
+ * environment is known. `key` highlights a configuration key or secret name.
  */
-export const appPath = (appSlug: string, envSlug?: string | null, tab?: AppTab | null) => {
+export const appPath = (
+  appSlug: string,
+  envSlug?: string | null,
+  tab?: AppTab | null,
+  key?: string | null
+) => {
   let path = `/apps/${seg(appSlug)}`;
   if (envSlug) {
     path += `/${seg(envSlug)}`;
-    if (tab && tab !== DEFAULT_APP_TAB) path += `/${tab}`;
+    if (tab && (tab !== DEFAULT_APP_TAB || key)) path += `/${tab}`;
   }
+  if (key) path += `?${new URLSearchParams({ key }).toString()}`;
   return path;
 };
 
@@ -44,6 +51,12 @@ export const globalPath = (tab?: GlobalTab | null, key?: string | null) => {
   if (tab && (tab !== DEFAULT_GLOBAL_TAB || key)) path += `/${tab}`;
   if (key) path += `?${new URLSearchParams({ key }).toString()}`;
   return path;
+};
+
+/** `/global[/:tab]?new=1` — opens Global with the create form for that tab. */
+export const globalCreatePath = (tab: GlobalTab) => {
+  const base = globalPath(tab);
+  return `${base}${base.includes('?') ? '&' : '?'}new=1`;
 };
 
 /**

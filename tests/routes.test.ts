@@ -13,6 +13,12 @@ describe('route helpers', () => {
     expect(appPath('a b', 'x/y')).toBe('/apps/a%20b/x%2Fy');
   });
 
+  it('builds application paths with a highlighted key', () => {
+    expect(appPath('my-app', 'prod', 'config', 'SMTP_HOST')).toBe('/apps/my-app/prod/config?key=SMTP_HOST');
+    expect(appPath('my-app', 'prod', 'secrets', 'A&B')).toBe('/apps/my-app/prod/secrets?key=A%26B');
+    expect(appPath('my-app', null, null, 'K')).toBe('/apps/my-app?key=K');
+  });
+
   it('builds Global paths with an optional highlighted key', () => {
     expect(globalPath()).toBe('/global');
     expect(globalPath('config')).toBe('/global');
@@ -54,11 +60,26 @@ describe('navigation store', () => {
     expect(useStore.getState()).toMatchObject({ lastVisitedAppSlug: null, lastVisitedEnvironmentSlug: null });
   });
 
-  it('persists only the last visited application', () => {
+  it('persists only the last visited application and dashboard view preferences', () => {
     useStore.getState().setLastVisited('my-app', 'prod');
+    useStore.getState().setDashboardAppsView('list');
+    useStore.getState().setDashboardAppsSort('lastFetched');
     const stored = JSON.parse(localStorage.getItem('grimoire-storage') ?? '{}');
-    expect(stored.state).toEqual({ lastVisitedAppSlug: 'my-app', lastVisitedEnvironmentSlug: 'prod' });
+    expect(stored.state).toEqual({
+      lastVisitedAppSlug: 'my-app',
+      lastVisitedEnvironmentSlug: 'prod',
+      dashboardAppsView: 'list',
+      dashboardAppsSort: 'lastFetched',
+    });
     expect(stored.version).toBe(1);
+    useStore.setState({ dashboardAppsView: 'grid', dashboardAppsSort: 'name' });
+  });
+
+  it('ignores invalid persisted dashboard view preferences', () => {
+    const merge = useStore.persist.getOptions().merge!;
+    const current = useStore.getState();
+    const merged = merge({ dashboardAppsView: 'table', dashboardAppsSort: 'size', lastVisitedAppSlug: 'x' }, current);
+    expect(merged).toMatchObject({ dashboardAppsView: 'grid', dashboardAppsSort: 'name', lastVisitedAppSlug: 'x' });
   });
 
   it('migrates the v0 persisted selection into the last visited application', async () => {

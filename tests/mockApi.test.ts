@@ -401,4 +401,62 @@ describe('Grimoire Mock API Integration Tests', () => {
       expect(delRes.status).toBe(204);
     });
   });
+  describe('Dashboard API', () => {
+    it('returns totals, per-application and per-environment counts', async () => {
+      const res = await api.get('/dashboard');
+      expect(res.status).toBe(200);
+      const d = res.data;
+      expect(typeof d.generatedAt).toBe('string');
+      expect(d.totals.applications).toBe(d.applications.length);
+      expect(d.totals.environments).toBe(5);
+      const gateway = d.applications.find((a: any) => a.slug === 'production-gateway');
+      expect(gateway.secretCount).toBe(2);
+      expect(gateway.configurationCount).toBe(3);
+      expect(gateway.inheritGlobals).toBe(true);
+      const prod = gateway.environments.find((e: any) => e.slug === 'production');
+      expect(prod).toMatchObject({ secretCount: 2, configurationCount: 2 });
+      expect(prod.lastSeenAt).not.toBeNull();
+      expect(d.global.configurationCount).toBe(4);
+      expect(d.global.secretCount).toBe(1);
+      expect(d.featureFlags).toBeNull();
+    });
+
+    it('includes every attention kind with its severity', async () => {
+      const res = await api.get('/dashboard');
+      const byKind = new Map(res.data.attention.map((i: any) => [i.kind, i]));
+      expect(byKind.get('secret-expired')).toMatchObject({ severity: 'error', application: 'production-gateway', environment: 'development', target: 'DATABASE_PASSWORDS' });
+      expect(byKind.get('secret-no-valid-version')).toMatchObject({ severity: 'error', environment: 'production', target: 'REDIS_CACHE_TOKEN' });
+      expect(byKind.get('secret-expiring')).toMatchObject({ severity: 'warning', application: 'auth-provider-security', environment: 'staging', target: 'JWT_SIGNING_SECRET' });
+      expect(byKind.get('rotation-due')).toMatchObject({ severity: 'warning', environment: 'production', target: 'JWT_SIGNING_SECRET' });
+      expect(byKind.get('consumer-stale')).toMatchObject({ severity: 'warning', application: 'auth-provider-security', environment: 'production' });
+      expect(byKind.get('consumer-never-seen')).toMatchObject({ severity: 'info', application: 'production-gateway', environment: 'development' });
+      expect(byKind.get('config-empty-value')).toMatchObject({ severity: 'info', environment: 'staging', target: 'OAUTH_CALLBACK_URL' });
+      expect((byKind.get('secret-expiring') as any).dueAt).toBeTruthy();
+    });
+
+    it('honours the threshold query parameters', async () => {
+      const kinds = async (params: Record<string, number>) =>
+        (await api.get('/dashboard', { params })).data.attention.map((i: any) => i.kind);
+      expect(await kinds({ expiringWithinDays: 1 })).not.toContain('secret-expiring');
+      expect(await kinds({ staleAfterDays: 30 })).not.toContain('consumer-stale');
+    });
+
+    it('reflects changes and records them as recent activity', async () => {
+      await api.put('/applications/production-gateway/configurations/production/MAX_DB_CONNECTIONS', {
+        value: '', description: 'x',
+      });
+      const res = await api.get('/dashboard');
+      expect(res.data.attention).toContainEqual(
+        expect.objectContaining({ kind: 'config-empty-value', application: 'production-gateway', target: 'MAX_DB_CONNECTIONS' })
+      );
+      expect(res.data.recentActivity[0]).toMatchObject({
+        action: 'Updated configuration',
+        application: 'production-gateway',
+        environment: 'production',
+        target: 'MAX_DB_CONNECTIONS',
+        targetType: 'configuration',
+      });
+      expect(res.data.recentActivity.length).toBeLessThanOrEqual(20);
+    });
+  });
 });

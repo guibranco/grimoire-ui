@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Navigate, useNavigate, useParams } from 'react-router-dom';
+import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useStore } from '@/store/useStore';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, extractPlainApiKey } from '@/lib/api';
@@ -33,6 +33,9 @@ export const AppDetailView: React.FC = () => {
 
 const AppDetail: React.FC<{ appSlug: string }> = ({ appSlug }) => {
   const { envSlug: envParam, tab: tabParam } = useParams();
+  const [searchParams] = useSearchParams();
+  // `?key=` highlights a configuration key or secret name (e.g. from the dashboard).
+  const highlightedKey = searchParams.get('key');
   const navigate = useNavigate();
   const setLastVisited = useStore((s) => s.setLastVisited);
   const forgetLastVisited = useStore((s) => s.forgetLastVisited);
@@ -130,7 +133,7 @@ const AppDetail: React.FC<{ appSlug: string }> = ({ appSlug }) => {
 
   // Unknown environment in the URL: fall back to the default environment.
   if (envParam && envsLoaded && !paramEnvExists) {
-    return <Navigate to={appPath(app.slug, safeEnvs[0]?.slug, activeTab)} replace />;
+    return <Navigate to={appPath(app.slug, safeEnvs[0]?.slug, activeTab, highlightedKey)} replace />;
   }
 
   const handleTabChange = (value: string) => {
@@ -227,10 +230,14 @@ const AppDetail: React.FC<{ appSlug: string }> = ({ appSlug }) => {
               environmentSlug={activeEnvSlug}
               onEnvironmentChange={handleEnvironmentChange}
               onAddEnv={() => setIsAddEnvOpen(true)}
+              highlightedKey={activeTab === 'config' ? highlightedKey : null}
             />
           </TabsContent>
           <TabsContent value="secrets" className="m-0 min-h-full">
-            <GrimoireTab appSlug={app.slug} />
+            <GrimoireTab
+              appSlug={app.slug}
+              highlightedName={activeTab === 'secrets' ? highlightedKey : null}
+            />
           </TabsContent>
         </div>
       </Tabs>

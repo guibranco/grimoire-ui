@@ -41,16 +41,22 @@ interface GlobalSecretsTabProps {
   highlightedName?: string | null;
   customSlugs?: string[];
   onAddCustomSlug?: (slug: string) => void;
+  /** Open the "add secret" dialog (from `?new=1`, e.g. the dashboard's quick action). */
+  startCreating?: boolean;
 }
 
 export const GlobalSecretsTab: React.FC<GlobalSecretsTabProps> = ({
   highlightedName = null,
+  startCreating = false,
   customSlugs: externalCustomSlugs,
   onAddCustomSlug,
 }) => {
   const [selectedEnvFilter, setSelectedEnvFilter] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [isAddSecretOpen, setIsAddSecretOpen] = useState(false);
+  const [isAddSecretOpen, setIsAddSecretOpen] = useState(startCreating);
+  useEffect(() => {
+    if (startCreating) setIsAddSecretOpen(true);
+  }, [startCreating]);
   const [expandedSecret, setExpandedSecret] = useState<string | null>(highlightedName);
 
   // Expand the highlighted secret when deep-linked to it (e.g. /global/secrets?key=NAME).

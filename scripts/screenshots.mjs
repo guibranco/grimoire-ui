@@ -54,7 +54,14 @@ try {
 
   // 2. Application secrets, with the first secret expanded to show per-environment values
   await page.getByText('Launch Live Demo').click();
-  await page.getByText('Production Gateway').first().click();
+
+  // Dashboard home: estate overview, attention items and recent activity
+  await page.getByRole('heading', { name: 'Dashboard' }).waitFor();
+  await page.getByRole('list', { name: 'Applications' }).waitFor();
+  await dismissToasts();
+  await shot('08-dashboard');
+
+  await page.locator('aside').getByText('Production Gateway').first().click();
   await page.getByText('DATABASE_PASSWORDS').first().click();
   await page.waitForTimeout(800);
   await dismissToasts();

@@ -15,6 +15,7 @@
 
 *   **🛡️ Secure Vaulting**: Manage sensitive credentials with an interface designed for security first.
 *   **🌍 Environment Management**: Switch between Development, Staging, and Production contexts with zero friction.
+*   **🏠 Dashboard**: An overview of every application, what changed, what's being fetched and what needs attention.
 *   **🔗 Deep Links**: Every application, environment, tab and Global entry has its own URL — bookmark it, share it, and use the browser's back/forward buttons.
 *   **🧙‍♂️ Elegant UX**: A dark, magical aesthetic built with React 19, Tailwind CSS 4, and Framer Motion.
 *   **🌑 Fluid Animations**: Powered by `motion` for smooth, meaningful transitions.
@@ -28,6 +29,11 @@
 > 🔮 **Try it yourself** — open the [live demo](http://guilherme.stracini.com.br/grimoire-ui/) and click **Launch Live Demo (Mock API)**. It runs entirely in your browser against a built-in mock API with demo data, so no Grimoire server is needed and nothing leaves your machine.
 
 All screenshots below were captured from that same demo mode.
+
+### 🏠 Dashboard
+The home page gives an overview of the whole estate: totals, every application with per-environment counts and consumer health, everything that **needs attention** (expired or expiring secrets, stale consumers, empty values…) with deep links to the offending entry, Global, and recent activity.
+
+![Dashboard](docs/screenshots/08-dashboard.png)
 
 ### 🔐 Application secrets
 Per-application secrets with per-environment presence, status and versions. Secrets inherited from **Global** are flagged and can be overridden.

@@ -41,6 +41,32 @@ const responses: Record<string, unknown> = {
   '/applications/my-app/configurations/effective?environment=staging': [
     { key: 'STAGING_ONLY_KEY', value: 's', description: '', source: 'application', overridesGlobal: false },
   ],
+  '/dashboard': {
+    generatedAt: new Date().toISOString(),
+    totals: { applications: 2, environments: 2, secrets: 0, configurations: 2 },
+    applications: [
+      {
+        slug: 'my-app', name: 'My App', inheritGlobals: true, secretCount: 0, configurationCount: 2,
+        lastChangedAt: null, lastSeenAt: null,
+        environments: [
+          { slug: 'production', name: 'Production', secretCount: 0, configurationCount: 1, lastSeenAt: null },
+          { slug: 'staging', name: 'Staging', secretCount: 0, configurationCount: 1, lastSeenAt: null },
+        ],
+      },
+      {
+        slug: 'other-app', name: 'Other App', inheritGlobals: true, secretCount: 0, configurationCount: 0,
+        lastChangedAt: null, lastSeenAt: null, environments: [],
+      },
+    ],
+    global: { secretCount: 0, configurationCount: 2, lastChangedAt: null },
+    featureFlags: null,
+    recentActivity: null,
+    attention: [],
+  },
+  '/applications/my-app/secrets/effective': [
+    { name: 'API_TOKEN', description: '', source: 'application', overridesGlobal: false },
+    { name: 'OTHER_SECRET', description: '', source: 'application', overridesGlobal: false },
+  ],
   '/global/configurations': [
     { key: 'SMTP_HOST', value: 'smtp.example.com', description: '', environmentSlug: '*' },
     { key: 'OTHER_KEY', value: 'x', description: '', environmentSlug: '*' },
@@ -75,7 +101,8 @@ describe('URL routing', () => {
 
   it('renders the dashboard at / with an active Dashboard sidebar entry', async () => {
     renderAt('/');
-    expect(await screen.findByText('Welcome to Grimoire')).toBeDefined();
+    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeDefined();
+    expect(await screen.findByRole('list', { name: 'Applications' })).toBeDefined();
     expect(screen.getByRole('link', { name: /dashboard/i }).getAttribute('aria-current')).toBe('page');
   });
 
@@ -211,6 +238,37 @@ describe('URL routing', () => {
   it('drops the highlight when switching Global tabs', async () => {
     const router = renderAt('/global/config?key=SMTP_HOST');
     fireEvent.click(await screen.findByRole('tab', { name: /secrets/i }));
+    await waitFor(() => expect(pathOf(router)).toBe('/global/secrets'));
+  });
+
+  it('highlights an application configuration key from ?key=', async () => {
+    renderAt('/apps/my-app/production/config?key=PROD_ONLY_KEY');
+    const cell = await screen.findByText('PROD_ONLY_KEY');
+    expect(cell.closest('tr')?.getAttribute('data-highlighted')).toBe('true');
+    expect(screen.getAllByText('SMTP_HOST')[0].closest('tr')?.getAttribute('data-highlighted')).toBeNull();
+  });
+
+  it('highlights and expands an application secret from ?key=', async () => {
+    renderAt('/apps/my-app/production/secrets?key=API_TOKEN');
+    await waitFor(() =>
+      expect(screen.getAllByText('API_TOKEN')[0].closest('tr')?.getAttribute('data-highlighted')).toBe('true')
+    );
+    expect(screen.getByText('OTHER_SECRET').closest('tr')?.getAttribute('data-highlighted')).toBeNull();
+    await waitFor(() =>
+      expect(api.get).toHaveBeenCalledWith('/applications/my-app/secrets/API_TOKEN')
+    );
+  });
+
+  it('drops the ?key= highlight when switching application tabs', async () => {
+    const router = renderAt('/apps/my-app/production/config?key=PROD_ONLY_KEY');
+    await screen.findByText('PROD_ONLY_KEY');
+    fireEvent.click(screen.getByRole('tab', { name: /secrets/i }));
+    await waitFor(() => expect(pathOf(router)).toBe('/apps/my-app/production/secrets'));
+  });
+
+  it('opens the Global create form from ?new=1 and drops the parameter', async () => {
+    const router = renderAt('/global/secrets?new=1');
+    expect(await screen.findByRole('dialog')).toBeDefined();
     await waitFor(() => expect(pathOf(router)).toBe('/global/secrets'));
   });
 

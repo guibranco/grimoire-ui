@@ -3,6 +3,8 @@ import { Toaster } from 'react-hot-toast';
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { routes } from './router';
 import { routerBasename } from './lib/routes';
+import { api } from './lib/api';
+import { invalidateDashboardOnMutations } from './lib/dashboard';
 
 const router = createBrowserRouter(routes, { basename: routerBasename() });
 
@@ -17,6 +19,7 @@ export const createQueryClient = () =>
   });
 
 const queryClient = createQueryClient();
+invalidateDashboardOnMutations(api, queryClient);
 
 export default function App() {
   return (
