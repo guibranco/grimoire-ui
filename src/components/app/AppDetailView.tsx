@@ -7,7 +7,7 @@ import { ApplicationHeader } from '@/components/layout/ApplicationHeader';
 import { GrimoireTab } from '@/components/grimoire/GrimoireTab';
 import { ConfigTab } from '@/components/config/ConfigTab';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Lock, Settings, Loader2 } from 'lucide-react';
+import { Flag, Lock, Settings, Loader2 } from 'lucide-react';
 import { ConfirmationModal } from '@/components/shared/ConfirmationModal';
 import { AddEnvModal } from '@/components/modals/AddEnvModal';
 import { EditAppModal } from '@/components/modals/EditAppModal';
@@ -17,7 +17,7 @@ import toast from 'react-hot-toast';
 export const AppDetailView: React.FC = () => {
   const { selectedAppSlug, setSelectedAppSlug } = useStore();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState('secrets');
+  const [activeTab, setActiveTab] = useState('config');
   const [isEditAppOpen, setIsEditAppOpen] = useState(false);
   const [isAddEnvOpen, setIsAddEnvOpen] = useState(false);
   const [isRotateKeyOpen, setIsRotateKeyOpen] = useState(false);
@@ -105,28 +105,39 @@ export const AppDetailView: React.FC = () => {
         <div className="h-[44px] border-b border-border flex bg-[#121214] sticky top-0 z-10 shrink-0">
           <TabsList className="bg-transparent h-full p-0 flex gap-0 rounded-none w-full">
             <TabsTrigger 
-              value="secrets" 
-              className="px-6 h-full bg-transparent border-r border-border data-[state=active]:bg-grimoire/5 data-[state=active]:border-b-2 data-[state=active]:border-b-grimoire data-[state=active]:text-grimoire rounded-none font-bold uppercase tracking-tight text-[11px] gap-2 transition-all shadow-none"
-            >
-              <Lock className="w-3.5 h-3.5" />
-              🔐 Secrets
-            </TabsTrigger>
-            <TabsTrigger 
               value="config" 
               className="px-6 h-full bg-transparent border-r border-border data-[state=active]:bg-config/5 data-[state=active]:border-b-2 data-[state=active]:border-b-config data-[state=active]:text-config rounded-none font-bold uppercase tracking-tight text-[11px] gap-2 transition-all shadow-none"
             >
               <Settings className="w-3.5 h-3.5" />
               ⚙️ Configuration
             </TabsTrigger>
+            <TabsTrigger
+              value="feature-flags"
+              disabled
+              aria-disabled="true"
+              title="Feature flags are coming soon"
+              className="px-6 h-full bg-transparent border-r border-border rounded-none font-bold uppercase tracking-tight text-[11px] gap-2 shadow-none cursor-not-allowed opacity-50"
+            >
+              <Flag className="w-3.5 h-3.5" />
+              🚩 Feature Flags
+              <span className="ml-1 px-1.5 py-0.5 border border-border text-[9px] font-mono tracking-widest text-zinc-500">SOON</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="secrets" 
+              className="px-6 h-full bg-transparent border-r border-border data-[state=active]:bg-grimoire/5 data-[state=active]:border-b-2 data-[state=active]:border-b-grimoire data-[state=active]:text-grimoire rounded-none font-bold uppercase tracking-tight text-[11px] gap-2 transition-all shadow-none"
+            >
+              <Lock className="w-3.5 h-3.5" />
+              🔐 Secrets
+            </TabsTrigger>
           </TabsList>
         </div>
 
         <div className="flex-1 overflow-auto bg-[#0A0A0B]">
-          <TabsContent value="secrets" className="m-0 min-h-full">
-            <GrimoireTab appSlug={app.slug} />
-          </TabsContent>
           <TabsContent value="config" className="m-0 min-h-full">
             <ConfigTab appSlug={app.slug} onAddEnv={() => setIsAddEnvOpen(true)} />
+          </TabsContent>
+          <TabsContent value="secrets" className="m-0 min-h-full">
+            <GrimoireTab appSlug={app.slug} />
           </TabsContent>
         </div>
       </Tabs>

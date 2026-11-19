@@ -5,7 +5,7 @@ import { Application } from '@/types/api';
 import { useStore } from '@/store/useStore';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Globe, Lock, Settings } from 'lucide-react';
+import { Flag, Globe, Lock, Settings } from 'lucide-react';
 import { GlobalConfigTab } from './GlobalConfigTab';
 import { GlobalSecretsTab } from './GlobalSecretsTab';
 
@@ -77,6 +77,17 @@ export const GlobalView: React.FC = () => {
             >
               <Settings className="w-3.5 h-3.5" />
               Configuration
+            </TabsTrigger>
+            <TabsTrigger
+              value="feature-flags"
+              disabled
+              aria-disabled="true"
+              title="Feature flags are coming soon"
+              className="px-6 h-full bg-transparent border-r border-border rounded-none font-bold uppercase tracking-tight text-[11px] gap-2 shadow-none cursor-not-allowed opacity-50"
+            >
+              <Flag className="w-3.5 h-3.5" />
+              Feature Flags
+              <span className="ml-1 px-1.5 py-0.5 border border-border text-[9px] font-mono tracking-widest text-zinc-500">SOON</span>
             </TabsTrigger>
             <TabsTrigger
               value="secrets"
