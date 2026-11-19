@@ -67,7 +67,8 @@ export const ConfigTab: React.FC<ConfigTabProps> = ({ appSlug, environmentSlug, 
     description: string;
     valueType: ConfigValueType;
   } | null>(null);
-  const [deletingConfig, setDeletingConfig] = useState<EffectiveConfiguration | null>(null);
+  // The environment is captured when the dialog opens so a route change (e.g. Back) can't retarget the delete.
+  const [deletingConfig, setDeletingConfig] = useState<{ config: EffectiveConfiguration; envSlug: string } | null>(null);
   const [deletingEnv, setDeletingEnv] = useState<Environment | null>(null);
   const [enablingInheritance, setEnablingInheritance] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -190,11 +191,12 @@ export const ConfigTab: React.FC<ConfigTabProps> = ({ appSlug, environmentSlug, 
   };
 
   const handleDelete = async () => {
-    if (!deletingConfig || !activeEnvironmentSlug) return;
-    const wasOverride = deletingConfig.overridesGlobal;
+    if (!deletingConfig) return;
+    const { config, envSlug } = deletingConfig;
+    const wasOverride = config.overridesGlobal;
     try {
       await api.delete(
-        `/applications/${appSlug}/configurations/${encodeURIComponent(activeEnvironmentSlug)}/${encodeURIComponent(deletingConfig.key)}`
+        `/applications/${appSlug}/configurations/${encodeURIComponent(envSlug)}/${encodeURIComponent(config.key)}`
       );
       await queryClient.invalidateQueries({ queryKey: ['effective-configurations', appSlug] });
       await queryClient.invalidateQueries({ queryKey: ['configurations', appSlug] });
@@ -507,7 +509,7 @@ export const ConfigTab: React.FC<ConfigTabProps> = ({ appSlug, environmentSlug, 
                                 type="button"
                                 aria-label={`Delete ${config.key}`}
                                 className="text-zinc-700 hover:text-destructive transition-colors"
-                                onClick={() => setDeletingConfig(config)}
+                                onClick={() => activeEnvironmentSlug && setDeletingConfig({ config, envSlug: activeEnvironmentSlug })}
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -530,9 +532,9 @@ export const ConfigTab: React.FC<ConfigTabProps> = ({ appSlug, environmentSlug, 
         onConfirm={handleDelete}
         title="Delete Configuration"
         description={
-          deletingConfig?.overridesGlobal
-            ? `Are you sure you want to delete the override "${deletingConfig?.key}" from ${activeEnvironmentSlug}? The inherited global value will become active again.`
-            : `Are you sure you want to delete the configuration key "${deletingConfig?.key}" from ${activeEnvironmentSlug}?`
+          deletingConfig?.config.overridesGlobal
+            ? `Are you sure you want to delete the override "${deletingConfig.config.key}" from ${deletingConfig.envSlug}? The inherited global value will become active again.`
+            : `Are you sure you want to delete the configuration key "${deletingConfig?.config.key}" from ${deletingConfig?.envSlug}?`
         }
         confirmText="Remove Entry"
         variant="destructive"

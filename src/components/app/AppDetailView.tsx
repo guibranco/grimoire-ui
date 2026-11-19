@@ -70,14 +70,25 @@ const AppDetail: React.FC<{ appSlug: string }> = ({ appSlug }) => {
   const safeEnvs = Array.isArray(envs) ? envs : [];
   const paramEnvExists = !!envParam && safeEnvs.some((e) => e.slug === envParam);
   // Until environments load, trust the URL so the config tab can start fetching.
-  const activeEnvSlug = !envsLoaded
-    ? envParam ?? null
-    : paramEnvExists ? envParam! : safeEnvs[0]?.slug ?? null;
-  const activeTab: AppTab = isAppTab(tabParam) ? tabParam : envParam ? DEFAULT_APP_TAB : fallbackTab;
+  let activeEnvSlug: string | null = envParam ?? null;
+  if (envsLoaded && !paramEnvExists) activeEnvSlug = safeEnvs[0]?.slug ?? null;
+
+  // With an environment in the URL the tab lives there too; otherwise use local state.
+  let activeTab: AppTab = envParam ? DEFAULT_APP_TAB : fallbackTab;
+  if (isAppTab(tabParam)) activeTab = tabParam;
 
   useEffect(() => {
     if (app && envsLoaded) setLastVisited(app.slug, activeEnvSlug);
   }, [app, envsLoaded, activeEnvSlug, setLastVisited]);
+
+  // A tab picked before environments loaded (or on /apps/:appSlug) moves into the URL
+  // once there is an environment to hold it.
+  const firstEnvSlug = safeEnvs[0]?.slug;
+  useEffect(() => {
+    if (!envParam && firstEnvSlug && fallbackTab !== DEFAULT_APP_TAB) {
+      navigate(appPath(appSlug, firstEnvSlug, fallbackTab), { replace: true });
+    }
+  }, [envParam, firstEnvSlug, fallbackTab, appSlug, navigate]);
 
   if (isLoading) {
     return (
@@ -127,6 +138,7 @@ const AppDetail: React.FC<{ appSlug: string }> = ({ appSlug }) => {
     if (activeEnvSlug) {
       navigate(appPath(app.slug, activeEnvSlug, value));
     } else {
+      // No environment to put in the URL yet; the effect above moves it there once one exists.
       setFallbackTab(value);
     }
   };

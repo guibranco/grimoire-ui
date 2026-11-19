@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Menu } from 'lucide-react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { useStore } from '@/store/useStore';
@@ -20,6 +20,7 @@ export const AppShell: React.FC = () => {
   const [isCreateAppOpen, setIsCreateAppOpen] = useState(false);
   const [isNavOpen, setIsNavOpen] = useState(false);
   const location = useLocation();
+  const openCreateApp = useCallback(() => setIsCreateAppOpen(true), []);
 
   // Close the mobile drawer whenever the route changes.
   useEffect(() => {
@@ -45,10 +46,10 @@ export const AppShell: React.FC = () => {
   }
 
   return (
-    <CreateAppContext.Provider value={() => setIsCreateAppOpen(true)}>
+    <CreateAppContext.Provider value={openCreateApp}>
       <div className="min-h-dvh bg-background text-foreground flex">
         <Sidebar
-          onCreateApp={() => setIsCreateAppOpen(true)}
+          onCreateApp={openCreateApp}
           open={isNavOpen}
           onClose={() => setIsNavOpen(false)}
         />

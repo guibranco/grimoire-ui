@@ -130,6 +130,43 @@ describe('URL routing', () => {
     expect(pathOf(router)).toBe('/apps/my-app/production/secrets');
   });
 
+  it('moves a tab picked while environments are loading into the URL', async () => {
+    let releaseEnvs!: () => void;
+    const envsGate = new Promise<void>((resolve) => { releaseEnvs = resolve; });
+    const get = api.get as ReturnType<typeof vi.fn>;
+    const base = get.getMockImplementation() as (url: string) => Promise<unknown>;
+    get.mockImplementation((url: string) =>
+      url === '/applications/my-app/environments' ? envsGate.then(() => base(url)) : base(url)
+    );
+
+    const router = renderAt('/apps/my-app');
+    fireEvent.click(await screen.findByRole('tab', { name: /secrets/i }));
+    expect(pathOf(router)).toBe('/apps/my-app');
+
+    await act(async () => releaseEnvs());
+    await waitFor(() => expect(pathOf(router)).toBe('/apps/my-app/production/secrets'));
+    // replace navigation: no extra history entry for the pending selection
+    expect(router.state.historyAction).toBe('REPLACE');
+  });
+
+  it('keeps the delete target environment when the route changes under the dialog', async () => {
+    const del = api.delete as ReturnType<typeof vi.fn>;
+    del.mockResolvedValue({ data: {} });
+    const router = renderAt('/apps/my-app/production');
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete PROD_ONLY_KEY' }));
+    await screen.findByText(/delete the configuration key "PROD_ONLY_KEY" from production/i);
+
+    await act(() => router.navigate('/apps/my-app/staging'));
+    await screen.findByText('STAGING_ONLY_KEY');
+    expect(screen.getByText(/delete the configuration key "PROD_ONLY_KEY" from production/i)).toBeDefined();
+
+    fireEvent.change(screen.getByPlaceholderText('DELETE'), { target: { value: 'DELETE' } });
+    fireEvent.click(screen.getByRole('button', { name: /remove entry/i }));
+    await waitFor(() =>
+      expect(del).toHaveBeenCalledWith('/applications/my-app/configurations/production/PROD_ONLY_KEY')
+    );
+  });
+
   it('switches applications from the sidebar', async () => {
     const router = renderAt('/apps/my-app');
     await screen.findByText('PROD_ONLY_KEY');

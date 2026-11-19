@@ -50,5 +50,8 @@ export const globalPath = (tab?: GlobalTab | null, key?: string | null) => {
  * Router basename derived from Vite's `base` (`/grimoire-ui/` on GitHub Pages,
  * `/` in dev). React Router expects no trailing slash.
  */
-export const routerBasename = (baseUrl: string = import.meta.env.BASE_URL ?? '/') =>
-  baseUrl.replace(/\/+$/, '') || '/';
+export const routerBasename = (baseUrl: string = import.meta.env.BASE_URL ?? '/') => {
+  let end = baseUrl.length;
+  while (end > 0 && baseUrl[end - 1] === '/') end--;
+  return baseUrl.slice(0, end) || '/';
+};

@@ -33,6 +33,8 @@ describe('route helpers', () => {
   it('derives the router basename from the Vite base', () => {
     expect(routerBasename('/')).toBe('/');
     expect(routerBasename('/grimoire-ui/')).toBe('/grimoire-ui');
+    expect(routerBasename('/grimoire-ui//')).toBe('/grimoire-ui');
+    expect(routerBasename('')).toBe('/');
   });
 });
 
