@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useQueries, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import {
@@ -48,7 +48,13 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import toast from 'react-hot-toast';
 
-export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
+interface GrimoireTabProps {
+  appSlug: string;
+  /** Secret name to highlight and expand (from `?key=`). */
+  highlightedName?: string | null;
+}
+
+export const GrimoireTab: React.FC<GrimoireTabProps> = ({ appSlug, highlightedName = null }) => {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [showInherited, setShowInherited] = useState(true);
@@ -114,6 +120,18 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
   const visibleSecrets = showInherited
     ? safeSecrets
     : safeSecrets.filter(s => s.source !== 'global');
+
+  // Expand the highlighted secret once secrets load, preferring the application's own over an inherited one.
+  const highlightedSecret = highlightedName
+    ? safeSecrets.find(s => s.name === highlightedName && s.source !== 'global') ??
+      safeSecrets.find(s => s.name === highlightedName)
+    : undefined;
+  const highlightedSource = highlightedSecret?.source;
+  useEffect(() => {
+    if (highlightedName && highlightedSource) {
+      setExpandedSecret({ name: highlightedName, source: highlightedSource });
+    }
+  }, [highlightedName, highlightedSource]);
 
   const searchLower = search.toLowerCase();
   const filteredSecrets = visibleSecrets.filter(s =>
@@ -412,13 +430,20 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
                       ? { ...secret, ...expandedSecretDetail }
                       : secret;
 
+                  const isHighlighted =
+                    !!highlightedSecret &&
+                    highlightedSecret.name === secret.name &&
+                    highlightedSecret.source === secret.source;
+
                   return (
                     <React.Fragment key={`${secret.source}:::${secret.name}`}>
                       <TableRow
+                        data-highlighted={isHighlighted || undefined}
                         className={cn(
                           "cursor-pointer border-zinc-900/50 transition-colors h-14 group",
                           isGlobal && "bg-global/[0.03] hover:bg-global/[0.06]",
-                          !isGlobal && (isExpanded ? "bg-zinc-900/40" : "hover:bg-zinc-900/20")
+                          !isGlobal && (isExpanded ? "bg-zinc-900/40" : "hover:bg-zinc-900/20"),
+                          isHighlighted && "bg-grimoire/10 border-l-2 border-l-grimoire"
                         )}
                         onClick={() =>
                           setExpandedSecret(

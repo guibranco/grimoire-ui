@@ -103,3 +103,93 @@ export enum SecretStatus {
   PENDING = 'pending',
   MISSING = 'missing',
 }
+
+// ── Dashboard (GET /management/dashboard, guibranco/grimoire-api#104) ──────────
+
+export interface DashboardTotals {
+  applications: number;
+  environments: number;
+  secrets: number;
+  configurations: number;
+}
+
+export interface DashboardEnvironment {
+  slug: string;
+  name?: string;
+  secretCount: number;
+  configurationCount: number;
+  lastChangedAt?: string | null;
+  /** Last time a consumer fetched from this environment; `null` when never seen. */
+  lastSeenAt: string | null;
+}
+
+export interface DashboardApplication {
+  slug: string;
+  name: string;
+  inheritGlobals: boolean;
+  environments: DashboardEnvironment[];
+  secretCount: number;
+  configurationCount: number;
+  lastChangedAt: string | null;
+  lastSeenAt: string | null;
+}
+
+export interface DashboardGlobal {
+  secretCount: number;
+  configurationCount: number;
+  lastChangedAt: string | null;
+}
+
+/** `null` until feature flags land (guibranco/grimoire-api#90). */
+export interface DashboardFeatureFlags {
+  total: number;
+  enabled: number;
+}
+
+export type AttentionSeverity = 'error' | 'warning' | 'info';
+
+export type AttentionKind =
+  | 'secret-expired'
+  | 'secret-expiring'
+  | 'secret-no-valid-version'
+  | 'consumer-stale'
+  | 'consumer-never-seen'
+  | 'config-empty-value'
+  | 'rotation-due';
+
+export interface AttentionItem {
+  kind: AttentionKind | (string & {});
+  severity: AttentionSeverity;
+  /** Application slug; `null` for Global entries. */
+  application: string | null;
+  /** Environment slug; `null` (or `*`) when not tied to one environment. */
+  environment: string | null;
+  /** Secret name or configuration key. */
+  target: string | null;
+  dueAt?: string | null;
+  lastSeenAt?: string | null;
+}
+
+/** Audit event (guibranco/grimoire-api#76). Fields beyond `occurredAt`/`action` are optional. */
+export interface ActivityEvent {
+  id?: string;
+  occurredAt: string;
+  actor?: string | null;
+  action: string;
+  application?: string | null;
+  environment?: string | null;
+  target?: string | null;
+  /** `secret` or `configuration`, when the event touches an entry. */
+  targetType?: string | null;
+}
+
+export interface DashboardResponse {
+  generatedAt: string;
+  totals: DashboardTotals;
+  applications: DashboardApplication[];
+  global: DashboardGlobal;
+  featureFlags: DashboardFeatureFlags | null;
+  /** `null` while the audit log isn't available. */
+  recentActivity: ActivityEvent[] | null;
+  attention: AttentionItem[];
+}

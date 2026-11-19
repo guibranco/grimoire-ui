@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
@@ -27,7 +27,13 @@ const GlobalViewContent: React.FC = () => {
   const navigate = useNavigate();
   const activeTab = isGlobalTab(tab) ? tab : DEFAULT_GLOBAL_TAB;
   const highlightedKey = searchParams.get('key');
+  const startCreating = searchParams.get('new') === '1';
   const [customSlugs, setCustomSlugs] = useState<string[]>([]);
+
+  // `?new=1` opens the create form once; drop it so a refresh or Back doesn't reopen it.
+  useEffect(() => {
+    if (startCreating) navigate(globalPath(activeTab, highlightedKey), { replace: true });
+  }, [startCreating, activeTab, highlightedKey, navigate]);
 
   const { data: apps } = useQuery({
     queryKey: ['applications'],
@@ -110,6 +116,7 @@ const GlobalViewContent: React.FC = () => {
           <TabsContent value="config" className="m-0 min-h-full">
             <GlobalConfigTab
               highlightedKey={activeTab === 'config' ? highlightedKey : null}
+              startCreating={startCreating && activeTab === 'config'}
               customSlugs={customSlugs}
               onAddCustomSlug={handleAddCustomSlug}
             />
@@ -117,6 +124,7 @@ const GlobalViewContent: React.FC = () => {
           <TabsContent value="secrets" className="m-0 min-h-full">
             <GlobalSecretsTab
               highlightedName={activeTab === 'secrets' ? highlightedKey : null}
+              startCreating={startCreating && activeTab === 'secrets'}
               customSlugs={customSlugs}
               onAddCustomSlug={handleAddCustomSlug}
             />
