@@ -7,6 +7,7 @@ import {
   Plus,
   Loader2,
   Globe,
+  X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -14,7 +15,14 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import logoMark from '@/assets/logo-mark.svg';
 
-export const Sidebar: React.FC<{ onCreateApp: () => void }> = ({ onCreateApp }) => {
+interface SidebarProps {
+  onCreateApp: () => void;
+  /** Whether the off-canvas drawer is open (mobile only; always visible from md up). */
+  open?: boolean;
+  onClose?: () => void;
+}
+
+export const Sidebar: React.FC<SidebarProps> = ({ onCreateApp, open = false, onClose }) => {
   const {
     selectedView,
     selectedAppSlug,
@@ -65,12 +73,38 @@ export const Sidebar: React.FC<{ onCreateApp: () => void }> = ({ onCreateApp }) 
     ? `v${apiVersion.replace(/^v/i, '')}`
     : 'N/A';
 
+  const close = () => onClose?.();
+
   return (
-    <aside className="w-[220px] border-r border-border bg-sidebar flex flex-col h-screen fixed left-0 top-0 z-20">
+    <>
+    <div
+      aria-hidden="true"
+      onClick={close}
+      className={cn(
+        "fixed inset-0 z-30 bg-black/70 backdrop-blur-[1px] transition-opacity md:hidden",
+        open ? "opacity-100" : "pointer-events-none opacity-0"
+      )}
+    />
+    <aside
+      id="app-sidebar"
+      className={cn(
+        "w-[260px] md:w-[220px] border-r border-border bg-sidebar flex flex-col h-dvh fixed left-0 top-0 z-40 md:z-20",
+        "transition-transform duration-200 ease-out md:translate-x-0",
+        open ? "translate-x-0 shadow-2xl" : "-translate-x-full"
+      )}
+    >
       <div className="p-5 border-b border-border">
         <div className="flex items-center gap-2">
           <img src={logoMark} alt="" aria-hidden="true" className="w-6 h-6 shrink-0" />
-          <h1 className="text-base font-bold tracking-tight text-foreground uppercase">Grimoire</h1>
+          <h1 className="text-base font-bold tracking-tight text-foreground uppercase flex-1">Grimoire</h1>
+          <button
+            type="button"
+            onClick={close}
+            aria-label="Close navigation"
+            className="md:hidden -mr-2 h-9 w-9 inline-flex items-center justify-center text-zinc-400 hover:text-foreground hover:bg-zinc-800 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
         <div className="text-[10px] text-zinc-600 font-mono mt-1 uppercase tracking-widest">v{UI_VERSION}-STABLE</div>
       </div>
@@ -82,6 +116,7 @@ export const Sidebar: React.FC<{ onCreateApp: () => void }> = ({ onCreateApp }) 
             onClick={() => {
               clearGlobalHighlight();
               setSelectedView('global');
+              close();
             }}
             className={cn(
               "w-full flex items-center justify-between gap-2 px-3 py-2 text-[13px] font-medium transition-all",
@@ -117,9 +152,12 @@ export const Sidebar: React.FC<{ onCreateApp: () => void }> = ({ onCreateApp }) 
               {(Array.isArray(apps) ? apps : []).map((app) => (
                 <button
                   key={app.slug}
-                  onClick={() => setSelectedAppSlug(app.slug)}
+                  onClick={() => {
+                    setSelectedAppSlug(app.slug);
+                    close();
+                  }}
                   className={cn(
-                    "w-full flex items-center gap-3 px-3 py-1.5 text-[13px] font-medium transition-all group relative",
+                    "w-full flex items-center gap-3 px-3 py-2.5 md:py-1.5 text-[13px] font-medium transition-all group relative",
                     selectedView === 'app' && selectedAppSlug === app.slug
                       ? "bg-zinc-900 border-l-2 border-grimoire text-grimoire"
                       : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"
@@ -129,7 +167,10 @@ export const Sidebar: React.FC<{ onCreateApp: () => void }> = ({ onCreateApp }) 
                 </button>
               ))}
               <button
-                onClick={onCreateApp}
+                onClick={() => {
+                  close();
+                  onCreateApp();
+                }}
                 className="w-[calc(100%-16px)] mx-2 mt-4 flex items-center justify-center gap-2 px-3 py-2 border border-dashed border-zinc-700 text-zinc-500 text-[10px] font-bold tracking-widest uppercase hover:border-zinc-500 hover:text-zinc-300 transition-colors"
               >
                 <Plus className="w-3 h-3" />
@@ -165,5 +206,6 @@ export const Sidebar: React.FC<{ onCreateApp: () => void }> = ({ onCreateApp }) 
         </Button>
       </div>
     </aside>
+    </>
   );
 };

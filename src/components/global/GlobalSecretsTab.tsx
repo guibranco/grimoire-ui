@@ -234,7 +234,7 @@ export const GlobalSecretsTab: React.FC<GlobalSecretsTabProps> = ({
 
   return (
     <div className="flex flex-col h-full">
-      <div className="border-b border-border bg-[#121214] px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 shrink-0">
+      <div className="border-b border-border bg-[#121214] px-4 md:px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 shrink-0">
         <div className="flex flex-wrap items-center gap-2 flex-1">
           <button
             type="button"
@@ -316,7 +316,7 @@ export const GlobalSecretsTab: React.FC<GlobalSecretsTabProps> = ({
           )}
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="relative w-52">
             <Search className="absolute left-2.5 top-1.5 h-3.5 w-3.5 text-zinc-600" />
             <input
@@ -450,17 +450,17 @@ export const GlobalSecretsTab: React.FC<GlobalSecretsTabProps> = ({
                     {isExpanded && (
                       <TableRow className="bg-[#080809] border-zinc-900 hover:bg-[#080809]">
                         <TableCell colSpan={4} className="p-0">
-                          <div className="p-8 border-l-2 border-global">
-                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-12">
+                          <div className="p-4 md:p-8 border-l-2 border-global">
+                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 md:gap-12">
                               <div>
                                 <h4 className="text-[10px] uppercase font-bold tracking-[0.25em] text-zinc-600 mb-6 flex items-center gap-2">
                                   <div className="w-1 h-3 bg-global" />
                                   Global Secret Metadata
                                 </h4>
-                                <div className="grid grid-cols-2 gap-6 bg-black/20 p-6 border border-zinc-900">
+                                <div className="grid grid-cols-2 gap-4 md:gap-6 bg-black/20 p-4 md:p-6 border border-zinc-900">
                                   <div className="col-span-2">
                                     <p className="text-[11px] font-bold text-zinc-700 uppercase mb-1">Identifier</p>
-                                    <p className="font-mono text-base text-zinc-200 tracking-tight">{secret.name}</p>
+                                    <p className="font-mono text-base text-zinc-200 tracking-tight break-all">{secret.name}</p>
                                   </div>
                                   <div>
                                     <p className="text-[11px] font-bold text-zinc-700 uppercase mb-1">Created</p>

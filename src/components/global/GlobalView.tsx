@@ -37,13 +37,13 @@ export const GlobalView: React.FC = () => {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <header className="h-[64px] flex items-center justify-between px-6 border-b border-border bg-background">
-        <div className="flex items-center gap-4">
+      <header className="min-h-[64px] flex items-center justify-between px-4 py-3 md:px-6 md:py-0 border-b border-border bg-background">
+        <div className="flex items-center gap-3 md:gap-4 min-w-0">
           <div className="w-8 h-8 bg-global/10 border border-global/40 text-global flex items-center justify-center shrink-0">
             <Globe className="w-4 h-4" />
           </div>
           <div>
-            <div className="flex items-center gap-2.5">
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
               <h2 className="text-xl font-semibold tracking-tight text-foreground">Global</h2>
               <Badge
                 variant="outline"
@@ -70,10 +70,10 @@ export const GlobalView: React.FC = () => {
         className="flex-1 flex flex-col"
       >
         <div className="h-[44px] border-b border-border flex bg-[#121214] sticky top-0 z-10 shrink-0">
-          <TabsList className="bg-transparent h-full p-0 flex gap-0 rounded-none w-full overflow-x-auto overflow-y-hidden">
+          <TabsList className="bg-transparent h-full p-0 flex gap-0 rounded-none w-full justify-start overflow-x-auto overflow-y-hidden">
             <TabsTrigger
               value="config"
-              className="px-6 h-full bg-transparent border-r border-border data-[state=active]:bg-global/5 data-[state=active]:border-b-2 data-[state=active]:border-b-global data-[state=active]:text-global rounded-none font-bold uppercase tracking-tight text-[11px] gap-2 transition-all shadow-none"
+              className="px-4 md:px-6 shrink-0 h-full bg-transparent border-r border-border data-[state=active]:bg-global/5 data-[state=active]:border-b-2 data-[state=active]:border-b-global data-[state=active]:text-global rounded-none font-bold uppercase tracking-tight text-[11px] gap-2 transition-all shadow-none"
             >
               <Settings className="w-3.5 h-3.5" />
               Configuration
@@ -83,7 +83,7 @@ export const GlobalView: React.FC = () => {
               disabled
               aria-disabled="true"
               title="Feature flags are coming soon"
-              className="px-6 h-full bg-transparent border-r border-border rounded-none font-bold uppercase tracking-tight text-[11px] gap-2 shadow-none cursor-not-allowed opacity-50"
+              className="px-4 md:px-6 shrink-0 h-full bg-transparent border-r border-border rounded-none font-bold uppercase tracking-tight text-[11px] gap-2 shadow-none cursor-not-allowed opacity-50"
             >
               <Flag className="w-3.5 h-3.5" />
               Feature Flags
@@ -91,7 +91,7 @@ export const GlobalView: React.FC = () => {
             </TabsTrigger>
             <TabsTrigger
               value="secrets"
-              className="px-6 h-full bg-transparent border-r border-border data-[state=active]:bg-global/5 data-[state=active]:border-b-2 data-[state=active]:border-b-global data-[state=active]:text-global rounded-none font-bold uppercase tracking-tight text-[11px] gap-2 transition-all shadow-none"
+              className="px-4 md:px-6 shrink-0 h-full bg-transparent border-r border-border data-[state=active]:bg-global/5 data-[state=active]:border-b-2 data-[state=active]:border-b-global data-[state=active]:text-global rounded-none font-bold uppercase tracking-tight text-[11px] gap-2 transition-all shadow-none"
             >
               <Lock className="w-3.5 h-3.5" />
               Secrets

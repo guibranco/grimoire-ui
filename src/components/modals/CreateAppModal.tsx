@@ -82,7 +82,7 @@ export const CreateAppModal: React.FC<CreateAppModalProps> = ({ open, onOpenChan
   return (
     <>
       <Dialog open={open} onOpenChange={(val) => !loading && onOpenChange(val)}>
-        <DialogContent className="max-w-md bg-card border-2 border-border p-0 gap-0 shadow-2xl">
+        <DialogContent className="sm:max-w-md bg-card border-2 border-border p-0 gap-0 shadow-2xl">
           <form onSubmit={handleSubmit(onSubmit)}>
             <div className="p-6">
               <DialogHeader className="mb-6">

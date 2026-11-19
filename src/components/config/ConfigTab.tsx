@@ -217,8 +217,8 @@ export const ConfigTab: React.FC<{ appSlug: string; onAddEnv?: () => void }> = (
 
   return (
     <div className="flex flex-col h-full">
-      <div className="h-[48px] border-b border-border bg-[#121214] flex items-center justify-between px-6 shrink-0 gap-4">
-        <div className="flex items-center gap-4 flex-1">
+      <div className="min-h-[48px] border-b border-border bg-[#121214] flex flex-wrap items-center justify-between px-4 md:px-6 py-2 shrink-0 gap-x-4 gap-y-2">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 w-full md:w-auto md:flex-1">
           <div className="flex items-center bg-zinc-900 border border-zinc-800 px-3 h-[28px] text-[10px] font-bold uppercase tracking-widest text-zinc-500 shrink-0">
             <span>ENV:</span>
             <DropdownMenu>
@@ -261,7 +261,7 @@ export const ConfigTab: React.FC<{ appSlug: string; onAddEnv?: () => void }> = (
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-          <div className="relative flex-1 max-w-xs">
+          <div className="relative flex-1 min-w-[140px] max-w-xs">
             <Search className="absolute left-2.5 top-1.5 h-3.5 w-3.5 text-zinc-600" />
             <input
               placeholder="Filter configs..."
@@ -285,7 +285,7 @@ export const ConfigTab: React.FC<{ appSlug: string; onAddEnv?: () => void }> = (
             </Label>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <input
             type="file"
             ref={fileInputRef}
@@ -321,7 +321,7 @@ export const ConfigTab: React.FC<{ appSlug: string; onAddEnv?: () => void }> = (
       </div>
 
       {app?.inheritGlobals === false && (
-        <div className="px-6 py-2 bg-zinc-900/70 border-b border-border flex items-center justify-between text-xs text-zinc-400 shrink-0">
+        <div className="px-4 md:px-6 py-2 bg-zinc-900/70 border-b border-border flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-400 shrink-0">
           <span>This application does not inherit global values</span>
           <button
             type="button"

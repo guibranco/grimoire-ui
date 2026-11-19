@@ -214,7 +214,7 @@ export const GlobalConfigTab: React.FC<GlobalConfigTabProps> = ({
 
   return (
     <div className="flex flex-col h-full">
-      <div className="border-b border-border bg-[#121214] px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 shrink-0">
+      <div className="border-b border-border bg-[#121214] px-4 md:px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 shrink-0">
         <div className="flex flex-wrap items-center gap-2 flex-1">
           <button
             type="button"
@@ -296,7 +296,7 @@ export const GlobalConfigTab: React.FC<GlobalConfigTabProps> = ({
           )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="relative w-52">
             <Search className="absolute left-2.5 top-1.5 h-3.5 w-3.5 text-zinc-600" />
             <input

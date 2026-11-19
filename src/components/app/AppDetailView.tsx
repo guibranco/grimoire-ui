@@ -103,10 +103,10 @@ export const AppDetailView: React.FC = () => {
         className="flex-1 flex flex-col"
       >
         <div className="h-[44px] border-b border-border flex bg-[#121214] sticky top-0 z-10 shrink-0">
-          <TabsList className="bg-transparent h-full p-0 flex gap-0 rounded-none w-full overflow-x-auto overflow-y-hidden">
+          <TabsList className="bg-transparent h-full p-0 flex gap-0 rounded-none w-full justify-start overflow-x-auto overflow-y-hidden">
             <TabsTrigger 
               value="config" 
-              className="px-6 h-full bg-transparent border-r border-border data-[state=active]:bg-config/5 data-[state=active]:border-b-2 data-[state=active]:border-b-config data-[state=active]:text-config rounded-none font-bold uppercase tracking-tight text-[11px] gap-2 transition-all shadow-none"
+              className="px-4 md:px-6 shrink-0 h-full bg-transparent border-r border-border data-[state=active]:bg-config/5 data-[state=active]:border-b-2 data-[state=active]:border-b-config data-[state=active]:text-config rounded-none font-bold uppercase tracking-tight text-[11px] gap-2 transition-all shadow-none"
             >
               <Settings className="w-3.5 h-3.5" />
               ⚙️ Configuration
@@ -116,7 +116,7 @@ export const AppDetailView: React.FC = () => {
               disabled
               aria-disabled="true"
               title="Feature flags are coming soon"
-              className="px-6 h-full bg-transparent border-r border-border rounded-none font-bold uppercase tracking-tight text-[11px] gap-2 shadow-none cursor-not-allowed opacity-50"
+              className="px-4 md:px-6 shrink-0 h-full bg-transparent border-r border-border rounded-none font-bold uppercase tracking-tight text-[11px] gap-2 shadow-none cursor-not-allowed opacity-50"
             >
               <Flag className="w-3.5 h-3.5" />
               🚩 Feature Flags
@@ -124,7 +124,7 @@ export const AppDetailView: React.FC = () => {
             </TabsTrigger>
             <TabsTrigger 
               value="secrets" 
-              className="px-6 h-full bg-transparent border-r border-border data-[state=active]:bg-grimoire/5 data-[state=active]:border-b-2 data-[state=active]:border-b-grimoire data-[state=active]:text-grimoire rounded-none font-bold uppercase tracking-tight text-[11px] gap-2 transition-all shadow-none"
+              className="px-4 md:px-6 shrink-0 h-full bg-transparent border-r border-border data-[state=active]:bg-grimoire/5 data-[state=active]:border-b-2 data-[state=active]:border-b-grimoire data-[state=active]:text-grimoire rounded-none font-bold uppercase tracking-tight text-[11px] gap-2 transition-all shadow-none"
             >
               <Lock className="w-3.5 h-3.5" />
               🔐 Secrets
