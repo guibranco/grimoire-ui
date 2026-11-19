@@ -484,7 +484,10 @@ export const ConfigTab: React.FC<{ appSlug: string; onAddEnv?: () => void }> = (
                               </button>
                             </div>
                           ) : (
-                            <div className="flex justify-end gap-2 pr-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div
+                              // Hide-until-hover only on devices that can hover; touch screens always show the actions.
+                              className="flex justify-end gap-2 pr-1 transition-opacity [@media(hover:hover)]:opacity-0 group-hover:opacity-100 focus-within:opacity-100"
+                            >
                               <button
                                 type="button"
                                 aria-label={`Edit ${config.key}`}
