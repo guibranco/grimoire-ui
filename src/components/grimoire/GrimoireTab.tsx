@@ -322,12 +322,12 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="h-[48px] border-b border-border bg-[#121214] flex items-center justify-between px-6 shrink-0 gap-4">
-        <div className="flex items-center gap-4 flex-1">
+      <div className="min-h-[48px] border-b border-border bg-[#121214] flex flex-wrap items-center justify-between px-4 md:px-6 py-2 shrink-0 gap-x-4 gap-y-2">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 w-full md:w-auto md:flex-1">
           <span className="text-[11px] font-bold text-zinc-500 uppercase tracking-widest whitespace-nowrap">
             {filteredSecrets.length} Secrets Defined
           </span>
-          <div className="relative flex-1 max-w-xs">
+          <div className="relative flex-1 min-w-[140px] max-w-xs">
             <Search className="absolute left-2.5 top-1.5 h-3.5 w-3.5 text-zinc-600" />
             <input
               placeholder="Search..."
@@ -364,7 +364,7 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
       </div>
 
       {app?.inheritGlobals === false && (
-        <div className="px-6 py-2 bg-zinc-900/70 border-b border-border flex items-center justify-between text-xs text-zinc-400 shrink-0">
+        <div className="px-4 md:px-6 py-2 bg-zinc-900/70 border-b border-border flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-400 shrink-0">
           <span>This application does not inherit global values</span>
           <button
             type="button"
@@ -556,17 +556,17 @@ export const GrimoireTab: React.FC<{ appSlug: string }> = ({ appSlug }) => {
                       {isExpanded && (
                         <TableRow className="bg-[#080809] border-zinc-900 hover:bg-[#080809]">
                           <TableCell colSpan={4} className="p-0">
-                            <div className={cn("p-8 border-l-2", isGlobal ? "border-global" : "border-grimoire")}>
-                              <div className="grid grid-cols-1 xl:grid-cols-2 gap-12">
+                            <div className={cn("p-4 md:p-8 border-l-2", isGlobal ? "border-global" : "border-grimoire")}>
+                              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 md:gap-12">
                                 <div>
                                   <h4 className="text-[10px] uppercase font-bold tracking-[0.25em] text-zinc-600 mb-6 flex items-center gap-2">
                                     <div className={cn("w-1 h-3", isGlobal ? "bg-global" : "bg-grimoire")} />
                                     Secret Metadata
                                   </h4>
-                                  <div className="grid grid-cols-2 gap-6 bg-black/20 p-6 border border-zinc-900">
+                                  <div className="grid grid-cols-2 gap-4 md:gap-6 bg-black/20 p-4 md:p-6 border border-zinc-900">
                                     <div className="col-span-2">
                                       <p className="text-[11px] font-bold text-zinc-700 uppercase mb-1">Identifier</p>
-                                      <p className="font-mono text-base text-zinc-200 tracking-tight">{secret.name}</p>
+                                      <p className="font-mono text-base text-zinc-200 tracking-tight break-all">{secret.name}</p>
                                     </div>
                                     <div>
                                       <p className="text-[11px] font-bold text-zinc-700 uppercase mb-1">Created</p>

@@ -18,23 +18,23 @@ export const ApplicationHeader: React.FC<ApplicationHeaderProps> = ({
   onDeleteApp 
 }) => {
   return (
-    <header className="h-[64px] flex items-center justify-between px-6 border-b border-border bg-background">
-      <div className="flex items-center gap-4">
-        <h2 className="text-xl font-semibold tracking-tight text-foreground">{app.name}</h2>
-        <span className="px-2 py-0.5 bg-zinc-900 text-zinc-500 font-mono text-[11px] border border-zinc-800 uppercase tracking-tight">
+    <header className="min-h-[64px] flex flex-wrap items-center justify-between gap-x-4 gap-y-3 px-4 py-3 md:px-6 md:py-0 border-b border-border bg-background">
+      <div className="flex items-center gap-3 md:gap-4 min-w-0">
+        <h2 className="text-lg md:text-xl font-semibold tracking-tight text-foreground truncate">{app.name}</h2>
+        <span className="hidden sm:inline px-2 py-0.5 bg-zinc-900 text-zinc-500 font-mono text-[11px] border border-zinc-800 uppercase tracking-tight">
           slug: {app.slug}
         </span>
         <button
           type="button"
           onClick={onEditApp}
           title="Edit application"
-          className="h-7 w-7 inline-flex items-center justify-center border border-border text-zinc-400 hover:text-foreground hover:bg-zinc-800 transition-colors"
+          className="h-8 w-8 md:h-7 md:w-7 shrink-0 inline-flex items-center justify-center border border-border text-zinc-400 hover:text-foreground hover:bg-zinc-800 transition-colors"
         >
           <Pencil className="w-3.5 h-3.5" />
         </button>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2 md:gap-3">
         <button 
           onClick={onAddEnv}
           className="h-[32px] px-3 border border-border text-[11px] font-bold uppercase tracking-widest text-grimoire hover:bg-grimoire/10 transition-colors inline-flex items-center gap-1.5"
