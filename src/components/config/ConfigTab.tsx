@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useScrollToHighlighted } from '@/lib/useScrollToHighlighted';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Application, ConfigValueType, EffectiveConfiguration, Environment } from '@/types/api';
@@ -115,6 +116,8 @@ export const ConfigTab: React.FC<ConfigTabProps> = ({
     },
     enabled: !!appSlug && !!activeEnvironmentSlug,
   });
+  useScrollToHighlighted(highlightedKey, !configsLoading);
+
 
   const safeConfigs = Array.isArray(effectiveConfigs) ? effectiveConfigs : [];
   const visibleConfigs = showInherited

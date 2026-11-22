@@ -14,6 +14,8 @@ import { cn } from '@/lib/utils';
 import type { Application, AttentionSeverity, DashboardResponse } from '@/types/api';
 import { useStore } from '@/store/useStore';
 import { CreateAppContext } from '@/components/layout/AppShell';
+import { useCommandPalette } from '@/components/command/CommandPalette';
+import { paletteShortcutLabel } from '@/lib/search';
 import logoMark from '@/assets/logo-mark.svg';
 import { RelativeTime, Skeleton } from './parts';
 import { ApplicationsSection, ApplicationsSkeleton, type AppAttention, type DashboardAppRow } from './ApplicationsSection';
@@ -58,7 +60,8 @@ const Header: React.FC<{
   refreshFailed: boolean;
   onRefresh: () => void;
   onCreateApp: () => void;
-}> = ({ generatedAt, isFetching, refreshFailed, onRefresh, onCreateApp }) => (
+  onSearch: () => void;
+}> = ({ generatedAt, isFetching, refreshFailed, onRefresh, onCreateApp, onSearch }) => (
   <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
     <div className="min-w-0">
       <h2 className="text-xl font-semibold tracking-tight text-foreground">Dashboard</h2>
@@ -106,16 +109,14 @@ const Header: React.FC<{
         <Lock className="w-3 h-3" aria-hidden="true" />
         New global secret
       </Link>
-      {/* Command palette lands in #471. */}
       <button
         type="button"
-        disabled
-        title="Search is coming soon"
-        className={cn(quickAction, 'border-zinc-800 text-zinc-500 cursor-not-allowed')}
+        onClick={onSearch}
+        className={cn(quickAction, 'border-zinc-800 text-zinc-300 hover:border-zinc-600 hover:text-foreground')}
       >
         <Search className="w-3 h-3" aria-hidden="true" />
         Search
-        <kbd className="ml-1 px-1 border border-zinc-700 font-mono text-[9px] normal-case tracking-normal">⌘K</kbd>
+        <kbd className="ml-1 px-1 border border-zinc-700 font-mono text-[9px] normal-case tracking-normal">{paletteShortcutLabel()}</kbd>
       </button>
     </div>
   </header>
@@ -185,6 +186,7 @@ const ErrorState: React.FC<{ onRetry: () => void; retrying: boolean }> = ({ onRe
 /** Home route (`/`): estate overview fed by `GET /management/dashboard`. */
 export const DashboardHome: React.FC = () => {
   const openCreateApp = useContext(CreateAppContext);
+  const palette = useCommandPalette();
   const lastVisitedAppSlug = useStore((s) => s.lastVisitedAppSlug);
   const lastVisitedEnvironmentSlug = useStore((s) => s.lastVisitedEnvironmentSlug);
   const { data, error, isPending, isFetching, refetch } = useDashboard();
@@ -276,6 +278,7 @@ export const DashboardHome: React.FC = () => {
           refreshFailed={!!error && !!data}
           onRefresh={() => void refetch()}
           onCreateApp={openCreateApp}
+          onSearch={palette.open}
         />
         {content}
       </div>

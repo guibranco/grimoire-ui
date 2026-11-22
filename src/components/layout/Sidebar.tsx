@@ -10,6 +10,7 @@ import {
   Loader2,
   Globe,
   LayoutDashboard,
+  Search,
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -17,6 +18,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import logoMark from '@/assets/logo-mark.svg';
+import { useCommandPalette } from '@/components/command/CommandPalette';
+import { paletteShortcutLabel } from '@/lib/search';
 
 interface SidebarProps {
   onCreateApp: () => void;
@@ -28,6 +31,7 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({ onCreateApp, open = false, onClose }) => {
   const disconnect = useStore((s) => s.disconnect);
   const navigate = useNavigate();
+  const palette = useCommandPalette();
 
   const connectionInfo = getApiConnectionInfo();
 
@@ -107,6 +111,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCreateApp, open = false, onC
       </div>
 
       <div className="flex-1 overflow-hidden flex flex-col pt-3">
+        <div className="px-2 pb-2">
+          <button
+            type="button"
+            onClick={() => {
+              close();
+              palette.open();
+            }}
+            className="w-full h-8 flex items-center gap-2 px-2.5 border border-border bg-zinc-900/60 text-[12px] text-zinc-500 hover:text-zinc-300 hover:border-zinc-700 transition-colors"
+          >
+            <Search className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+            <span className="flex-1 text-left">Search…</span>
+            <kbd className="px-1 border border-zinc-700 font-mono text-[9px] text-zinc-500">{paletteShortcutLabel()}</kbd>
+          </button>
+        </div>
         <nav aria-label="Primary" className="px-2 pb-3 border-b border-border/60 space-y-0.5">
           <NavLink
             to={dashboardPath()}

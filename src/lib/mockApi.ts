@@ -563,6 +563,95 @@ function buildDashboard(expiringWithinDays: number, staleAfterDays: number) {
   };
 }
 
+/**
+ * Mirrors GET /management/search (guibranco/grimoire-api#105): names, keys, slugs and
+ * descriptions only — values are never matched or returned.
+ */
+function buildSearch(query: string, limit: number) {
+  const term = query.trim();
+  const needle = term.toLowerCase();
+  const has = (s?: string | null) => !!s && s.toLowerCase().includes(needle);
+  const rate = (value: string) => {
+    const v = value.toLowerCase();
+    return v === needle ? 0 : v.startsWith(needle) ? 1 : v.includes(needle) ? 2 : null;
+  };
+  const sortEnvs = (envs: Iterable<string>) =>
+    [...new Set(envs)].sort((a, b) => (a === '*' ? -1 : b === '*' ? 1 : a.localeCompare(b)));
+  const typeOrder = ['application', 'secret', 'configuration', 'global-secret', 'global-configuration'];
+
+  const hits: any[] = [];
+  for (const app of applications as any[]) {
+    if (has(app.name) || has(app.slug) || has(app.description)) {
+      hits.push({ type: 'application', name: app.name, application: app.slug, environments: [], description: app.description || null, valueType: null });
+    }
+  }
+  for (const [appSlug, list] of Object.entries(secrets as Record<string, any[]>)) {
+    for (const s of list) {
+      if (!has(s.name) && !has(s.description)) continue;
+      const envs = Object.keys(secretVersions)
+        .filter((k) => k.startsWith(`${appSlug}:${s.name}:`) && (secretVersions[k] ?? []).length > 0)
+        .map((k) => k.slice(`${appSlug}:${s.name}:`.length));
+      hits.push({ type: 'secret', name: s.name, application: appSlug, environments: sortEnvs(envs), description: s.description || null, valueType: null });
+    }
+  }
+  for (const [appSlug, list] of Object.entries(configurations as Record<string, any[]>)) {
+    const byKey = new Map<string, any[]>();
+    for (const c of list) {
+      if (!has(c.key) && !has(c.description)) continue;
+      byKey.set(c.key, [...(byKey.get(c.key) ?? []), c]);
+    }
+    for (const [key, rows] of byKey) {
+      hits.push({
+        type: 'configuration', name: key, application: appSlug,
+        environments: sortEnvs(rows.map((r) => r.environmentSlug)),
+        description: rows.find((r) => r.description)?.description ?? null,
+        valueType: rows[0].valueType ?? 'string',
+      });
+    }
+  }
+  for (const s of globalSecrets as any[]) {
+    if (!has(s.name) && !has(s.description)) continue;
+    const envs = Object.keys(globalSecretVersions)
+      .filter((k) => k.startsWith(`${s.name}:`) && (globalSecretVersions[k] ?? []).length > 0)
+      .map((k) => k.slice(s.name.length + 1));
+    hits.push({ type: 'global-secret', name: s.name, application: null, environments: sortEnvs(envs), description: s.description || null, valueType: null });
+  }
+  const globalByKey = new Map<string, any[]>();
+  for (const c of globalConfigurations as any[]) {
+    if (!has(c.key) && !has(c.description)) continue;
+    globalByKey.set(c.key, [...(globalByKey.get(c.key) ?? []), c]);
+  }
+  for (const [key, rows] of globalByKey) {
+    hits.push({
+      type: 'global-configuration', name: key, application: null,
+      environments: sortEnvs(rows.map((r) => r.environmentSlug)),
+      description: rows.find((r) => r.description)?.description ?? null,
+      valueType: rows[0].valueType ?? 'string',
+    });
+  }
+
+  const scored = hits
+    .map((hit) => {
+      let score = rate(hit.name);
+      if (hit.type === 'application') {
+        const bySlug = rate(hit.application);
+        if (bySlug !== null && (score === null || bySlug < score)) score = bySlug;
+      }
+      if (score === null && has(hit.description)) score = 3;
+      return { hit, score };
+    })
+    .filter((x) => x.score !== null)
+    .sort((a, b) =>
+      (a.score! - b.score!) ||
+      (typeOrder.indexOf(a.hit.type) - typeOrder.indexOf(b.hit.type)) ||
+      a.hit.name.localeCompare(b.hit.name, undefined, { sensitivity: 'base' }) ||
+      String(a.hit.application ?? '').localeCompare(String(b.hit.application ?? ''))
+    )
+    .map((x) => x.hit);
+
+  return { query: term, results: scored.slice(0, limit), truncated: scored.length > limit };
+}
+
 const parseDays = (raw: unknown, fallback: number, min: number) => {
   const n = Number(raw);
   return raw === undefined || raw === null || raw === '' || !Number.isInteger(n) ? fallback : Math.max(min, Math.min(3650, n));
@@ -632,6 +721,17 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
     const expiring = parseDays(searchParams.get('expiringWithinDays') ?? config.params?.expiringWithinDays, 14, 0);
     const stale = parseDays(searchParams.get('staleAfterDays') ?? config.params?.staleAfterDays, 7, 1);
     return makeResponse(200, buildDashboard(expiring, stale), config);
+  }
+
+  // GET /search?q=&limit=
+  if (cleanPath === '/search' && method === 'GET') {
+    const q = String(searchParams.get('q') ?? config.params?.q ?? '').trim();
+    const rawLimit = searchParams.get('limit') ?? config.params?.limit;
+    const limit = rawLimit === undefined || rawLimit === null || rawLimit === '' ? 20 : Number(rawLimit);
+    if (q.length < 2 || !Number.isInteger(limit) || limit < 1 || limit > 50) {
+      return makeResponse(400, { title: 'One or more validation errors occurred.', status: 400 }, config);
+    }
+    return makeResponse(200, buildSearch(q, limit), config);
   }
 
   // 1. GET /applications
