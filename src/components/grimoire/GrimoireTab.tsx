@@ -222,8 +222,9 @@ export const GrimoireTab: React.FC<GrimoireTabProps> = ({ appSlug, highlightedNa
     appVersionPairs.forEach(({ secretName, envSlug }, idx) => {
       const versions = appVersionQueries[idx]?.data;
       if (Array.isArray(versions) && versions.length > 0) {
-        const latest = versions.reduce((best, curr) =>
-          (curr.version ?? 0) >= (best.version ?? 0) ? curr : best
+        const latest = versions.reduce(
+          (best, curr) => ((curr.version ?? 0) >= (best.version ?? 0) ? curr : best),
+          versions[0]
         );
         map.set(`${secretName}:::${envSlug}`, latest);
       }
@@ -236,8 +237,9 @@ export const GrimoireTab: React.FC<GrimoireTabProps> = ({ appSlug, highlightedNa
     globalVersionPairs.forEach(({ secretName, envSlug }, idx) => {
       const versions = globalVersionQueries[idx]?.data;
       if (Array.isArray(versions) && versions.length > 0) {
-        const latest = versions.reduce((best, curr) =>
-          (curr.version ?? 0) >= (best.version ?? 0) ? curr : best
+        const latest = versions.reduce(
+          (best, curr) => ((curr.version ?? 0) >= (best.version ?? 0) ? curr : best),
+          versions[0]
         );
         map.set(`${secretName}:::${envSlug}`, latest);
       }
@@ -521,7 +523,9 @@ export const GrimoireTab: React.FC<GrimoireTabProps> = ({ appSlug, highlightedNa
                           {isGlobal ? (
                             <div
                               className="flex justify-end items-center gap-2"
+                              // Keep clicks and key presses on these actions from toggling the row.
                               onClick={(e) => e.stopPropagation()}
+                              onKeyDown={(e) => e.stopPropagation()}
                             >
                               <button
                                 type="button"
