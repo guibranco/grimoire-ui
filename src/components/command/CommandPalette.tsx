@@ -12,11 +12,12 @@ import {
   Lock,
   LogOut,
   Plus,
+  ScrollText,
   Search,
   Settings,
 } from 'lucide-react';
 import { api } from '@/lib/api';
-import { appPath, dashboardPath, globalCreatePath, globalPath } from '@/lib/routes';
+import { appPath, auditPath, dashboardPath, globalCreatePath, globalPath } from '@/lib/routes';
 import {
   highlightSegments,
   isPaletteShortcut,
@@ -163,6 +164,13 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onOpenChan
         label: 'Go to Global',
         icon: <Globe className="w-3.5 h-3.5 text-global" aria-hidden="true" />,
         run: () => go(globalPath()),
+      },
+      {
+        id: 'cmd-audit',
+        group: 'Commands',
+        label: 'Go to Audit log',
+        icon: <ScrollText className="w-3.5 h-3.5 text-zinc-400" aria-hidden="true" />,
+        run: () => go(auditPath()),
       },
       {
         id: 'cmd-new-app',

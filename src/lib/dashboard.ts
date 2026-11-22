@@ -8,7 +8,7 @@ import type {
   DashboardApplication,
   DashboardResponse,
 } from '@/types/api';
-import { appPath, globalPath, type AppTab } from '@/lib/routes';
+import { appPath, globalPath, type EntryTab } from '@/lib/routes';
 import type { DashboardAppsSort } from '@/store/useStore';
 
 /** Query key for `GET /dashboard`. Invalidated after every mutation (see `App.tsx`). */
@@ -178,7 +178,7 @@ export function attentionDetail(item: AttentionItem): string | null {
   }
 }
 
-const tabForKind = (kind: string): AppTab | null => {
+const tabForKind = (kind: string): EntryTab | null => {
   if (kind.startsWith('secret-') || kind === 'rotation-due') return 'secrets';
   if (kind.startsWith('config-')) return 'config';
   return null;
@@ -198,7 +198,7 @@ export function attentionLink(item: AttentionItem): string {
 /** Deep link for an audit event, as specific as its fields allow. */
 export function activityLink(event: ActivityEvent): string | null {
   const type = (event.targetType ?? '').toLowerCase();
-  const tab: AppTab | null = type.startsWith('secret') ? 'secrets' : type.startsWith('config') ? 'config' : null;
+  const tab: EntryTab | null = type.startsWith('secret') ? 'secrets' : type.startsWith('config') ? 'config' : null;
   const key = tab ? event.target ?? null : null;
   if (event.application) return appPath(event.application, realEnv(event.environment), tab, key);
   if (tab) return globalPath(tab, key);

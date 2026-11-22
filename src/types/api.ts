@@ -181,6 +181,8 @@ export interface ActivityEvent {
   target?: string | null;
   /** `secret` or `configuration`, when the event touches an entry. */
   targetType?: string | null;
+  /** Audit action code (e.g. `secret.write`); `action` is its readable description. */
+  code?: string | null;
 }
 
 export interface DashboardResponse {
@@ -221,4 +223,36 @@ export interface SearchResponse {
   query: string;
   results: SearchResult[];
   truncated: boolean;
+}
+
+// ── Audit log (GET /management/audit, guibranco/grimoire-api#76) ───────────────
+
+export type AuditOutcome = 'success' | 'notfound' | 'forbidden' | 'invalid' | 'conflict' | 'error';
+
+/** One audited request. Never carries secret or configuration values. */
+export interface AuditEvent {
+  id: string;
+  occurredAt: string;
+  /** `admin`, `app:<slug>` or `anonymous`. */
+  actor: string;
+  /** Action code, e.g. `secret.read`. */
+  action: string;
+  /** Human-readable action, e.g. "Read secret". */
+  description: string;
+  application: string | null;
+  /** Environment slug(s), comma-separated when one request touched several. */
+  environment: string | null;
+  targetType: string | null;
+  target: string | null;
+  outcome: AuditOutcome | (string & {});
+  statusCode: number;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+}
+
+export interface AuditPage {
+  items: AuditEvent[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
 }

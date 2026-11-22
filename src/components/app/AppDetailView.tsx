@@ -9,7 +9,8 @@ import { ApplicationHeader } from '@/components/layout/ApplicationHeader';
 import { GrimoireTab } from '@/components/grimoire/GrimoireTab';
 import { ConfigTab } from '@/components/config/ConfigTab';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Flag, Lock, Settings, Loader2 } from 'lucide-react';
+import { Flag, History, Lock, Settings, Loader2 } from 'lucide-react';
+import { AuditLogPanel } from '@/components/audit/AuditLogPanel';
 import { ConfirmationModal } from '@/components/shared/ConfirmationModal';
 import { NotFoundView } from '@/components/shared/NotFoundView';
 import { AddEnvModal } from '@/components/modals/AddEnvModal';
@@ -220,6 +221,13 @@ const AppDetail: React.FC<{ appSlug: string }> = ({ appSlug }) => {
               <Lock className="w-3.5 h-3.5" />
               🔐 Secrets
             </TabsTrigger>
+            <TabsTrigger
+              value="activity"
+              className="px-4 md:px-6 shrink-0 h-full bg-transparent border-r border-border data-[state=active]:bg-zinc-800/40 data-[state=active]:border-b-2 data-[state=active]:border-b-zinc-300 data-[state=active]:text-zinc-100 rounded-none font-bold uppercase tracking-tight text-[11px] gap-2 transition-all shadow-none"
+            >
+              <History className="w-3.5 h-3.5" />
+              Activity
+            </TabsTrigger>
           </TabsList>
         </div>
 
@@ -238,6 +246,9 @@ const AppDetail: React.FC<{ appSlug: string }> = ({ appSlug }) => {
               appSlug={app.slug}
               highlightedName={activeTab === 'secrets' ? highlightedKey : null}
             />
+          </TabsContent>
+          <TabsContent value="activity" className="m-0 min-h-full p-4 md:p-6">
+            {activeTab === 'activity' && <AuditLogPanel application={app.slug} />}
           </TabsContent>
         </div>
       </Tabs>

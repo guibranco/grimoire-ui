@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useStore } from '@/store/useStore';
-import { appPath, dashboardPath, globalPath } from '@/lib/routes';
+import { appPath, auditPath, dashboardPath, globalPath } from '@/lib/routes';
 import { useQuery } from '@tanstack/react-query';
 import { api, fetchApiVersion, getApiConnectionInfo, UI_VERSION } from '@/lib/api';
 import { Application, GlobalConfiguration, Secret } from '@/types/api';
@@ -10,6 +10,7 @@ import {
   Loader2,
   Globe,
   LayoutDashboard,
+  ScrollText,
   Search,
   X,
 } from 'lucide-react';
@@ -160,6 +161,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCreateApp, open = false, onC
             >
               {globalCount}
             </Badge>
+          </NavLink>
+          <NavLink
+            to={auditPath()}
+            onClick={close}
+            className={({ isActive }) => cn(
+              "w-full flex items-center gap-2.5 px-3 py-2 text-[13px] font-medium transition-all",
+              isActive
+                ? "bg-zinc-900 border-l-2 border-zinc-300 text-zinc-100"
+                : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"
+            )}
+          >
+            <ScrollText className="w-3.5 h-3.5 shrink-0" />
+            <span className="font-sans">Audit log</span>
           </NavLink>
         </nav>
 

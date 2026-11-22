@@ -1,5 +1,6 @@
 import { AxiosResponse, AxiosRequestConfig } from 'axios';
 import { parseArrayItems } from './configValue';
+import { AUDIT_ACTION_LABELS } from './audit';
 
 // Mock Database Initial State
 const DEFAULT_APPLICATIONS = [
@@ -356,30 +357,58 @@ interface MockActivity {
   id: string;
   occurredAt: string;
   actor: string;
+  /** Readable description, as the dashboard feed shows it. */
   action: string;
+  /** Audit action code (guibranco/grimoire-api#76). */
+  code: string;
   application: string | null;
   environment: string | null;
   target: string | null;
   targetType: string | null;
+  outcome: string;
+  statusCode: number;
+  ipAddress: string | null;
+  userAgent: string | null;
 }
 
 const MOCK_ACTOR = 'admin';
+const MOCK_AUDIT_CAP = 500;
+const CODE_BY_LABEL: Record<string, string> = Object.fromEntries(
+  Object.entries(AUDIT_ACTION_LABELS).map(([code, label]) => [label, code])
+);
 let activityLog: MockActivity[] = [];
 let activitySeq = 0;
 
+type SeedActivity = Omit<MockActivity, 'id' | 'code' | 'outcome' | 'statusCode' | 'ipAddress' | 'userAgent'> &
+  Partial<Pick<MockActivity, 'outcome' | 'statusCode' | 'ipAddress' | 'userAgent'>>;
+
+const withAuditFields = (e: SeedActivity, id: string): MockActivity => ({
+  id,
+  code: CODE_BY_LABEL[e.action] ?? e.action,
+  outcome: 'success',
+  statusCode: 200,
+  ipAddress: '127.0.0.1',
+  userAgent: e.actor.startsWith('app:') ? 'Grimoire.Consumer/1.4.0' : 'grimoire-ui',
+  ...e,
+});
+
 function seedActivity(): MockActivity[] {
-  const seed: Omit<MockActivity, 'id'>[] = [
+  const seed: SeedActivity[] = [
+    { occurredAt: daysFromLoad(-0.005), actor: 'app:production-gateway', action: 'Read secret', application: 'production-gateway', environment: 'production', target: 'DATABASE_PASSWORDS', targetType: 'secret' },
+    { occurredAt: daysFromLoad(-0.006), actor: 'app:production-gateway', action: 'Read configuration', application: 'production-gateway', environment: 'production', target: null, targetType: 'configuration' },
     { occurredAt: daysFromLoad(-0.01), actor: MOCK_ACTOR, action: 'Updated configuration', application: 'production-gateway', environment: 'production', target: 'MAX_DB_CONNECTIONS', targetType: 'configuration' },
-    { occurredAt: daysFromLoad(-0.2), actor: MOCK_ACTOR, action: 'Added secret version', application: 'auth-provider-security', environment: 'staging', target: 'JWT_SIGNING_SECRET', targetType: 'secret' },
+    { occurredAt: daysFromLoad(-0.05), actor: 'app:auth-provider-security', action: 'Read secret', application: 'auth-provider-security', environment: 'staging', target: 'OAUTH_CLIENT_SECRET', targetType: 'secret', outcome: 'notfound', statusCode: 404 },
+    { occurredAt: daysFromLoad(-0.1), actor: 'anonymous', action: 'Rejected unauthenticated request', application: null, environment: null, target: 'GET /consumer/secrets/DATABASE_PASSWORDS', targetType: null, outcome: 'forbidden', statusCode: 401, ipAddress: '203.0.113.7', userAgent: 'curl/8.5.0' },
+    { occurredAt: daysFromLoad(-0.2), actor: MOCK_ACTOR, action: 'Added secret version', application: 'auth-provider-security', environment: 'staging', target: 'JWT_SIGNING_SECRET', targetType: 'secret', statusCode: 201 },
     { occurredAt: daysFromLoad(-1.5), actor: 'ci-deploy', action: 'Updated global configuration', application: null, environment: null, target: 'LogStream:Url', targetType: 'configuration' },
-    { occurredAt: daysFromLoad(-4), actor: MOCK_ACTOR, action: 'Created application', application: 'auth-provider-security', environment: null, target: null, targetType: null },
+    { occurredAt: daysFromLoad(-4), actor: MOCK_ACTOR, action: 'Created application', application: 'auth-provider-security', environment: null, target: 'Auth Provider Security', targetType: 'application', statusCode: 201 },
   ];
-  return seed.map((e, i) => ({ id: `seed-${i}`, ...e }));
+  return seed.map((e, i) => withAuditFields(e, `seed-${i}`));
 }
 activityLog = seedActivity();
 
 /** Human-readable audit entry for a successful mutation, mirroring what the audit log will record. */
-function describeMutation(method: string, path: string, body: any): Omit<MockActivity, 'id' | 'occurredAt' | 'actor'> | null {
+function describeMutation(method: string, path: string, body: any): Omit<SeedActivity, 'occurredAt' | 'actor'> | null {
   const verb = method === 'POST' ? 'Created' : method === 'PUT' ? 'Updated' : method === 'DELETE' ? 'Deleted' : null;
   if (!verb) return null;
   const d = (s: string) => decodeURIComponent(s);
@@ -400,8 +429,11 @@ function describeMutation(method: string, path: string, body: any): Omit<MockAct
 function recordActivity(method: string, path: string, body: any) {
   const entry = describeMutation(method, path, body);
   if (!entry) return;
-  activityLog.unshift({ id: `act-${++activitySeq}`, occurredAt: new Date().toISOString(), actor: MOCK_ACTOR, ...entry });
-  activityLog = activityLog.slice(0, 50);
+  const statusCode = method === 'POST' ? 201 : method === 'DELETE' ? 204 : 200;
+  activityLog.unshift(
+    withAuditFields({ occurredAt: new Date().toISOString(), actor: MOCK_ACTOR, statusCode, ...entry }, `act-${++activitySeq}`)
+  );
+  activityLog = activityLog.slice(0, MOCK_AUDIT_CAP);
 }
 
 const maxIso = (...values: (string | null | undefined)[]): string | null => {
@@ -558,7 +590,12 @@ function buildDashboard(expiringWithinDays: number, staleAfterDays: number) {
     },
     // Feature flags aren't in the mock yet (guibranco/grimoire-api#90).
     featureFlags: null,
-    recentActivity: activityLog.slice(0, 20),
+    recentActivity: activityLog
+      .filter((e) => !e.code.endsWith('.read') && e.code !== 'auth.failed')
+      .slice(0, 20)
+      .map(({ id, occurredAt, actor, action, code, application, environment, target, targetType }) => ({
+        id, occurredAt, actor, action, code, application, environment, target, targetType,
+      })),
     attention,
   };
 }
@@ -670,6 +707,73 @@ function buildSearch(query: string, limit: number) {
   return { query: term, results: ranked.slice(0, limit), truncated: ranked.length > limit };
 }
 
+const MOCK_AUDIT_OUTCOMES = ['success', 'notfound', 'forbidden', 'invalid', 'conflict', 'error'];
+
+type AuditParam = (key: string) => string | null;
+
+/** `null` when the query would be rejected with 400 by the API. */
+function validAuditQuery(param: AuditParam) {
+  const page = param('page') === null ? 1 : Number(param('page'));
+  const pageSize = param('pageSize') === null ? 50 : Number(param('pageSize'));
+  const outcome = param('outcome');
+  const from = param('from') ? Date.parse(param('from')!) : null;
+  const to = param('to') ? Date.parse(param('to')!) : null;
+  if (!Number.isInteger(page) || page < 1) return null;
+  if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 200) return null;
+  if (outcome && !MOCK_AUDIT_OUTCOMES.includes(outcome)) return null;
+  if (from !== null && to !== null && from > to) return null;
+  return { page, pageSize, from, to };
+}
+
+function matchesAuditFilters(e: MockActivity, param: AuditParam, from: number | null, to: number | null) {
+  const eq = (field: string | null, wanted: string | null) => !wanted || field === wanted;
+  const action = param('action');
+  const env = param('environment');
+  const at = Date.parse(e.occurredAt);
+  return (
+    eq(e.application, param('application')) &&
+    eq(e.actor, param('actor')) &&
+    eq(e.target, param('target')) &&
+    eq(e.outcome, param('outcome')) &&
+    (!env || (e.environment ?? '').split(',').includes(env)) &&
+    (!action || (action.endsWith('*') ? e.code.startsWith(action.slice(0, -1)) : e.code === action)) &&
+    (param('includeReads') !== 'false' || !e.code.endsWith('.read')) &&
+    (from === null || at >= from) &&
+    (to === null || at <= to)
+  );
+}
+
+/** Mirrors GET /management/audit (guibranco/grimoire-api#76): filters, newest first, paged. */
+function buildAuditPage(param: AuditParam) {
+  const query = validAuditQuery(param);
+  if (!query) return null;
+  const { page, pageSize, from, to } = query;
+  const matching = activityLog
+    .filter((e) => matchesAuditFilters(e, param, from, to))
+    .sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt));
+
+  return {
+    items: matching.slice((page - 1) * pageSize, page * pageSize).map((e) => ({
+      id: e.id,
+      occurredAt: e.occurredAt,
+      actor: e.actor,
+      action: e.code,
+      description: e.action,
+      application: e.application,
+      environment: e.environment,
+      targetType: e.targetType,
+      target: e.target,
+      outcome: e.outcome,
+      statusCode: e.statusCode,
+      ipAddress: e.ipAddress,
+      userAgent: e.userAgent,
+    })),
+    page,
+    pageSize,
+    totalCount: matching.length,
+  };
+}
+
 const parseDays = (raw: unknown, fallback: number, min: number) => {
   const n = Number(raw);
   return raw === undefined || raw === null || raw === '' || !Number.isInteger(n) ? fallback : Math.max(min, Math.min(3650, n));
@@ -739,6 +843,18 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
     const expiring = parseDays(searchParams.get('expiringWithinDays') ?? config.params?.expiringWithinDays, 14, 0);
     const stale = parseDays(searchParams.get('staleAfterDays') ?? config.params?.staleAfterDays, 7, 1);
     return makeResponse(200, buildDashboard(expiring, stale), config);
+  }
+
+  // GET /audit?application=&action=&actor=&environment=&target=&outcome=&from=&to=&includeReads=&page=&pageSize=
+  if (cleanPath === '/audit' && method === 'GET') {
+    const param = (key: string) => {
+      const v = searchParams.get(key) ?? config.params?.[key];
+      return v === undefined || v === null || v === '' ? null : String(v);
+    };
+    const page = buildAuditPage(param);
+    return page
+      ? makeResponse(200, page, config)
+      : makeResponse(400, { title: 'One or more validation errors occurred.', status: 400 }, config);
   }
 
   // GET /search?q=&limit=

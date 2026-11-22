@@ -17,6 +17,7 @@
 *   **🌍 Environment Management**: Switch between Development, Staging, and Production contexts with zero friction.
 *   **🏠 Dashboard**: An overview of every application, what changed, what's being fetched and what needs attention.
 *   **🔍 Command Palette**: Press <kbd>⌘K</kbd> / <kbd>Ctrl K</kbd> anywhere to find an application, secret or configuration key (application or Global) and jump straight to it, highlighted. Names and keys only — values are never searched.
+*   **📜 Audit Log**: See who read or changed what, where and how it ended — estate-wide or per application — with filters you can bookmark and share.
 *   **🔗 Deep Links**: Every application, environment, tab and Global entry has its own URL — bookmark it, share it, and use the browser's back/forward buttons.
 *   **🧙‍♂️ Elegant UX**: A dark, magical aesthetic built with React 19, Tailwind CSS 4, and Framer Motion.
 *   **🌑 Fluid Animations**: Powered by `motion` for smooth, meaningful transitions.
@@ -170,6 +171,8 @@ This project is configured for **GitHub Pages**. Every push to the `main` branch
 | `/global`, `/global/secrets` | Global configuration / secrets |
 | `/global/config?key=KEY` | Global, with an entry highlighted |
 | `/apps/:appSlug/:envSlug/config?key=KEY` | Application, with an entry highlighted (also `secrets`) |
+| `/apps/:appSlug/:envSlug/activity` | Application audit log |
+| `/audit?action=secret.*&includeReads=false` | Audit log, with filters in the query string |
 
 GitHub Pages has no SPA fallback, so the deploy workflow copies `index.html` to `404.html`; deep links such as `/grimoire-ui/apps/my-app/production` then boot the client-side router.
 
