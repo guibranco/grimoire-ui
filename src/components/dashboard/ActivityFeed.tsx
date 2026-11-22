@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { History } from 'lucide-react';
 import { activityLink } from '@/lib/dashboard';
+import { auditPath } from '@/lib/routes';
 import type { ActivityEvent } from '@/types/api';
 import { Panel, RelativeTime, Skeleton } from './parts';
 
@@ -14,8 +15,8 @@ const where = (event: ActivityEvent, appNames: Map<string, string>) => {
 };
 
 /**
- * Last audit events. `events === null` means the API has no audit log yet
- * (guibranco/grimoire-api#76); the "View all" link waits for the viewer (#445).
+ * Last audit events (changes only). `events === null` means the API has no audit log
+ * (guibranco/grimoire-api#76) or it is disabled; "View all" opens the audit log viewer.
  */
 export const ActivityFeed: React.FC<{
   events: ActivityEvent[] | null;
@@ -30,13 +31,12 @@ export const ActivityFeed: React.FC<{
     bodyClassName="p-0"
     actions={
       events !== null && (
-        <span
-          aria-disabled="true"
-          title="The audit log viewer is coming soon"
-          className="text-[10px] uppercase tracking-widest text-zinc-600 cursor-not-allowed"
+        <Link
+          to={auditPath({ includeReads: false })}
+          className="text-[10px] uppercase tracking-widest text-zinc-400 hover:text-zinc-100"
         >
           View all
-        </span>
+        </Link>
       )
     }
   >

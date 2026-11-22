@@ -6,10 +6,12 @@
  * so encoding and defaults stay consistent.
  */
 
-export type AppTab = 'config' | 'secrets';
+export type AppTab = 'config' | 'secrets' | 'activity';
+/** Tabs that list entries (and can highlight one with `?key=`). */
+export type EntryTab = 'config' | 'secrets';
 export type GlobalTab = 'config' | 'secrets';
 
-export const APP_TABS: readonly AppTab[] = ['config', 'secrets'];
+export const APP_TABS: readonly AppTab[] = ['config', 'secrets', 'activity'];
 export const GLOBAL_TABS: readonly GlobalTab[] = ['config', 'secrets'];
 
 export const DEFAULT_APP_TAB: AppTab = 'config';
@@ -51,6 +53,16 @@ export const globalPath = (tab?: GlobalTab | null, key?: string | null) => {
   if (tab && (tab !== DEFAULT_GLOBAL_TAB || key)) path += `/${tab}`;
   if (key) path += `?${new URLSearchParams({ key }).toString()}`;
   return path;
+};
+
+/** `/audit[?filters]` — the audit log, optionally pre-filtered. */
+export const auditPath = (filters?: Record<string, string | number | boolean | null | undefined>) => {
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(filters ?? {})) {
+    if (v !== null && v !== undefined && v !== '') params.set(k, String(v));
+  }
+  const qs = params.toString();
+  return qs ? `/audit?${qs}` : '/audit';
 };
 
 /** `/global[/:tab]?new=1` — opens Global with the create form for that tab. */
