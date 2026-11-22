@@ -366,10 +366,19 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onOpenChan
                             id={optionId(index)}
                             role="option"
                             aria-selected={active}
+                            // Focus normally stays in the input (combobox pattern, aria-activedescendant);
+                            // options are still programmatically focusable and keyboard-operable if they get focus.
+                            tabIndex={-1}
                             onMouseMove={() => !active && setActiveIndex(index)}
                             // Keep focus in the input while clicking.
                             onMouseDown={(e) => e.preventDefault()}
                             onClick={() => item.run()}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                item.run();
+                              }
+                            }}
                             className={cn(
                               'mx-1 px-2.5 py-2 flex items-center gap-3 cursor-pointer border-l-2',
                               active ? 'bg-zinc-800/70 border-l-grimoire' : 'border-l-transparent'

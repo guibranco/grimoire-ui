@@ -131,6 +131,16 @@ describe('Command palette', () => {
     expect(selected()).toBe(options[options.length - 1]);
   });
 
+  it('opens a focused option with Enter', async () => {
+    const router = renderAt('/apps/production-gateway');
+    await openWithShortcut();
+    const option = within(await screen.findByRole('group', { name: 'Commands' })).getByText('Go to Global').closest('[role="option"]') as HTMLElement;
+    expect(option.getAttribute('tabindex')).toBe('-1');
+    option.focus();
+    fireEvent.keyDown(option, { key: 'Enter' });
+    await waitFor(() => expect(pathOf(router)).toBe('/global'));
+  });
+
   it('prefers the last visited environment for that application', async () => {
     useStore.setState({ lastVisitedAppSlug: 'production-gateway', lastVisitedEnvironmentSlug: 'staging' });
     const router = renderAt('/');

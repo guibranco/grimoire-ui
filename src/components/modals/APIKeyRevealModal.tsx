@@ -33,12 +33,16 @@ export const APIKeyRevealModal: React.FC<APIKeyRevealModalProps> = ({
     setCopiedToClipboard(false);
   }, [apiKey]);
 
-  const copyToClipboard = () => {
-    if (apiKey) {
-      navigator.clipboard.writeText(apiKey);
+  const copyToClipboard = async () => {
+    if (!apiKey) return;
+    try {
+      await navigator.clipboard.writeText(apiKey);
       setCopiedToClipboard(true);
       setTimeout(() => setCopiedToClipboard(false), 2000);
       toast.success('API Key copied to clipboard');
+    } catch {
+      // Clipboard access can be denied (insecure context, permissions): say so instead of claiming success.
+      toast.error('Could not copy to the clipboard — select the key and copy it manually');
     }
   };
 
@@ -72,7 +76,8 @@ export const APIKeyRevealModal: React.FC<APIKeyRevealModalProps> = ({
                 size="icon"
                 variant="ghost"
                 className="absolute right-1 top-1 h-8 w-8 hover:bg-muted"
-                onClick={copyToClipboard}
+                aria-label="Copy API key"
+                onClick={() => void copyToClipboard()}
               >
                 {copiedToClipboard ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
               </Button>

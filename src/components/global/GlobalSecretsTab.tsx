@@ -174,8 +174,9 @@ export const GlobalSecretsTab: React.FC<GlobalSecretsTabProps> = ({
     versionPairs.forEach(({ secretName, envSlug }, idx) => {
       const versions = versionQueries[idx]?.data;
       if (Array.isArray(versions) && versions.length > 0) {
-        const latest = versions.reduce((best, curr) =>
-          (curr.version ?? 0) >= (best.version ?? 0) ? curr : best
+        const latest = versions.reduce(
+          (best, curr) => ((curr.version ?? 0) >= (best.version ?? 0) ? curr : best),
+          versions[0]
         );
         map.set(`${secretName}:::${envSlug}`, latest);
       }
