@@ -1,6 +1,7 @@
 import { AxiosResponse, AxiosRequestConfig } from 'axios';
 import { parseArrayItems } from './configValue';
 import { AUDIT_ACTION_LABELS } from './audit';
+import { versionsToExpire, withStatus, wouldLeaveNoValidVersion } from './secretVersions';
 
 // Mock Database Initial State
 const DEFAULT_APPLICATIONS = [
@@ -409,10 +410,15 @@ activityLog = seedActivity();
 
 /** Human-readable audit entry for a successful mutation, mirroring what the audit log will record. */
 function describeMutation(method: string, path: string, body: any): Omit<SeedActivity, 'occurredAt' | 'actor'> | null {
-  const verb = method === 'POST' ? 'Created' : method === 'PUT' ? 'Updated' : method === 'DELETE' ? 'Deleted' : null;
-  if (!verb) return null;
   const d = (s: string) => decodeURIComponent(s);
   let m: RegExpMatchArray | null;
+  if (method === 'PATCH') {
+    if ((m = path.match(/^\/applications\/([^/]+)\/secrets\/([^/]+)\/versions\/([^/]+)\/\d+$/))) return { action: 'Updated secret version', application: d(m[1]), environment: d(m[3]), target: d(m[2]), targetType: 'secret' };
+    if ((m = path.match(/^\/global\/secrets\/([^/]+)\/versions\/([^/]+)\/\d+$/))) return { action: 'Updated global secret version', application: null, environment: d(m[2]), target: d(m[1]), targetType: 'secret' };
+    return null;
+  }
+  const verb = method === 'POST' ? 'Created' : method === 'PUT' ? 'Updated' : method === 'DELETE' ? 'Deleted' : null;
+  if (!verb) return null;
   if (path === '/applications') return { action: 'Created application', application: body?.slug ?? null, environment: null, target: null, targetType: null };
   if ((m = path.match(/^\/applications\/([^/]+)$/))) return { action: `${verb} application`, application: d(m[1]), environment: null, target: null, targetType: null };
   if ((m = path.match(/^\/applications\/([^/]+)\/rotate-key$/))) return { action: 'Rotated API key', application: d(m[1]), environment: null, target: null, targetType: null };
@@ -774,6 +780,51 @@ function buildAuditPage(param: AuditParam) {
   };
 }
 
+/** Mirrors `previousVersionGraceDays` on POST …/values (guibranco/grimoire-api#96). */
+function applyGracePeriod(existing: any[], graceDays: unknown) {
+  if (typeof graceDays !== 'number' || !Number.isInteger(graceDays) || graceDays < 0) return;
+  const expiresAt = new Date(Date.now() + graceDays * DAY);
+  for (const v of versionsToExpire(existing, expiresAt)) v.expiresAt = expiresAt.toISOString();
+}
+
+/** Mirrors PATCH …/versions/{env}/{version}: merge, validate, guard against leaving no valid version. */
+function updateMockVersion(
+  store: Record<string, any[]>,
+  key: string,
+  version: number,
+  body: any,
+  searchParams: URLSearchParams,
+  config: AxiosRequestConfig,
+  storageKey: string
+): Promise<AxiosResponse> {
+  const versions = store[key] || [];
+  const target = versions.find((v: any) => v.version === version);
+  if (!target) return makeResponse(404, { title: 'Secret version not found.', status: 404 }, config);
+
+  if ((body?.clearNotBefore && body?.notBefore) || (body?.clearExpiresAt && body?.expiresAt)) {
+    return makeResponse(400, { title: 'One or more validation errors occurred.', status: 400 }, config);
+  }
+  const next = {
+    isEnabled: body?.isEnabled ?? target.isEnabled,
+    notBefore: body?.clearNotBefore ? null : body?.notBefore ?? target.notBefore,
+    expiresAt: body?.clearExpiresAt ? null : body?.expiresAt ?? target.expiresAt,
+  };
+  if (next.notBefore && next.expiresAt && new Date(next.expiresAt) <= new Date(next.notBefore)) {
+    return makeResponse(400, { title: 'One or more validation errors occurred.', status: 400 }, config);
+  }
+  const force = (searchParams.get('force') ?? String(config.params?.force ?? '')) === 'true';
+  if (!force && wouldLeaveNoValidVersion(versions, version, next)) {
+    return makeResponse(
+      409,
+      { title: 'Conflict', status: 409, detail: 'This change would leave the secret with no valid version in this environment.' },
+      config
+    );
+  }
+  Object.assign(target, next);
+  saveStored(storageKey, store);
+  return makeResponse(200, withStatus(versions).find((v) => v.version === version), config);
+}
+
 const parseDays = (raw: unknown, fallback: number, min: number) => {
   const n = Number(raw);
   return raw === undefined || raw === null || raw === '' || !Number.isInteger(n) ? fallback : Math.max(min, Math.min(3650, n));
@@ -1057,6 +1108,7 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
         createdAt: nowIso,
       };
 
+      applyGracePeriod(existingVersions, val.previousVersionGraceDays);
       secretVersions[historyKey] = [newVersionEntry, ...existingVersions];
       secret.updatedAt = nowIso;
     });
@@ -1074,7 +1126,14 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
     const envSlug = decodeURIComponent(match[3]);
     const historyKey = `${appSlug}:${secretName}:${envSlug}`;
     const versions = secretVersions[historyKey] || [];
-    return makeResponse(200, versions, config);
+    return makeResponse(200, withStatus(versions), config);
+  }
+
+  // 10b2. PATCH /applications/:appSlug/secrets/:secretName/versions/:envSlug/:version
+  match = cleanPath.match(/^\/applications\/([^\/]+)\/secrets\/([^\/]+)\/versions\/([^\/]+)\/(\d+)$/);
+  if (match && method === 'PATCH') {
+    const key = `${match[1]}:${decodeURIComponent(match[2])}:${decodeURIComponent(match[3])}`;
+    return updateMockVersion(secretVersions, key, Number(match[4]), body, searchParams, config, 'secret_versions');
   }
 
   // 10c. GET /applications/:appSlug/configurations/effective?environment=
@@ -1491,6 +1550,7 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
         notBefore: val.notBefore || null,
         createdAt: nowIso,
       };
+      applyGracePeriod(existingVersions, val.previousVersionGraceDays);
       globalSecretVersions[historyKey] = [entry, ...existingVersions];
       secret.updatedAt = nowIso;
     });
@@ -1505,7 +1565,14 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
     const secretName = decodeURIComponent(match[1]);
     const envSlug = decodeURIComponent(match[2]);
     const historyKey = `${secretName}:${envSlug}`;
-    return makeResponse(200, globalSecretVersions[historyKey] || [], config);
+    return makeResponse(200, withStatus(globalSecretVersions[historyKey] || []), config);
+  }
+
+  // 24b. PATCH /global/secrets/:name/versions/:envSlug/:version
+  match = cleanPath.match(/^\/global\/secrets\/([^\/]+)\/versions\/([^\/]+)\/(\d+)$/);
+  if (match && method === 'PATCH') {
+    const key = `${decodeURIComponent(match[1])}:${decodeURIComponent(match[2])}`;
+    return updateMockVersion(globalSecretVersions, key, Number(match[3]), body, searchParams, config, 'global_secret_versions');
   }
 
   // 25. GET & DELETE /global/secrets/:name

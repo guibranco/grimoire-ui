@@ -1,8 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, cleanup, fireEvent, within, waitFor } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { createMemoryRouter, RouterProvider } from 'react-router-dom';
-import { routes } from '../src/router';
+import { renderAt, pathOf } from './helpers';
 import { api } from '../src/lib/api';
 import { resetMockDatabase } from '../src/lib/mockApi';
 import { useStore } from '../src/store/useStore';
@@ -12,19 +10,7 @@ vi.mock('../src/lib/api', async (importOriginal) => {
   return { ...actual, fetchApiVersion: vi.fn().mockResolvedValue('2.0.0') };
 });
 
-const renderAt = (path: string) => {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const router = createMemoryRouter(routes, { initialEntries: [path] });
-  render(
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>
-  );
-  return router;
-};
 
-const pathOf = (router: ReturnType<typeof createMemoryRouter>) =>
-  router.state.location.pathname + router.state.location.search;
 
 const auditTable = () => screen.findByRole('table', { name: /audit events/i });
 const rows = (table: HTMLElement) => within(table).getAllByRole('row').slice(1);

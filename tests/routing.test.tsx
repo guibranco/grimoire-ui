@@ -1,8 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent, act } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { createMemoryRouter, RouterProvider } from 'react-router-dom';
-import { routes } from '../src/router';
+import { renderAt, pathOf } from './helpers';
 import { api } from '../src/lib/api';
 import { useStore } from '../src/store/useStore';
 
@@ -73,19 +71,7 @@ const responses: Record<string, unknown> = {
   ],
 };
 
-const renderAt = (path: string) => {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const router = createMemoryRouter(routes, { initialEntries: [path] });
-  render(
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>
-  );
-  return router;
-};
 
-const pathOf = (router: ReturnType<typeof createMemoryRouter>) =>
-  router.state.location.pathname + router.state.location.search;
 
 describe('URL routing', () => {
   beforeEach(() => {

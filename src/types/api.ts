@@ -22,6 +22,8 @@ export interface Environment {
   slug: string;
 }
 
+export type SecretVersionStatus = 'current' | 'valid' | 'scheduled' | 'expired' | 'disabled';
+
 export interface SecretVersion {
   id?: string;
   version: number;
@@ -30,6 +32,18 @@ export interface SecretVersion {
   notBefore: string | null;
   createdAt?: string;
   updatedAt?: string;
+  /** The version consumers get now (guibranco/grimoire-api#96). */
+  isCurrent?: boolean;
+  status?: SecretVersionStatus;
+}
+
+/** Body of `PATCH …/versions/{env}/{version}`; omitted fields keep their value. */
+export interface UpdateSecretVersionRequest {
+  isEnabled?: boolean;
+  notBefore?: string | null;
+  expiresAt?: string | null;
+  clearNotBefore?: boolean;
+  clearExpiresAt?: boolean;
 }
 
 export interface Secret {
@@ -244,6 +258,8 @@ export interface AuditEvent {
   environment: string | null;
   targetType: string | null;
   target: string | null;
+  /** Secret version created or changed, when the request touched exactly one. */
+  version?: number | null;
   outcome: AuditOutcome | (string & {});
   statusCode: number;
   ipAddress?: string | null;
