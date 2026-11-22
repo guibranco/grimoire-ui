@@ -25,12 +25,27 @@ import {
   Globe
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { MAX_GRACE_DAYS } from '@/lib/secretVersions';
+
+const graceDaysValue = (raw: unknown): number | null => {
+  if (raw === null || raw === undefined || String(raw).trim() === '') return null;
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 0 && n <= MAX_GRACE_DAYS ? n : null;
+};
 
 const schema = z.object({
   value: z.string().min(1, 'Value is required'),
   isEnabled: z.boolean().default(true),
   expiresAt: z.string().nullable().default(null),
   notBefore: z.string().nullable().default(null),
+  /** Days until other versions expire (guibranco/grimoire-api#96); empty leaves them untouched. */
+  graceDays: z
+    .string()
+    .nullable()
+    .default(null)
+    .refine((v) => v === null || v.trim() === '' || graceDaysValue(v) !== null, {
+      message: `Whole days between 0 and ${MAX_GRACE_DAYS}`,
+    }),
 });
 
 export type SecretModalScope = 'global' | { appSlug: string };
@@ -67,6 +82,7 @@ export const EditSecretValueModal: React.FC<EditSecretValueModalProps> = ({
       isEnabled: true,
       expiresAt: null,
       notBefore: null,
+      graceDays: null,
     }
   });
 
@@ -83,6 +99,7 @@ export const EditSecretValueModal: React.FC<EditSecretValueModalProps> = ({
         isEnabled: data.isEnabled,
         expiresAt: toApiDateTime(data.expiresAt),
         notBefore: toApiDateTime(data.notBefore),
+        ...(graceDaysValue(data.graceDays) !== null ? { previousVersionGraceDays: graceDaysValue(data.graceDays) } : {}),
       }]);
 
       if (isGlobal) {
@@ -109,7 +126,8 @@ export const EditSecretValueModal: React.FC<EditSecretValueModalProps> = ({
   return (
     <Dialog open={open} onOpenChange={(val) => !loading && onOpenChange(val)}>
       <DialogContent className="sm:max-w-md bg-card border-2 border-border p-0 gap-0 shadow-2xl">
-        <form onSubmit={handleSubmit(onSubmit)}>
+        {/* zod validates (with readable messages); native min/max would block submit silently. */}
+        <form noValidate onSubmit={handleSubmit(onSubmit)}>
           <div className="p-6">
             <DialogHeader className="mb-6">
               <div className="flex items-center gap-3 mb-2">
@@ -182,6 +200,25 @@ export const EditSecretValueModal: React.FC<EditSecretValueModalProps> = ({
                     {...register('expiresAt')}
                   />
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="grace-days" className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground">
+                  Expire previous versions after (days)
+                </Label>
+                <Input
+                  id="grace-days"
+                  type="number"
+                  min={0}
+                  max={MAX_GRACE_DAYS}
+                  placeholder="Keep them valid"
+                  className="border-border bg-muted/20 text-xs font-mono h-9"
+                  {...register('graceDays')}
+                />
+                {errors.graceDays && <p className="text-[10px] text-destructive font-bold uppercase tracking-widest">{(errors.graceDays.message as string)}</p>}
+                <p className="text-[10px] text-muted-foreground">
+                  Optional. Older values keep working for this many days, then stop. Leave empty to keep them valid.
+                </p>
               </div>
             </div>
           </div>
