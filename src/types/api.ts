@@ -193,3 +193,32 @@ export interface DashboardResponse {
   recentActivity: ActivityEvent[] | null;
   attention: AttentionItem[];
 }
+
+// ── Search (GET /management/search, guibranco/grimoire-api#105) ───────────────
+
+export type SearchResultType =
+  | 'application'
+  | 'secret'
+  | 'configuration'
+  | 'global-secret'
+  | 'global-configuration';
+
+/** Where a name or key lives. Never carries a value. */
+export interface SearchResult {
+  type: SearchResultType | (string & {});
+  /** Application name, secret name or configuration key. */
+  name: string;
+  /** Application slug; `null` for Global entries. */
+  application: string | null;
+  /** Environments holding a value (`*` = all environments, Global only). */
+  environments: string[];
+  description?: string | null;
+  /** Configuration value type; configuration hits only. */
+  valueType?: ConfigValueType | null;
+}
+
+export interface SearchResponse {
+  query: string;
+  results: SearchResult[];
+  truncated: boolean;
+}

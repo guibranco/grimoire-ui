@@ -1,4 +1,5 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
+import { useScrollToHighlighted } from '@/lib/useScrollToHighlighted';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { GlobalConfiguration, GlobalEnvironment } from '@/types/api';
@@ -92,6 +93,8 @@ export const GlobalConfigTab: React.FC<GlobalConfigTabProps> = ({
       return res.data;
     },
   });
+  useScrollToHighlighted(highlightedKey, !configsLoading);
+
 
   const safeEnvs = Array.isArray(globalEnvs) ? globalEnvs : [];
   const safeConfigs = Array.isArray(configs) ? configs : [];
@@ -400,6 +403,7 @@ export const GlobalConfigTab: React.FC<GlobalConfigTabProps> = ({
                   return (
                     <TableRow
                       key={`${config.environmentSlug}:::${config.key}`}
+                      data-highlighted={isHighlighted || undefined}
                       className={cn(
                         "group border-zinc-900/50 hover:bg-zinc-900/20 h-12 transition-colors",
                         isHighlighted && "bg-global/10 border-l-2 border-l-global"

@@ -1,10 +1,11 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Menu } from 'lucide-react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { useStore } from '@/store/useStore';
 import { SetupScreen } from '@/components/auth/SetupScreen';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { CreateAppModal } from '@/components/modals/CreateAppModal';
+import { CommandPalette, CommandPaletteContext, usePaletteShortcut } from '@/components/command/CommandPalette';
 import logoMark from '@/assets/logo-mark.svg';
 
 /** Opens the "New Application" modal from anywhere inside the shell (e.g. the dashboard). */
@@ -18,9 +19,13 @@ export const CreateAppContext = React.createContext<() => void>(() => {});
 export const AppShell: React.FC = () => {
   const isAdminAuthenticated = useStore((s) => s.isAdminAuthenticated);
   const [isCreateAppOpen, setIsCreateAppOpen] = useState(false);
+  const [isPaletteOpen, setIsPaletteOpen] = useState(false);
   const [isNavOpen, setIsNavOpen] = useState(false);
   const location = useLocation();
   const openCreateApp = useCallback(() => setIsCreateAppOpen(true), []);
+  const openPalette = useCallback(() => setIsPaletteOpen(true), []);
+  const togglePalette = useCallback(() => setIsPaletteOpen((v) => !v), []);
+  const paletteApi = useMemo(() => ({ open: openPalette }), [openPalette]);
 
   // Close the mobile drawer whenever the route changes.
   useEffect(() => {
@@ -47,6 +52,8 @@ export const AppShell: React.FC = () => {
 
   return (
     <CreateAppContext.Provider value={openCreateApp}>
+      <CommandPaletteContext.Provider value={paletteApi}>
+      <PaletteShortcut onToggle={togglePalette} />
       <div className="min-h-dvh bg-background text-foreground flex">
         <Sidebar
           onCreateApp={openCreateApp}
@@ -74,7 +81,15 @@ export const AppShell: React.FC = () => {
         </main>
 
         <CreateAppModal open={isCreateAppOpen} onOpenChange={setIsCreateAppOpen} />
+        <CommandPalette open={isPaletteOpen} onOpenChange={setIsPaletteOpen} onCreateApp={openCreateApp} />
       </div>
+      </CommandPaletteContext.Provider>
     </CreateAppContext.Provider>
   );
+};
+
+/** ⌘K / Ctrl+K toggles the command palette; only mounted while connected. */
+const PaletteShortcut: React.FC<{ onToggle: () => void }> = ({ onToggle }) => {
+  usePaletteShortcut(onToggle);
+  return null;
 };

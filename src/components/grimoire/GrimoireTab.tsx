@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { useScrollToHighlighted } from '@/lib/useScrollToHighlighted';
 import { useQuery, useQueries, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import {
@@ -89,6 +90,8 @@ export const GrimoireTab: React.FC<GrimoireTabProps> = ({ appSlug, highlightedNa
     },
     enabled: !!appSlug,
   });
+  useScrollToHighlighted(highlightedName, !secretsLoading);
+
 
   const { data: envs } = useQuery({
     queryKey: ['environments', appSlug],

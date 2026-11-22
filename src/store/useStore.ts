@@ -6,7 +6,8 @@ import { clearDetectedApiVersion } from '@/lib/api';
  * Navigation (view, application, environment, tab, highlighted key) lives in
  * the URL — see `src/lib/routes.ts`. The store only keeps auth state and the
  * last visited application/environment for the dashboard's "Continue to …",
- * plus the dashboard's application list preferences.
+ * the recently visited applications for the command palette, plus the
+ * dashboard's application list preferences.
  */
 export type DashboardAppsView = 'grid' | 'list';
 export type DashboardAppsSort = 'name' | 'lastChanged' | 'lastFetched';
@@ -15,10 +16,20 @@ const isAppsView = (v: unknown): v is DashboardAppsView => v === 'grid' || v ===
 const isAppsSort = (v: unknown): v is DashboardAppsSort =>
   v === 'name' || v === 'lastChanged' || v === 'lastFetched';
 
+/** How many recently visited applications the command palette offers. */
+export const MAX_RECENT_APPS = 5;
+
+const toRecentApps = (v: unknown): string[] =>
+  Array.isArray(v)
+    ? [...new Set(v.filter((s): s is string => typeof s === 'string' && s.length > 0))].slice(0, MAX_RECENT_APPS)
+    : [];
+
 interface AppState {
   isAdminAuthenticated: boolean;
   lastVisitedAppSlug: string | null;
   lastVisitedEnvironmentSlug: string | null;
+  /** Most recently visited application slugs, newest first (at most `MAX_RECENT_APPS`). */
+  recentAppSlugs: string[];
   dashboardAppsView: DashboardAppsView;
   dashboardAppsSort: DashboardAppsSort;
 
@@ -37,18 +48,24 @@ export const useStore = create<AppState>()(
       isAdminAuthenticated: !!(localStorage.getItem('grimoire_api_url') && localStorage.getItem('grimoire_api_key')),
       lastVisitedAppSlug: null,
       lastVisitedEnvironmentSlug: null,
+      recentAppSlugs: [],
       dashboardAppsView: 'grid',
       dashboardAppsSort: 'name',
 
       setAdminAuthenticated: (auth) => set({ isAdminAuthenticated: auth }),
       setLastVisited: (appSlug, environmentSlug = null) =>
-        set({ lastVisitedAppSlug: appSlug, lastVisitedEnvironmentSlug: appSlug ? environmentSlug : null }),
+        set((state) => ({
+          lastVisitedAppSlug: appSlug,
+          lastVisitedEnvironmentSlug: appSlug ? environmentSlug : null,
+          recentAppSlugs: appSlug ? toRecentApps([appSlug, ...state.recentAppSlugs]) : state.recentAppSlugs,
+        })),
       forgetLastVisited: (appSlug) =>
-        set((state) =>
-          state.lastVisitedAppSlug === appSlug
+        set((state) => ({
+          ...(state.lastVisitedAppSlug === appSlug
             ? { lastVisitedAppSlug: null, lastVisitedEnvironmentSlug: null }
-            : {}
-        ),
+            : {}),
+          recentAppSlugs: state.recentAppSlugs.filter((s) => s !== appSlug),
+        })),
       setDashboardAppsView: (dashboardAppsView) => set({ dashboardAppsView }),
       setDashboardAppsSort: (dashboardAppsSort) => set({ dashboardAppsSort }),
       disconnect: () => {
@@ -59,6 +76,7 @@ export const useStore = create<AppState>()(
           isAdminAuthenticated: false,
           lastVisitedAppSlug: null,
           lastVisitedEnvironmentSlug: null,
+          recentAppSlugs: [],
         });
       },
     }),
@@ -68,6 +86,7 @@ export const useStore = create<AppState>()(
       partialize: (state) => ({
         lastVisitedAppSlug: state.lastVisitedAppSlug,
         lastVisitedEnvironmentSlug: state.lastVisitedEnvironmentSlug,
+        recentAppSlugs: state.recentAppSlugs,
         dashboardAppsView: state.dashboardAppsView,
         dashboardAppsSort: state.dashboardAppsSort,
       }),
@@ -77,6 +96,7 @@ export const useStore = create<AppState>()(
         return {
           ...current,
           ...p,
+          recentAppSlugs: toRecentApps(p.recentAppSlugs),
           dashboardAppsView: isAppsView(p.dashboardAppsView) ? p.dashboardAppsView : current.dashboardAppsView,
           dashboardAppsSort: isAppsSort(p.dashboardAppsSort) ? p.dashboardAppsSort : current.dashboardAppsSort,
         };
@@ -93,6 +113,7 @@ export const useStore = create<AppState>()(
           : {
               lastVisitedAppSlug: str(old.lastVisitedAppSlug),
               lastVisitedEnvironmentSlug: str(old.lastVisitedEnvironmentSlug),
+              recentAppSlugs: toRecentApps(old.recentAppSlugs),
             };
       },
     }

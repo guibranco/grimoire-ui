@@ -46,7 +46,7 @@ describe('route helpers', () => {
 
 describe('navigation store', () => {
   beforeEach(() => {
-    useStore.setState({ lastVisitedAppSlug: null, lastVisitedEnvironmentSlug: null });
+    useStore.setState({ lastVisitedAppSlug: null, lastVisitedEnvironmentSlug: null, recentAppSlugs: [] });
   });
 
   it('remembers and forgets the last visited application', () => {
@@ -60,7 +60,7 @@ describe('navigation store', () => {
     expect(useStore.getState()).toMatchObject({ lastVisitedAppSlug: null, lastVisitedEnvironmentSlug: null });
   });
 
-  it('persists only the last visited application and dashboard view preferences', () => {
+  it('persists only the last visited application, recent applications and dashboard view preferences', () => {
     useStore.getState().setLastVisited('my-app', 'prod');
     useStore.getState().setDashboardAppsView('list');
     useStore.getState().setDashboardAppsSort('lastFetched');
@@ -68,6 +68,7 @@ describe('navigation store', () => {
     expect(stored.state).toEqual({
       lastVisitedAppSlug: 'my-app',
       lastVisitedEnvironmentSlug: 'prod',
+      recentAppSlugs: ['my-app'],
       dashboardAppsView: 'list',
       dashboardAppsSort: 'lastFetched',
     });
@@ -80,6 +81,25 @@ describe('navigation store', () => {
     const current = useStore.getState();
     const merged = merge({ dashboardAppsView: 'table', dashboardAppsSort: 'size', lastVisitedAppSlug: 'x' }, current);
     expect(merged).toMatchObject({ dashboardAppsView: 'grid', dashboardAppsSort: 'name', lastVisitedAppSlug: 'x' });
+  });
+
+  it('keeps the five most recently visited applications, newest first and without duplicates', () => {
+    const { setLastVisited } = useStore.getState();
+    ['a', 'b', 'c', 'a', 'd', 'e', 'f'].forEach((slug) => setLastVisited(slug));
+    expect(useStore.getState().recentAppSlugs).toEqual(['f', 'e', 'd', 'a', 'c']);
+
+    setLastVisited(null);
+    expect(useStore.getState().recentAppSlugs).toEqual(['f', 'e', 'd', 'a', 'c']);
+
+    useStore.getState().forgetLastVisited('d');
+    expect(useStore.getState().recentAppSlugs).toEqual(['f', 'e', 'a', 'c']);
+  });
+
+  it('sanitises persisted recent applications', () => {
+    const merge = useStore.persist.getOptions().merge!;
+    const merged = merge({ recentAppSlugs: ['a', 'a', 3, '', 'b', 'c', 'd', 'e', 'f'] }, useStore.getState());
+    expect(merged.recentAppSlugs).toEqual(['a', 'b', 'c', 'd', 'e']);
+    expect(merge({ recentAppSlugs: 'nope' }, useStore.getState()).recentAppSlugs).toEqual([]);
   });
 
   it('migrates the v0 persisted selection into the last visited application', async () => {

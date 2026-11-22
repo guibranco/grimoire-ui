@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { useScrollToHighlighted } from '@/lib/useScrollToHighlighted';
 import { useQuery, useQueries, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Secret, SecretStatus, SecretVersion, GlobalEnvironment } from '@/types/api';
@@ -93,6 +94,8 @@ export const GlobalSecretsTab: React.FC<GlobalSecretsTabProps> = ({
       return res.data;
     },
   });
+  useScrollToHighlighted(highlightedName, !secretsLoading);
+
 
   const { data: globalEnvs } = useQuery({
     queryKey: ['global-environments'],
@@ -381,6 +384,7 @@ export const GlobalSecretsTab: React.FC<GlobalSecretsTabProps> = ({
                 return (
                   <React.Fragment key={secret.name}>
                     <TableRow
+                      data-highlighted={isHighlighted || undefined}
                       className={cn(
                         "cursor-pointer border-zinc-900/50 transition-colors h-14 group",
                         isExpanded ? "bg-zinc-900/40" : "hover:bg-zinc-900/20",
