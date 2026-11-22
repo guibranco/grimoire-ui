@@ -59,15 +59,15 @@ describe('searchResultPath', () => {
 describe('highlightSegments', () => {
   it('marks every case-insensitive occurrence', () => {
     expect(highlightSegments('SMTP_HOST_smtp', 'smtp')).toEqual([
-      { text: 'SMTP', match: true },
-      { text: '_HOST_', match: false },
-      { text: 'smtp', match: true },
+      { text: 'SMTP', match: true, start: 0 },
+      { text: '_HOST_', match: false, start: 4 },
+      { text: 'smtp', match: true, start: 10 },
     ]);
   });
 
   it('returns the text untouched without a query or match', () => {
-    expect(highlightSegments('abc', '  ')).toEqual([{ text: 'abc', match: false }]);
-    expect(highlightSegments('abc', 'z')).toEqual([{ text: 'abc', match: false }]);
+    expect(highlightSegments('abc', '  ')).toEqual([{ text: 'abc', match: false, start: 0 }]);
+    expect(highlightSegments('abc', 'z')).toEqual([{ text: 'abc', match: false, start: 0 }]);
   });
 });
 

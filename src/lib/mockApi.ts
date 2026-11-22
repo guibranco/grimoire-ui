@@ -563,6 +563,90 @@ function buildDashboard(expiringWithinDays: number, staleAfterDays: number) {
   };
 }
 
+type MockSearchHit = {
+  type: string;
+  name: string;
+  application: string | null;
+  environments: string[];
+  description: string | null;
+  valueType: string | null;
+};
+
+const SEARCH_TYPE_ORDER = ['application', 'secret', 'configuration', 'global-secret', 'global-configuration'];
+
+/** Environment slugs, sorted with `*` (all environments) first. */
+const sortSearchEnvs = (envs: Iterable<string>) =>
+  [...new Set(envs)].sort((a, b) => {
+    if (a === b) return 0;
+    if (a === '*') return -1;
+    if (b === '*') return 1;
+    return a.localeCompare(b);
+  });
+
+/** 0 exact, 1 prefix, 2 contains; `null` when `value` doesn't contain `needle`. */
+const rateSearchMatch = (needle: string, value: string | null | undefined): number | null => {
+  const v = (value ?? '').toLowerCase();
+  if (v === needle) return 0;
+  if (v.startsWith(needle)) return 1;
+  if (v.includes(needle)) return 2;
+  return null;
+};
+
+const scoreSearchHit = (needle: string, hit: MockSearchHit): number | null => {
+  const scores = [rateSearchMatch(needle, hit.name)];
+  if (hit.type === 'application') scores.push(rateSearchMatch(needle, hit.application));
+  const best = scores.filter((s): s is number => s !== null);
+  if (best.length) return Math.min(...best);
+  return hit.description?.toLowerCase().includes(needle) ? 3 : null;
+};
+
+/** Environments of versioned secrets, from `prefix<env>` keys holding at least one version. */
+const versionedEnvs = (versions: Record<string, any[]>, prefix: string) =>
+  Object.keys(versions)
+    .filter((k) => k.startsWith(prefix) && (versions[k] ?? []).length > 0)
+    .map((k) => k.slice(prefix.length));
+
+/** Groups configuration rows by key into one hit per key, listing their environments. */
+const groupConfigHits = (rows: any[], type: string, application: string | null): MockSearchHit[] => {
+  const byKey = new Map<string, any[]>();
+  for (const row of rows) byKey.set(row.key, [...(byKey.get(row.key) ?? []), row]);
+  return [...byKey].map(([key, group]) => ({
+    type,
+    name: key,
+    application,
+    environments: sortSearchEnvs(group.map((r) => r.environmentSlug)),
+    description: group.find((r) => r.description)?.description ?? null,
+    valueType: group[0].valueType ?? 'string',
+  }));
+};
+
+function collectSearchHits(matches: (...values: (string | null | undefined)[]) => boolean): MockSearchHit[] {
+  const hits: MockSearchHit[] = (applications as any[])
+    .filter((app) => matches(app.name, app.slug, app.description))
+    .map((app) => ({ type: 'application', name: app.name, application: app.slug, environments: [], description: app.description || null, valueType: null }));
+
+  for (const [appSlug, list] of Object.entries(secrets as Record<string, any[]>)) {
+    for (const s of list.filter((x) => matches(x.name, x.description))) {
+      const envs = versionedEnvs(secretVersions, `${appSlug}:${s.name}:`);
+      hits.push({ type: 'secret', name: s.name, application: appSlug, environments: sortSearchEnvs(envs), description: s.description || null, valueType: null });
+    }
+  }
+
+  for (const [appSlug, list] of Object.entries(configurations as Record<string, any[]>)) {
+    hits.push(...groupConfigHits(list.filter((c) => matches(c.key, c.description)), 'configuration', appSlug));
+  }
+
+  for (const s of (globalSecrets as any[]).filter((x) => matches(x.name, x.description))) {
+    const envs = versionedEnvs(globalSecretVersions, `${s.name}:`);
+    hits.push({ type: 'global-secret', name: s.name, application: null, environments: sortSearchEnvs(envs), description: s.description || null, valueType: null });
+  }
+
+  hits.push(
+    ...groupConfigHits((globalConfigurations as any[]).filter((c) => matches(c.key, c.description)), 'global-configuration', null)
+  );
+  return hits;
+}
+
 /**
  * Mirrors GET /management/search (guibranco/grimoire-api#105): names, keys, slugs and
  * descriptions only — values are never matched or returned.
@@ -570,86 +654,20 @@ function buildDashboard(expiringWithinDays: number, staleAfterDays: number) {
 function buildSearch(query: string, limit: number) {
   const term = query.trim();
   const needle = term.toLowerCase();
-  const has = (s?: string | null) => !!s && s.toLowerCase().includes(needle);
-  const rate = (value: string) => {
-    const v = value.toLowerCase();
-    return v === needle ? 0 : v.startsWith(needle) ? 1 : v.includes(needle) ? 2 : null;
-  };
-  const sortEnvs = (envs: Iterable<string>) =>
-    [...new Set(envs)].sort((a, b) => (a === '*' ? -1 : b === '*' ? 1 : a.localeCompare(b)));
-  const typeOrder = ['application', 'secret', 'configuration', 'global-secret', 'global-configuration'];
+  const matches = (...values: (string | null | undefined)[]) => values.some((v) => !!v && v.toLowerCase().includes(needle));
 
-  const hits: any[] = [];
-  for (const app of applications as any[]) {
-    if (has(app.name) || has(app.slug) || has(app.description)) {
-      hits.push({ type: 'application', name: app.name, application: app.slug, environments: [], description: app.description || null, valueType: null });
-    }
-  }
-  for (const [appSlug, list] of Object.entries(secrets as Record<string, any[]>)) {
-    for (const s of list) {
-      if (!has(s.name) && !has(s.description)) continue;
-      const envs = Object.keys(secretVersions)
-        .filter((k) => k.startsWith(`${appSlug}:${s.name}:`) && (secretVersions[k] ?? []).length > 0)
-        .map((k) => k.slice(`${appSlug}:${s.name}:`.length));
-      hits.push({ type: 'secret', name: s.name, application: appSlug, environments: sortEnvs(envs), description: s.description || null, valueType: null });
-    }
-  }
-  for (const [appSlug, list] of Object.entries(configurations as Record<string, any[]>)) {
-    const byKey = new Map<string, any[]>();
-    for (const c of list) {
-      if (!has(c.key) && !has(c.description)) continue;
-      byKey.set(c.key, [...(byKey.get(c.key) ?? []), c]);
-    }
-    for (const [key, rows] of byKey) {
-      hits.push({
-        type: 'configuration', name: key, application: appSlug,
-        environments: sortEnvs(rows.map((r) => r.environmentSlug)),
-        description: rows.find((r) => r.description)?.description ?? null,
-        valueType: rows[0].valueType ?? 'string',
-      });
-    }
-  }
-  for (const s of globalSecrets as any[]) {
-    if (!has(s.name) && !has(s.description)) continue;
-    const envs = Object.keys(globalSecretVersions)
-      .filter((k) => k.startsWith(`${s.name}:`) && (globalSecretVersions[k] ?? []).length > 0)
-      .map((k) => k.slice(s.name.length + 1));
-    hits.push({ type: 'global-secret', name: s.name, application: null, environments: sortEnvs(envs), description: s.description || null, valueType: null });
-  }
-  const globalByKey = new Map<string, any[]>();
-  for (const c of globalConfigurations as any[]) {
-    if (!has(c.key) && !has(c.description)) continue;
-    globalByKey.set(c.key, [...(globalByKey.get(c.key) ?? []), c]);
-  }
-  for (const [key, rows] of globalByKey) {
-    hits.push({
-      type: 'global-configuration', name: key, application: null,
-      environments: sortEnvs(rows.map((r) => r.environmentSlug)),
-      description: rows.find((r) => r.description)?.description ?? null,
-      valueType: rows[0].valueType ?? 'string',
-    });
-  }
-
-  const scored = hits
-    .map((hit) => {
-      let score = rate(hit.name);
-      if (hit.type === 'application') {
-        const bySlug = rate(hit.application);
-        if (bySlug !== null && (score === null || bySlug < score)) score = bySlug;
-      }
-      if (score === null && has(hit.description)) score = 3;
-      return { hit, score };
-    })
-    .filter((x) => x.score !== null)
+  const ranked = collectSearchHits(matches)
+    .map((hit) => ({ hit, score: scoreSearchHit(needle, hit) }))
+    .filter((x): x is { hit: MockSearchHit; score: number } => x.score !== null)
     .sort((a, b) =>
-      (a.score! - b.score!) ||
-      (typeOrder.indexOf(a.hit.type) - typeOrder.indexOf(b.hit.type)) ||
+      (a.score - b.score) ||
+      (SEARCH_TYPE_ORDER.indexOf(a.hit.type) - SEARCH_TYPE_ORDER.indexOf(b.hit.type)) ||
       a.hit.name.localeCompare(b.hit.name, undefined, { sensitivity: 'base' }) ||
       String(a.hit.application ?? '').localeCompare(String(b.hit.application ?? ''))
     )
     .map((x) => x.hit);
 
-  return { query: term, results: scored.slice(0, limit), truncated: scored.length > limit };
+  return { query: term, results: ranked.slice(0, limit), truncated: ranked.length > limit };
 }
 
 const parseDays = (raw: unknown, fallback: number, min: number) => {
