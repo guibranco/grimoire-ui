@@ -70,13 +70,13 @@ const describeLocation = (hit: SearchResult) => {
 
 const Highlighted: React.FC<{ text: string; query: string }> = ({ text, query }) => (
   <>
-    {highlightSegments(text, query).map((s, i) =>
+    {highlightSegments(text, query).map((s) =>
       s.match ? (
-        <mark key={i} className="bg-grimoire/25 text-foreground rounded-none">
+        <mark key={s.start} className="bg-grimoire/25 text-foreground rounded-none">
           {s.text}
         </mark>
       ) : (
-        <React.Fragment key={i}>{s.text}</React.Fragment>
+        <React.Fragment key={s.start}>{s.text}</React.Fragment>
       )
     )}
   </>
@@ -325,7 +325,6 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onOpenChan
             )}
             <input
               ref={inputRef}
-              autoFocus
               type="text"
               role="combobox"
               aria-expanded="true"
@@ -348,22 +347,21 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onOpenChan
           </div>
 
           <div className="flex-1 overflow-y-auto py-1">
-            <ul id={listId} role="listbox" aria-label="Results" className="outline-none">
+            <div id={listId} role="listbox" aria-label="Results" className="outline-none">
               {groups.map((group) => {
                 const headingId = `${listId}-${group.name.replace(/\s+/g, '-').toLowerCase()}`;
                 return (
-                  <li key={group.name} role="presentation">
+                  <div key={group.name} role="group" aria-labelledby={headingId}>
                     <div
                       id={headingId}
                       className="px-3 pt-2 pb-1 text-[9px] font-bold font-mono uppercase tracking-[0.2em] text-zinc-600"
                     >
                       {group.name}
                     </div>
-                    <ul role="group" aria-labelledby={headingId}>
                       {group.entries.map(({ item, index }) => {
                         const active = index === activeIndex;
                         return (
-                          <li
+                          <div
                             key={item.id}
                             id={optionId(index)}
                             role="option"
@@ -399,14 +397,13 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onOpenChan
                             {active ? (
                               <CornerDownLeft className="w-3 h-3 text-zinc-500 shrink-0" aria-hidden="true" />
                             ) : null}
-                          </li>
+                          </div>
                         );
                       })}
-                    </ul>
-                  </li>
+                  </div>
                 );
               })}
-            </ul>
+            </div>
 
             <div aria-live="polite" className="px-3 py-2 text-[11px] text-zinc-500">
               {term.length === 1 ? `Type at least ${MIN_SEARCH_LENGTH} characters to search.` : null}
