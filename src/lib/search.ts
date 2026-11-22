@@ -50,22 +50,24 @@ export const searchResultPath = (hit: SearchResult, preferredEnv?: string | null
 export interface TextSegment {
   text: string;
   match: boolean;
+  /** Offset of the segment in the original text; unique, so usable as a React key. */
+  start: number;
 }
 
 /** Splits `text` into segments, marking case-insensitive occurrences of `query`. */
 export const highlightSegments = (text: string, query: string): TextSegment[] => {
   const term = query.trim().toLowerCase();
-  if (!term) return [{ text, match: false }];
+  if (!term) return [{ text, match: false, start: 0 }];
 
   const lower = text.toLowerCase();
   const segments: TextSegment[] = [];
   let from = 0;
   for (let at = lower.indexOf(term); at !== -1; at = lower.indexOf(term, from)) {
-    if (at > from) segments.push({ text: text.slice(from, at), match: false });
-    segments.push({ text: text.slice(at, at + term.length), match: true });
+    if (at > from) segments.push({ text: text.slice(from, at), match: false, start: from });
+    segments.push({ text: text.slice(at, at + term.length), match: true, start: at });
     from = at + term.length;
   }
-  if (from < text.length) segments.push({ text: text.slice(from), match: false });
+  if (from < text.length) segments.push({ text: text.slice(from), match: false, start: from });
   return segments;
 };
 
