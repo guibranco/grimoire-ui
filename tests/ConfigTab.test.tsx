@@ -1,75 +1,48 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, cleanup } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { ConfigTab } from '../src/components/config/ConfigTab';
 import { api } from '../src/lib/api';
+import { routeGet, useTestQueryClient } from './apiMock';
 
-vi.mock('../src/lib/api', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../src/lib/api')>();
-  return {
-    ...actual,
-    api: {
-      get: vi.fn(),
-      post: vi.fn(),
-      put: vi.fn(),
-      delete: vi.fn(),
-    },
-  };
-});
+vi.mock('../src/lib/api', async (orig) => (await import('./apiMock')).mockApiModule(orig));
+
+const APP = '/applications/my-app';
+const EFFECTIVE = `${APP}/configurations/effective?environment=production`;
 
 describe('ConfigTab', () => {
-  let queryClient: QueryClient;
+  const client = useTestQueryClient();
 
-  beforeEach(() => {
-    queryClient = new QueryClient({
-      defaultOptions: {
-        queries: {
-          retry: false,
-        },
-      },
+  const renderTab = () =>
+    render(
+      <QueryClientProvider client={client.current}>
+        <MemoryRouter>
+          <ConfigTab appSlug="my-app" />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+  /** The application, its production environment, and its effective configuration. */
+  const mockApp = (configs: unknown[], inheritGlobals = true) =>
+    routeGet(api.get, {
+      [APP]: { id: '1', name: 'My App', slug: 'my-app', inheritGlobals },
+      [`${APP}/environments`]: [{ name: 'Production', slug: 'production' }],
+      [EFFECTIVE]: configs,
     });
-    vi.clearAllMocks();
-  });
-
-  afterEach(() => {
-    cleanup();
-  });
 
   it('displays configuration keys, values, and descriptions with exact API casing', async () => {
-    const mockGet = api.get as ReturnType<typeof vi.fn>;
-    mockGet.mockImplementation((url: string) => {
-      if (url === '/applications/my-app') {
-        return Promise.resolve({
-          data: { id: '1', name: 'My App', slug: 'my-app', inheritGlobals: true },
-        });
-      }
-      if (url === '/applications/my-app/environments') {
-        return Promise.resolve({
-          data: [{ name: 'Production', slug: 'production' }],
-        });
-      }
-      if (url === '/applications/my-app/configurations/effective?environment=production') {
-        return Promise.resolve({
-          data: [
-            {
-              key: 'FeatureFlag.EnableBetaUI',
-              value: 'TrueOrMixedCaseValue',
-              description: 'Enables Beta UI for Selected Users',
-              source: 'application',
-              overridesGlobal: false,
-            },
-          ],
-        });
-      }
-      return Promise.resolve({ data: [] });
-    });
+    mockApp([
+      {
+        key: 'FeatureFlag.EnableBetaUI',
+        value: 'TrueOrMixedCaseValue',
+        description: 'Enables Beta UI for Selected Users',
+        source: 'application',
+        overridesGlobal: false,
+      },
+    ]);
 
-    const { container } = render(
-      <QueryClientProvider client={queryClient}><MemoryRouter>
-        <ConfigTab appSlug="my-app" />
-      </MemoryRouter></QueryClientProvider>
-    );
+    const { container } = renderTab();
 
     await waitFor(() => {
       expect(screen.getByText('FeatureFlag.EnableBetaUI')).toBeDefined();
@@ -98,49 +71,25 @@ describe('ConfigTab', () => {
   });
 
   it('renders inherited Global badge, overrides global badge, Override prefill, and Show inherited toggle', async () => {
-    const mockGet = api.get as ReturnType<typeof vi.fn>;
-    mockGet.mockImplementation((url: string) => {
-      if (url === '/applications/my-app') {
-        return Promise.resolve({
-          data: { id: '1', name: 'My App', slug: 'my-app', inheritGlobals: true },
-        });
-      }
-      if (url === '/applications/my-app/environments') {
-        return Promise.resolve({
-          data: [{ name: 'Production', slug: 'production' }],
-        });
-      }
-      if (url === '/applications/my-app/configurations/effective?environment=production') {
-        return Promise.resolve({
-          data: [
-            {
-              key: 'LogStream:Url',
-              value: 'https://logs.internal',
-              description: 'Centralized logs',
-              source: 'global',
-              globalEnvironmentSlug: '*',
-              overridesGlobal: false,
-            },
-            {
-              key: 'FeatureFlags:NewDashboard',
-              value: 'false',
-              description: 'App override',
-              source: 'application',
-              overridesGlobal: true,
-            },
-          ],
-        });
-      }
-      return Promise.resolve({ data: [] });
-    });
+    mockApp([
+      {
+        key: 'LogStream:Url',
+        value: 'https://logs.internal',
+        description: 'Centralized logs',
+        source: 'global',
+        globalEnvironmentSlug: '*',
+        overridesGlobal: false,
+      },
+      {
+        key: 'FeatureFlags:NewDashboard',
+        value: 'false',
+        description: 'App override',
+        source: 'application',
+        overridesGlobal: true,
+      },
+    ]);
 
-    const { fireEvent } = await import('@testing-library/react');
-
-    render(
-      <QueryClientProvider client={queryClient}><MemoryRouter>
-        <ConfigTab appSlug="my-app" />
-      </MemoryRouter></QueryClientProvider>
-    );
+    renderTab();
 
     await waitFor(() => {
       expect(screen.getByText('LogStream:Url')).toBeDefined();
@@ -166,31 +115,11 @@ describe('ConfigTab', () => {
   });
 
   it('shows opt-out banner and enables inheritance when Turn it on is clicked', async () => {
-    const mockGet = api.get as ReturnType<typeof vi.fn>;
     const mockPut = api.put as ReturnType<typeof vi.fn>;
     mockPut.mockResolvedValue({ status: 200, data: { slug: 'my-app', name: 'My App', inheritGlobals: true } });
+    mockApp([], false);
 
-    mockGet.mockImplementation((url: string) => {
-      if (url === '/applications/my-app') {
-        return Promise.resolve({
-          data: { id: '1', name: 'My App', slug: 'my-app', inheritGlobals: false },
-        });
-      }
-      if (url === '/applications/my-app/environments') {
-        return Promise.resolve({
-          data: [{ name: 'Production', slug: 'production' }],
-        });
-      }
-      return Promise.resolve({ data: [] });
-    });
-
-    const { fireEvent } = await import('@testing-library/react');
-
-    render(
-      <QueryClientProvider client={queryClient}><MemoryRouter>
-        <ConfigTab appSlug="my-app" />
-      </MemoryRouter></QueryClientProvider>
-    );
+    renderTab();
 
     await waitFor(() => {
       expect(screen.getByText('This application does not inherit global values')).toBeDefined();
@@ -210,19 +139,10 @@ describe('ConfigTab', () => {
   it('shows array values with a type badge and sends valueType when saving an array', async () => {
     const mockPost = api.post as ReturnType<typeof vi.fn>;
     mockPost.mockResolvedValue({ status: 201, data: {} });
-    const responses: Record<string, unknown> = {
-      '/applications/my-app': { id: '1', name: 'My App', slug: 'my-app', inheritGlobals: true },
-      '/applications/my-app/environments': [{ name: 'Production', slug: 'production' }],
-      '/applications/my-app/configurations/effective?environment=production': [
-        { key: 'AllowedIps', value: '["10.0.0.1","10.0.0.2"]', valueType: 'array', source: 'application', overridesGlobal: false },
-      ],
-    };
-    (api.get as ReturnType<typeof vi.fn>).mockImplementation((url: string) =>
-      Promise.resolve({ data: responses[url] ?? [] })
-    );
-
-    const { fireEvent } = await import('@testing-library/react');
-    render(<QueryClientProvider client={queryClient}><MemoryRouter><ConfigTab appSlug="my-app" /></MemoryRouter></QueryClientProvider>);
+    mockApp([
+      { key: 'AllowedIps', value: '["10.0.0.1","10.0.0.2"]', valueType: 'array', source: 'application', overridesGlobal: false },
+    ]);
+    renderTab();
 
     await waitFor(() => {
       expect(screen.getByText('AllowedIps')).toBeDefined();

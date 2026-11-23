@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useScrollToHighlighted } from '@/lib/useScrollToHighlighted';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { Application, ConfigValueType, EffectiveConfiguration, Environment } from '@/types/api';
+import { ConfigValueType, EffectiveConfiguration, Environment } from '@/types/api';
 import { useNavigate } from 'react-router-dom';
 import { globalPath } from '@/lib/routes';
 import {
@@ -10,8 +10,6 @@ import {
   History,
   Edit2,
   Trash2,
-  Check,
-  X,
   Loader2,
   FileJson,
   ChevronDown,
@@ -19,7 +17,6 @@ import {
   ExternalLink,
   ArrowUpRight,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
@@ -43,6 +40,8 @@ import { ConfirmationModal } from '@/components/shared/ConfirmationModal';
 import { ConfigValueCell, ConfigValueField, useConfigValue } from '@/components/shared/ConfigValueEditor';
 import { exportValue, importEntry, valueTypeOf } from '@/lib/configValue';
 import { cn } from '@/lib/utils';
+import { RowEditActions } from '@/components/shared/RowEditActions';
+import { InheritGlobalsBanner } from '@/components/shared/InheritGlobalsBanner';
 import toast from 'react-hot-toast';
 import { apiErrorMessage } from '@/lib/errors';
 import { ConfigHistoryModal } from '@/components/history/ConfigHistoryModal';
@@ -83,19 +82,9 @@ export const ConfigTab: React.FC<ConfigTabProps> = ({
   // The environment is captured when the dialog opens so a route change (e.g. Back) can't retarget the delete.
   const [deletingConfig, setDeletingConfig] = useState<{ config: EffectiveConfiguration; envSlug: string } | null>(null);
   const [deletingEnv, setDeletingEnv] = useState<Environment | null>(null);
-  const [enablingInheritance, setEnablingInheritance] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const queryClient = useQueryClient();
-
-  const { data: app } = useQuery({
-    queryKey: ['application', appSlug],
-    queryFn: async () => {
-      const res = await api.get<Application>(`/applications/${appSlug}`);
-      return res.data;
-    },
-    enabled: !!appSlug,
-  });
 
   const { data: envs } = useQuery({
     queryKey: ['environments', appSlug],
@@ -134,27 +123,6 @@ export const ConfigTab: React.FC<ConfigTabProps> = ({
     String(c.value ?? '').toLowerCase().includes(searchLower) ||
     (c.description || '').toLowerCase().includes(searchLower)
   );
-
-  const handleEnableInheritance = async () => {
-    if (!app) return;
-    setEnablingInheritance(true);
-    try {
-      await api.put(`/applications/${appSlug}`, {
-        name: app.name,
-        description: app.description ?? '',
-        inheritGlobals: true,
-      });
-      await queryClient.invalidateQueries({ queryKey: ['application', appSlug] });
-      await queryClient.invalidateQueries({ queryKey: ['applications'] });
-      await queryClient.invalidateQueries({ queryKey: ['effective-configurations', appSlug] });
-      await queryClient.invalidateQueries({ queryKey: ['effective-secrets', appSlug] });
-      toast.success('Global inheritance enabled');
-    } catch (err) {
-      toast.error(apiErrorMessage(err, 'Failed to enable global inheritance'));
-    } finally {
-      setEnablingInheritance(false);
-    }
-  };
 
   const handleExport = () => {
     if (!activeEnvironmentSlug) return;
@@ -344,19 +312,7 @@ export const ConfigTab: React.FC<ConfigTabProps> = ({
         </div>
       </div>
 
-      {app?.inheritGlobals === false && (
-        <div className="px-4 md:px-6 py-2 bg-zinc-900/70 border-b border-border flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-400 shrink-0">
-          <span>This application does not inherit global values</span>
-          <button
-            type="button"
-            disabled={enablingInheritance}
-            onClick={handleEnableInheritance}
-            className="text-[11px] font-bold uppercase tracking-widest text-global hover:text-global/80 transition-colors disabled:opacity-50"
-          >
-            {enablingInheritance ? 'Enabling...' : 'Turn it on'}
-          </button>
-        </div>
-      )}
+      {appSlug && <InheritGlobalsBanner appSlug={appSlug} />}
 
       <div className="flex-1 overflow-auto scroll-area">
         {!activeEnvironmentSlug ? (
@@ -686,32 +642,7 @@ const ConfigRow: React.FC<ConfigRowProps> = ({
           className="h-8 text-[11px] border-border bg-card focus-visible:ring-config"
         />
       </TableCell>
-      <TableCell className="py-2 text-right pr-6">
-        <div className="flex justify-end gap-1">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label="Cancel"
-            disabled={loading}
-            className="h-8 w-8 hover:bg-red-500/10 text-destructive"
-            onClick={onCancel}
-          >
-            <X className="w-4 h-4" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label="Save"
-            disabled={loading}
-            className="h-8 w-8 hover:bg-green-500/10 text-green-500"
-            onClick={handleSave}
-          >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-          </Button>
-        </div>
-      </TableCell>
+      <RowEditActions loading={loading} onCancel={onCancel} onSave={handleSave} />
     </TableRow>
   );
 };

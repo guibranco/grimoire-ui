@@ -3,7 +3,6 @@ import { useScrollToHighlighted } from '@/lib/useScrollToHighlighted';
 import { useQuery, useQueries, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import {
-  Application,
   EffectiveSecret,
   Secret,
   SecretStatus,
@@ -48,6 +47,10 @@ import { EditSecretModal } from './EditSecretModal';
 import { ConfirmationModal } from '@/components/shared/ConfirmationModal';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { InheritGlobalsBanner } from '@/components/shared/InheritGlobalsBanner';
+import { secretStatusOf } from '@/lib/secretVersions';
+import { appSecretVersionsUrl, fetchSecretVersions, globalSecretVersionsUrl } from '@/lib/secretVersionsApi';
+import { SecretStatusIndicator } from '@/components/shared/SecretStatusIndicator';
 import toast from 'react-hot-toast';
 import { apiErrorMessage } from '@/lib/errors';
 
@@ -72,18 +75,8 @@ export const GrimoireTab: React.FC<GrimoireTabProps> = ({ appSlug, highlightedNa
   } | null>(null);
   const [deletingSecret, setDeletingSecret] = useState<EffectiveSecret | null>(null);
   const [editingSecret, setEditingSecret] = useState<string | null>(null);
-  const [enablingInheritance, setEnablingInheritance] = useState(false);
 
   const queryClient = useQueryClient();
-
-  const { data: app } = useQuery({
-    queryKey: ['application', appSlug],
-    queryFn: async () => {
-      const res = await api.get<Application>(`/applications/${appSlug}`);
-      return res.data;
-    },
-    enabled: !!appSlug,
-  });
 
   const { data: secrets, isLoading: secretsLoading } = useQuery({
     queryKey: ['effective-secrets', appSlug],
@@ -181,19 +174,7 @@ export const GrimoireTab: React.FC<GrimoireTabProps> = ({ appSlug, highlightedNa
   const appVersionQueries = useQueries({
     queries: appVersionPairs.map(({ secretName, envSlug }) => ({
       queryKey: ['secret-versions', appSlug, secretName, envSlug],
-      queryFn: async () => {
-        try {
-          const res = await api.get<SecretVersion[]>(
-            `/applications/${appSlug}/secrets/${encodeURIComponent(secretName)}/versions/${encodeURIComponent(envSlug)}`
-          );
-          return Array.isArray(res.data) ? res.data : [];
-        } catch (err: any) {
-          if (err?.response?.status === 404) {
-            return [] as SecretVersion[];
-          }
-          throw err;
-        }
-      },
+      queryFn: () => fetchSecretVersions(appSecretVersionsUrl(appSlug, secretName, envSlug)),
       enabled: !!appSlug && !!secretName && !!envSlug,
       retry: false,
     })),
@@ -202,19 +183,7 @@ export const GrimoireTab: React.FC<GrimoireTabProps> = ({ appSlug, highlightedNa
   const globalVersionQueries = useQueries({
     queries: globalVersionPairs.map(({ secretName, envSlug }) => ({
       queryKey: ['global-secret-versions', secretName, envSlug],
-      queryFn: async () => {
-        try {
-          const res = await api.get<SecretVersion[]>(
-            `/global/secrets/${encodeURIComponent(secretName)}/versions/${encodeURIComponent(envSlug)}`
-          );
-          return Array.isArray(res.data) ? res.data : [];
-        } catch (err: any) {
-          if (err?.response?.status === 404) {
-            return [] as SecretVersion[];
-          }
-          throw err;
-        }
-      },
+      queryFn: () => fetchSecretVersions(globalSecretVersionsUrl(secretName, envSlug)),
       enabled: !!secretName && !!envSlug,
       retry: false,
     })),
@@ -279,22 +248,7 @@ export const GrimoireTab: React.FC<GrimoireTabProps> = ({ appSlug, highlightedNa
     };
   };
 
-  const computeStatusFromVersion = (versionInfo?: SecretVersion): SecretStatus => {
-    if (!versionInfo) return SecretStatus.MISSING;
-    if (!versionInfo.isEnabled) return SecretStatus.DISABLED;
-
-    const now = new Date();
-    if (versionInfo.expiresAt) {
-      const expires = new Date(versionInfo.expiresAt);
-      if (!Number.isNaN(expires.getTime()) && expires < now) return SecretStatus.EXPIRED;
-    }
-    if (versionInfo.notBefore) {
-      const notBefore = new Date(versionInfo.notBefore);
-      if (!Number.isNaN(notBefore.getTime()) && notBefore > now) return SecretStatus.PENDING;
-    }
-
-    return SecretStatus.ENABLED;
-  };
+  const computeStatusFromVersion = (versionInfo?: SecretVersion) => secretStatusOf(versionInfo);
 
   const getSecretStatus = (secret: EffectiveSecret, envSlug: string): SecretStatus => {
     const { version } = resolveSecretVersion(secret, envSlug);
@@ -305,27 +259,6 @@ export const GrimoireTab: React.FC<GrimoireTabProps> = ({ appSlug, highlightedNa
     if (!ts) return '—';
     const d = new Date(ts);
     return Number.isNaN(d.getTime()) ? '—' : format(d, 'yyyy-MM-dd');
-  };
-
-  const handleEnableInheritance = async () => {
-    if (!app) return;
-    setEnablingInheritance(true);
-    try {
-      await api.put(`/applications/${appSlug}`, {
-        name: app.name,
-        description: app.description ?? '',
-        inheritGlobals: true,
-      });
-      await queryClient.invalidateQueries({ queryKey: ['application', appSlug] });
-      await queryClient.invalidateQueries({ queryKey: ['applications'] });
-      await queryClient.invalidateQueries({ queryKey: ['effective-configurations', appSlug] });
-      await queryClient.invalidateQueries({ queryKey: ['effective-secrets', appSlug] });
-      toast.success('Global inheritance enabled');
-    } catch (err) {
-      toast.error(apiErrorMessage(err, 'Failed to enable global inheritance'));
-    } finally {
-      setEnablingInheritance(false);
-    }
   };
 
   const handleDeleteSecret = async () => {
@@ -390,19 +323,7 @@ export const GrimoireTab: React.FC<GrimoireTabProps> = ({ appSlug, highlightedNa
         </button>
       </div>
 
-      {app?.inheritGlobals === false && (
-        <div className="px-4 md:px-6 py-2 bg-zinc-900/70 border-b border-border flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-400 shrink-0">
-          <span>This application does not inherit global values</span>
-          <button
-            type="button"
-            disabled={enablingInheritance}
-            onClick={handleEnableInheritance}
-            className="text-[11px] font-bold uppercase tracking-widest text-global hover:text-global/80 transition-colors disabled:opacity-50"
-          >
-            {enablingInheritance ? 'Enabling...' : 'Turn it on'}
-          </button>
-        </div>
-      )}
+      {appSlug && <InheritGlobalsBanner appSlug={appSlug} />}
 
       <div className="flex-1 overflow-auto scroll-area">
         {secretsLoading ? (
@@ -660,22 +581,7 @@ export const GrimoireTab: React.FC<GrimoireTabProps> = ({ appSlug, highlightedNa
                                             <TableRow key={env.slug} className="border-zinc-900 hover:bg-zinc-900/30 h-12 transition-colors">
                                               <td className="px-4 font-mono text-[11px] font-bold">{env.name}</td>
                                               <td className="px-4">
-                                                <div className="flex items-center gap-2">
-                                                  <div className={cn(
-                                                    "w-1.5 h-1.5 rounded-full",
-                                                    status === SecretStatus.ENABLED ? "bg-green-500 shadow-[0_0_4px_rgba(34,197,94,0.4)]" :
-                                                    status === SecretStatus.DISABLED ? "bg-zinc-700" :
-                                                    status === SecretStatus.EXPIRED ? "bg-red-500" :
-                                                    status === SecretStatus.MISSING ? "bg-zinc-800" : "bg-amber-500"
-                                                  )} />
-                                                  <span className={cn(
-                                                    "text-[10px] font-bold uppercase tracking-widest",
-                                                    status === SecretStatus.ENABLED ? "text-green-500" :
-                                                    status === SecretStatus.MISSING ? "text-zinc-600" : "text-zinc-400"
-                                                  )}>
-                                                    {status}
-                                                  </span>
-                                                </div>
+                                                <SecretStatusIndicator status={status} />
                                               </td>
                                               <td className="px-4 font-mono text-[10px] text-zinc-600">
                                                 {latestVersion ? (
