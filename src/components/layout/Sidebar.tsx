@@ -18,6 +18,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import type { LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -31,6 +32,88 @@ interface SidebarProps {
   open?: boolean;
   onClose?: () => void;
 }
+
+
+interface SidebarSectionProps {
+  title: string;
+  count?: number;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}
+
+/** A labelled group of sidebar links; the label names the `<nav>` for assistive tech. */
+const SidebarSection: React.FC<SidebarSectionProps> = ({ title, count, action, children }) => {
+  const headingId = React.useId();
+  return (
+    <section className="pt-3 first:pt-1">
+      <div className="px-3 pb-1.5 flex items-center justify-between gap-2 min-h-5">
+        <h2 id={headingId} className="text-[10px] font-bold text-zinc-600 uppercase tracking-[0.2em]">
+          {title}
+          {count !== undefined && (
+            <span className="ml-1.5 font-mono tracking-normal text-zinc-700">{count}</span>
+          )}
+        </h2>
+        {action}
+      </div>
+      <nav aria-labelledby={headingId} className="space-y-0.5">
+        {children}
+      </nav>
+    </section>
+  );
+};
+
+interface SidebarNavItemProps {
+  to: string;
+  label: string;
+  icon: LucideIcon;
+  end?: boolean;
+  /** `global` uses the Global (sky) accent; everything else uses the Grimoire (amber) accent. */
+  accent?: 'grimoire' | 'global';
+  count?: number;
+  onNavigate?: () => void;
+}
+
+const SidebarNavItem: React.FC<SidebarNavItemProps> = ({
+  to,
+  label,
+  icon: Icon,
+  end,
+  accent = 'grimoire',
+  count,
+  onNavigate,
+}) => {
+  const isGlobal = accent === 'global';
+  return (
+    <NavLink
+      to={to}
+      end={end}
+      onClick={onNavigate}
+      className={({ isActive }) => cn(
+        "w-full flex items-center gap-2.5 px-3 py-2 md:py-1.5 text-[13px] font-medium transition-all border-l-2",
+        isActive
+          ? cn("bg-zinc-900", isGlobal ? "border-global text-global" : "border-grimoire text-grimoire")
+          : cn(
+              "border-transparent text-sidebar-foreground hover:bg-sidebar-accent",
+              isGlobal ? "hover:text-global" : "hover:text-foreground"
+            )
+      )}
+    >
+      <Icon className={cn("w-3.5 h-3.5 shrink-0", isGlobal && "text-global")} aria-hidden="true" />
+      <span className="flex-1 truncate font-sans">{label}</span>
+      {count !== undefined && (
+        <Badge
+          variant="outline"
+          className={cn(
+            "text-[9px] font-mono px-1.5 py-0 h-4",
+            isGlobal ? "border-global/30 bg-global/10 text-global" : "border-zinc-700 text-zinc-400"
+          )}
+        >
+          {count}
+        </Badge>
+      )}
+    </NavLink>
+  );
+};
 
 export const Sidebar: React.FC<SidebarProps> = ({ onCreateApp, open = false, onClose }) => {
   const disconnect = useStore((s) => s.disconnect);
@@ -46,6 +129,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCreateApp, open = false, onC
       return res.data;
     },
   });
+
+  const sortedApps = React.useMemo(
+    () =>
+      (Array.isArray(apps) ? [...apps] : []).sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+      ),
+    [apps]
+  );
 
   const { data: globalConfigs } = useQuery({
     queryKey: ['global-configurations', 'all'],
@@ -122,138 +213,99 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCreateApp, open = false, onC
         <div className="text-[10px] text-zinc-600 font-mono mt-1 uppercase tracking-widest">v{UI_VERSION}-STABLE</div>
       </div>
 
-      <div className="flex-1 overflow-hidden flex flex-col pt-3">
-        <div className="px-2 pb-2">
-          <button
-            type="button"
-            onClick={() => {
-              close();
-              palette.open();
-            }}
-            className="w-full h-8 flex items-center gap-2 px-2.5 border border-border bg-zinc-900/60 text-[12px] text-zinc-500 hover:text-zinc-300 hover:border-zinc-700 transition-colors"
-          >
-            <Search className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-            <span className="flex-1 text-left">Search…</span>
-            <kbd className="px-1 border border-zinc-700 font-mono text-[9px] text-zinc-500">{paletteShortcutLabel()}</kbd>
-          </button>
-        </div>
-        <nav aria-label="Primary" className="px-2 pb-3 border-b border-border/60 space-y-0.5">
-          <NavLink
-            to={dashboardPath()}
-            end
-            onClick={close}
-            className={({ isActive }) => cn(
-              "w-full flex items-center gap-2.5 px-3 py-2 text-[13px] font-medium transition-all",
-              isActive
-                ? "bg-zinc-900 border-l-2 border-grimoire text-grimoire"
-                : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"
-            )}
-          >
-            <LayoutDashboard className="w-3.5 h-3.5 shrink-0" />
-            <span className="font-sans">Dashboard</span>
-          </NavLink>
-          <NavLink
-            to={globalPath()}
-            onClick={close}
-            className={({ isActive }) => cn(
-              "w-full flex items-center justify-between gap-2 px-3 py-2 text-[13px] font-medium transition-all",
-              isActive
-                ? "bg-zinc-900 border-l-2 border-global text-global"
-                : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-global"
-            )}
-          >
-            <span className="flex items-center gap-2.5">
-              <Globe className="w-3.5 h-3.5 text-global shrink-0" />
-              <span className="font-sans">Global</span>
-            </span>
-            <Badge
-              variant="outline"
-              className="border-global/30 bg-global/10 text-global text-[9px] font-mono px-1.5 py-0 h-4"
-            >
-              {globalCount}
-            </Badge>
-          </NavLink>
-          <NavLink
-            to={auditPath()}
-            onClick={close}
-            className={({ isActive }) => cn(
-              "w-full flex items-center gap-2.5 px-3 py-2 text-[13px] font-medium transition-all",
-              isActive
-                ? "bg-zinc-900 border-l-2 border-zinc-300 text-zinc-100"
-                : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"
-            )}
-          >
-            <ScrollText className="w-3.5 h-3.5 shrink-0" />
-            <span className="font-sans">Audit log</span>
-          </NavLink>
-          <NavLink
-            to={rotationPath()}
-            onClick={close}
-            className={({ isActive }) => cn(
-              "w-full flex items-center gap-2.5 px-3 py-2 text-[13px] font-medium transition-all",
-              isActive
-                ? "bg-zinc-900 border-l-2 border-zinc-300 text-zinc-100"
-                : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"
-            )}
-          >
-            <TimerReset className="w-3.5 h-3.5 shrink-0" />
-            <span className="font-sans">Rotation</span>
-          </NavLink>
-          <NavLink
-            to={reportsPath()}
-            onClick={close}
-            className={({ isActive }) => cn(
-              "w-full flex items-center gap-2.5 px-3 py-2 text-[13px] font-medium transition-all",
-              isActive
-                ? "bg-zinc-900 border-l-2 border-zinc-300 text-zinc-100"
-                : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"
-            )}
-          >
-            <BarChart3 className="w-3.5 h-3.5 shrink-0" />
-            <span className="font-sans">Reports</span>
-          </NavLink>
-        </nav>
+      <div className="px-2 pt-3 pb-2">
+        <button
+          type="button"
+          onClick={() => {
+            close();
+            palette.open();
+          }}
+          className="w-full h-8 flex items-center gap-2 px-2.5 border border-border bg-zinc-900/60 text-[12px] text-zinc-500 hover:text-zinc-300 hover:border-zinc-700 transition-colors"
+        >
+          <Search className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+          <span className="flex-1 text-left">Search…</span>
+          <kbd className="px-1 border border-zinc-700 font-mono text-[9px] text-zinc-500">{paletteShortcutLabel()}</kbd>
+        </button>
+      </div>
 
-        <div className="px-5 pt-4 pb-2 flex items-center justify-between">
-          <h2 className="text-[10px] font-bold text-zinc-600 uppercase tracking-[0.2em]">Applications</h2>
-        </div>
+      <ScrollArea className="flex-1 min-h-0">
+        <div className="px-2 pb-4">
+          <SidebarSection title="Overview">
+            <SidebarNavItem to={dashboardPath()} end icon={LayoutDashboard} label="Dashboard" onNavigate={close} />
+            <SidebarNavItem to={reportsPath()} icon={BarChart3} label="Reports" onNavigate={close} />
+          </SidebarSection>
 
-        <ScrollArea className="flex-1 px-2 mt-1">
-          {isLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-            </div>
-          ) : (
-            <nav aria-label="Applications" className="space-y-0.5">
-              {(Array.isArray(apps) ? apps : []).map((app) => (
-                <NavLink
-                  key={app.slug}
-                  to={appPath(app.slug)}
-                  onClick={close}
-                  className={({ isActive }) => cn(
-                    "w-full flex items-center gap-3 px-3 py-2.5 md:py-1.5 text-[13px] font-medium transition-all group relative",
-                    isActive
-                      ? "bg-zinc-900 border-l-2 border-grimoire text-grimoire"
-                      : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"
-                  )}
-                >
-                  <span className="truncate flex-1 text-left font-sans">{app.name}</span>
-                </NavLink>
-              ))}
+          <SidebarSection title="Shared">
+            <SidebarNavItem
+              to={globalPath()}
+              icon={Globe}
+              label="Global"
+              accent="global"
+              count={globalCount}
+              onNavigate={close}
+            />
+          </SidebarSection>
+
+          <SidebarSection title="Governance">
+            <SidebarNavItem to={rotationPath()} icon={TimerReset} label="Rotation" onNavigate={close} />
+            <SidebarNavItem to={auditPath()} icon={ScrollText} label="Audit log" onNavigate={close} />
+          </SidebarSection>
+
+          <SidebarSection
+            title="Applications"
+            count={isLoading ? undefined : sortedApps.length}
+            action={
               <button
+                type="button"
                 onClick={() => {
                   close();
                   onCreateApp();
                 }}
-                className="w-[calc(100%-16px)] mx-2 mt-4 flex items-center justify-center gap-2 px-3 py-2 border border-dashed border-zinc-700 text-zinc-500 text-[10px] font-bold tracking-widest uppercase hover:border-zinc-500 hover:text-zinc-300 transition-colors"
+                aria-label="New application"
+                title="New application"
+                className="h-5 w-5 inline-flex items-center justify-center text-zinc-500 hover:text-grimoire hover:bg-zinc-800 transition-colors"
+              >
+                <Plus className="w-3 h-3" />
+              </button>
+            }
+          >
+            {isLoading ? (
+              <div className="flex items-center justify-center py-6">
+                <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+              </div>
+            ) : sortedApps.length === 0 ? (
+              <button
+                type="button"
+                onClick={() => {
+                  close();
+                  onCreateApp();
+                }}
+                className="w-full mt-1 flex items-center justify-center gap-2 px-3 py-2 border border-dashed border-zinc-700 text-zinc-500 text-[10px] font-bold tracking-widest uppercase hover:border-zinc-500 hover:text-zinc-300 transition-colors"
               >
                 <Plus className="w-3 h-3" />
                 New Application
               </button>
-            </nav>
-          )}
-        </ScrollArea>
-      </div>
+            ) : (
+              sortedApps.map((app) => (
+                <NavLink
+                  key={app.slug}
+                  to={appPath(app.slug)}
+                  onClick={close}
+                  title={app.name}
+                  className={({ isActive }) => cn(
+                    "w-full flex items-center gap-2.5 px-3 py-2.5 md:py-1.5 text-[13px] font-medium transition-all border-l-2",
+                    isActive
+                      ? "bg-zinc-900 border-grimoire text-grimoire"
+                      : "border-transparent text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"
+                  )}
+                >
+                  <span className="truncate flex-1 text-left font-sans">{app.name}</span>
+                </NavLink>
+              ))
+            )}
+          </SidebarSection>
+        </div>
+      </ScrollArea>
 
       <div className="p-4 border-t border-zinc-800 bg-black/40 space-y-2.5">
         <div className="space-y-1">
