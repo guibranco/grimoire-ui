@@ -24,6 +24,14 @@ describe('getApiDocsUrl', () => {
     expect(getApiDocsUrl()).toBe('https://api.grimoire.example.com/swagger');
   });
 
+  it('resolves a relative base against the page origin', () => {
+    localStorage.setItem('grimoire_api_url', '/api/management');
+    expect(getApiDocsUrl()).toBe(`${window.location.origin}/swagger`);
+
+    localStorage.setItem('grimoire_api_url', '/grimoire');
+    expect(getApiDocsUrl()).toBe(`${window.location.origin}/grimoire/swagger`);
+  });
+
   it('links to the API repository when connected to the mock API', () => {
     localStorage.setItem('grimoire_api_url', 'mock://');
     expect(getApiDocsUrl()).toBe(API_REPOSITORY_URL);

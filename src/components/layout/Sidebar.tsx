@@ -79,6 +79,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCreateApp, open = false, onC
     : 'N/A';
 
   const apiDocsUrl = getApiDocsUrl();
+  const apiVersionLabel = apiVersion ? `API ${formattedApiVersion}` : 'API version unavailable';
+  const apiLinkTitle = connectionInfo.isMock
+    ? 'Open the Grimoire API repository on GitHub'
+    : `Open the API docs (${apiVersionLabel})`;
   const versionLinkClass =
     'flex items-center gap-1 w-fit max-w-full hover:text-zinc-300 hover:underline underline-offset-2 transition-colors focus-visible:outline-none focus-visible:text-zinc-300 focus-visible:underline';
 
@@ -276,11 +280,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCreateApp, open = false, onC
               target="_blank"
               rel="noopener noreferrer"
               className={versionLinkClass}
-              title={
-                connectionInfo.isMock
-                  ? 'Open the Grimoire API repository on GitHub'
-                  : `Open the API docs (${apiVersion ? `API ${formattedApiVersion}` : 'API version unavailable'})`
-              }
+              title={apiLinkTitle}
             >
               <span className="truncate">API: {apiVersionLoading ? '...' : formattedApiVersion}</span>
               <ExternalLink className="w-2.5 h-2.5 shrink-0 opacity-60" aria-hidden="true" />

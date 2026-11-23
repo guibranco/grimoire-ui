@@ -83,8 +83,14 @@ export function getApiDocsUrl(): string {
     return API_REPOSITORY_URL;
   }
   const origin = stripManagementSuffix(info.rawUrl.trim());
-  const withScheme = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(origin) ? origin : `https://${origin}`;
-  return `${withScheme}/swagger`;
+  if (/^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(origin)) {
+    return `${origin}/swagger`;
+  }
+  // A relative base (e.g. `/api/management`) is served from the UI's own origin.
+  if (origin === '' || origin.startsWith('/')) {
+    return new URL(`${origin}/swagger`, window.location.origin).toString();
+  }
+  return `https://${origin}/swagger`;
 }
 
 export interface ApiConnectionInfo {
