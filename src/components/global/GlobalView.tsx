@@ -2,12 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { Application } from '@/types/api';
+import { Application, GlobalEnvironment } from '@/types/api';
 import { DEFAULT_GLOBAL_TAB, globalPath, isGlobalTab } from '@/lib/routes';
 import { NotFoundView } from '@/components/shared/NotFoundView';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Flag, Globe, Lock, Settings } from 'lucide-react';
+import { FileUp, Flag, Globe, Lock, Settings } from 'lucide-react';
+import { ImportWizard } from '@/components/import/ImportWizard';
 import { GlobalConfigTab } from './GlobalConfigTab';
 import { GlobalFlagsTab } from './GlobalFlagsTab';
 import { GlobalSecretsTab } from './GlobalSecretsTab';
@@ -30,6 +31,7 @@ const GlobalViewContent: React.FC = () => {
   const highlightedKey = searchParams.get('key');
   const startCreating = searchParams.get('new') === '1';
   const [customSlugs, setCustomSlugs] = useState<string[]>([]);
+  const [isImportOpen, setIsImportOpen] = useState(false);
 
   // `?new=1` opens the create form once; drop it so a refresh or Back doesn't reopen it.
   useEffect(() => {
@@ -44,6 +46,19 @@ const GlobalViewContent: React.FC = () => {
     },
   });
 
+  const { data: globalEnvs } = useQuery({
+    queryKey: ['global-environments'],
+    queryFn: async () => (await api.get<GlobalEnvironment[]>('/global/environments')).data,
+    enabled: isImportOpen,
+  });
+  const importEnvironments = [
+    { slug: '*', label: 'All environments' },
+    ...[...new Set([...(Array.isArray(globalEnvs) ? globalEnvs.map((e) => e.slug) : []), ...customSlugs])].map((slug) => ({
+      slug,
+      label: slug,
+    })),
+  ];
+
   const safeApps = Array.isArray(apps) ? apps : [];
   const inheritingCount = safeApps.filter((a) => a.inheritGlobals !== false).length;
 
@@ -53,7 +68,7 @@ const GlobalViewContent: React.FC = () => {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <header className="min-h-[64px] flex items-center justify-between px-4 py-3 md:px-6 md:py-0 border-b border-border bg-background">
+      <header className="min-h-[64px] flex flex-wrap items-center justify-between gap-3 px-4 py-3 md:px-6 md:py-0 border-b border-border bg-background">
         <div className="flex items-center gap-3 md:gap-4 min-w-0">
           <div className="w-8 h-8 bg-global/10 border border-global/40 text-global flex items-center justify-center shrink-0">
             <Globe className="w-4 h-4" />
@@ -73,7 +88,24 @@ const GlobalViewContent: React.FC = () => {
             </p>
           </div>
         </div>
+        <button
+          type="button"
+          onClick={() => setIsImportOpen(true)}
+          title="Import a .env, appsettings.json or PHP config"
+          className="h-[32px] px-3 border border-border text-[11px] font-bold uppercase tracking-widest text-foreground hover:bg-zinc-800 transition-colors inline-flex items-center gap-1.5"
+        >
+          <FileUp className="w-3.5 h-3.5" aria-hidden="true" />
+          Import file
+        </button>
       </header>
+
+      <ImportWizard
+        scope="global"
+        environments={importEnvironments}
+        defaultEnvironment="*"
+        open={isImportOpen}
+        onOpenChange={setIsImportOpen}
+      />
 
       <Tabs
         value={activeTab}

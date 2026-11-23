@@ -3,6 +3,7 @@ import { forgetMockAccessTokens, handleAccessTokenRequest, handleTrustPolicyRequ
 import { AxiosResponse, AxiosRequestConfig } from 'axios';
 import { parseArrayItems } from './configValue';
 import { AUDIT_ACTION_LABELS } from './audit';
+import { DEFAULT_SECRET_KEYS, parseEnv, parseJsonObject, planImport, writes, type ImportedValue, type ImportSnapshot } from './importer';
 import { isValidVersion, versionsToExpire, withStatus, wouldLeaveNoValidVersion } from './secretVersions';
 import { daysRemaining, secretDue, MAX_ROTATION_INTERVAL_DAYS } from './rotation';
 
@@ -1285,6 +1286,156 @@ export async function mockApiAdapter(config: AxiosRequestConfig): Promise<AxiosR
   return response;
 }
 
+// ── Import (guibranco/grimoire-api#82) ──
+
+interface MockImportStore {
+  application: string | null;
+  snapshot: () => ImportSnapshot;
+  setConfiguration: (key: string, value: string, valueType: string) => void;
+  addSecretVersion: (name: string) => void;
+}
+
+const validationProblem = (field: string, message: string, config: AxiosRequestConfig) =>
+  makeResponse(400, { title: 'One or more validation errors occurred.', errors: { [field]: [message] } }, config);
+
+const nextVersionEntry = (existing: any[], prefix: string) => {
+  const version = existing.length ? Math.max(...existing.map((v: any) => v.version ?? 0)) + 1 : 1;
+  return { id: `${prefix}-${Date.now()}-${version}`, version, isEnabled: true, expiresAt: null, notBefore: null, createdAt: new Date().toISOString() };
+};
+
+function appImportStore(appSlug: string, envSlug: string): MockImportStore {
+  return {
+    application: appSlug,
+    snapshot: () => ({
+      configuration: new Map(
+        (configurations[appSlug] || [])
+          .filter((c: any) => c.environmentSlug === envSlug)
+          .map((c: any) => [c.key, { value: c.value, type: c.valueType || 'string' }])
+      ),
+      secrets: new Map(
+        (secrets[appSlug] || []).map((s: any) => [s.name, (secretVersions[`${appSlug}:${s.name}:${envSlug}`] || []).length > 0])
+      ),
+    }),
+    setConfiguration: (key, value, valueType) => {
+      const list = (configurations[appSlug] ||= []);
+      const index = list.findIndex((c: any) => c.key === key && c.environmentSlug === envSlug);
+      const previous = snapshot(list[index]);
+      const next = { key, value, valueType, description: list[index]?.description ?? '', environmentSlug: envSlug, updatedAt: new Date().toISOString() };
+      if (index >= 0) list[index] = next;
+      else list.push(next);
+      recordConfigRevision(revisionKey(appSlug, envSlug, key), previous, next);
+      saveStored('configurations', configurations);
+    },
+    addSecretVersion: (name) => {
+      const list = (secrets[appSlug] ||= []);
+      const nowIso = new Date().toISOString();
+      if (!list.some((s: any) => s.name === name)) {
+        list.push({ id: `sec-${Date.now()}-${list.length}`, name, description: '', rotationIntervalDays: null, createdAt: nowIso, updatedAt: nowIso });
+      }
+      const k = `${appSlug}:${name}:${envSlug}`;
+      secretVersions[k] = [nextVersionEntry(secretVersions[k] || [], 'ver'), ...(secretVersions[k] || [])];
+      saveStored('secrets', secrets);
+      saveStored('secret_versions', secretVersions);
+    },
+  };
+}
+
+function globalImportStore(envSlug: string): MockImportStore {
+  return {
+    application: null,
+    snapshot: () => ({
+      configuration: new Map(
+        globalConfigurations
+          .filter((c: any) => c.environmentSlug === envSlug)
+          .map((c: any) => [c.key, { value: c.value, type: c.valueType || 'string' }])
+      ),
+      secrets: new Map(globalSecrets.map((s: any) => [s.name, (globalSecretVersions[`${s.name}:${envSlug}`] || []).length > 0])),
+    }),
+    setConfiguration: (key, value, valueType) => {
+      const index = globalConfigurations.findIndex((c: any) => c.key === key && c.environmentSlug === envSlug);
+      const nowIso = new Date().toISOString();
+      const previous = snapshot(globalConfigurations[index]);
+      const next = {
+        id: globalConfigurations[index]?.id ?? `gcfg-${Date.now()}-${key}`,
+        environmentSlug: envSlug,
+        key,
+        value,
+        valueType,
+        description: globalConfigurations[index]?.description ?? '',
+        createdAt: globalConfigurations[index]?.createdAt ?? nowIso,
+        updatedAt: nowIso,
+      };
+      if (index >= 0) globalConfigurations[index] = next;
+      else globalConfigurations.push(next);
+      recordConfigRevision(revisionKey(null, envSlug, key), previous, next);
+      saveStored('global_configurations', globalConfigurations);
+    },
+    addSecretVersion: (name) => {
+      const nowIso = new Date().toISOString();
+      if (!globalSecrets.some((s: any) => s.name === name)) {
+        globalSecrets.push({ id: `gsec-${Date.now()}-${name}`, name, description: '', createdAt: nowIso, updatedAt: nowIso });
+      }
+      const k = `${name}:${envSlug}`;
+      globalSecretVersions[k] = [nextVersionEntry(globalSecretVersions[k] || [], 'gver'), ...(globalSecretVersions[k] || [])];
+      saveStored('global_secrets', globalSecrets);
+      saveStored('global_secret_versions', globalSecretVersions);
+    },
+  };
+}
+
+/** Reads the file into keys and values, or the 400 to return. The demo can't read PHP. */
+function parseMockImport(body: any, config: AxiosRequestConfig): ImportedValue[] | Promise<AxiosResponse> {
+  if (!['env', 'appsettings', 'json', 'php'].includes(body?.format)) {
+    return validationProblem('Format', "'Format' must be one of: env, appsettings, php, json.", config);
+  }
+  if (!body.content) return validationProblem('Content', "'Content' must not be empty.", config);
+  if (body.format === 'php') {
+    return validationProblem('Content', 'The demo reads .env, appsettings and JSON files; PHP files need a Grimoire API.', config);
+  }
+  try {
+    return body.format === 'env' ? parseEnv(body.content) : parseJsonObject(body.content, body.format === 'appsettings');
+  } catch (err) {
+    return validationProblem('Content', (err as Error).message, config);
+  }
+}
+
+function mockImport(body: any, envSlug: string, dryRun: boolean, store: MockImportStore, config: AxiosRequestConfig) {
+  const values = parseMockImport(body, config);
+  if (!Array.isArray(values)) return values;
+  const secretKeys = Array.isArray(body.secretKeys) && body.secretKeys.length ? body.secretKeys : DEFAULT_SECRET_KEYS;
+  const items = planImport(values, store.snapshot(), {
+    secretKeys,
+    kinds: body.kinds ?? {},
+    exclude: body.exclude ?? [],
+    overwrite: body.onConflict === 'overwrite',
+  });
+  if (!dryRun) {
+    for (const item of writes(items)) {
+      if (item.kind === 'secret') store.addSecretVersion(item.key);
+      else store.setConfiguration(item.key, item.value ?? '', item.type);
+    }
+    activityLog.unshift(
+      withAuditFields(
+        { occurredAt: new Date().toISOString(), actor: MOCK_ACTOR, action: 'Imported values', application: store.application, environment: envSlug, target: body.format, targetType: 'import' },
+        `act-${++activitySeq}`
+      )
+    );
+  }
+  const count = (...actions: string[]) => items.filter((i) => actions.includes(i.action)).length;
+  return makeResponse(
+    200,
+    {
+      environment: envSlug,
+      dryRun,
+      secretKeys,
+      items: items.map(({ type: _type, ...item }) => item),
+      summary: { create: count('create'), update: count('update'), unchanged: count('unchanged'), skipped: count('skip', 'conflict', 'excluded') },
+      skipped: [],
+    },
+    config
+  );
+}
+
 type MockContext = {
   match: RegExpExecArray;
   body: any;
@@ -2199,6 +2350,33 @@ const ROUTES: MockRoute[] = [
       saveStored('global_secrets', globalSecrets);
       saveStored('global_secret_versions', globalSecretVersions);
       return makeResponse(204, null, config);
+    },
+  },
+  // POST /applications/:appSlug/import and /global/import (guibranco/grimoire-api#82)
+  {
+    method: 'POST',
+    pattern: /^\/applications\/([^/]+)\/import$/,
+    handle: ({ match, body, searchParams, config }) => {
+      const appSlug = match[1];
+      if (!applications.some((a: any) => a.slug === appSlug)) {
+        return makeResponse(404, { message: 'Application not found.' }, config);
+      }
+      const envSlug = searchParams.get('environment') ?? '';
+      if (!(environments[appSlug] || []).some((e: any) => e.slug === envSlug)) {
+        return makeResponse(404, { message: 'Environment not found.' }, config);
+      }
+      return mockImport(body, envSlug, searchParams.get('dryRun') !== 'false', appImportStore(appSlug, envSlug), config);
+    },
+  },
+  {
+    method: 'POST',
+    pattern: /^\/global\/import$/,
+    handle: ({ body, searchParams, config }) => {
+      const envSlug = searchParams.get('environment') ?? '';
+      if (envSlug !== '*' && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(envSlug)) {
+        return validationProblem('Environment', "'Environment' must be \"*\" or a lowercase slug.", config);
+      }
+      return mockImport(body, envSlug, searchParams.get('dryRun') !== 'false', globalImportStore(envSlug), config);
     },
   },
 ];

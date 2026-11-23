@@ -885,4 +885,58 @@ describe('Grimoire Mock API Integration Tests', () => {
       expect(res.data.recentActivity.length).toBeLessThanOrEqual(20);
     });
   });
+
+  describe('Import API (guibranco/grimoire-api#82)', () => {
+    const appUrl = (dryRun: boolean, environment = 'staging') =>
+      `/applications/production-gateway/import?environment=${environment}&dryRun=${dryRun}`;
+    const status = (p: Promise<{ status: number }>) => p.then((res) => res.status);
+
+    it('plans without writing, then applies creates, overwrites and an audit entry', async () => {
+      const content = 'APP_MODE=safe\nDATABASE_PASSWORDS=new\nFEATURE_PASSWORD=x';
+      const dry = await api.post(appUrl(true), { format: 'env', content });
+      expect(dry.data.dryRun).toBe(true);
+      const byKey = Object.fromEntries(dry.data.items.map((i: any) => [i.key, i]));
+      expect(byKey.APP_MODE).toMatchObject({ kind: 'configuration', action: 'create', value: 'safe' });
+      expect(byKey.DATABASE_PASSWORDS).toMatchObject({ kind: 'secret', action: 'skip', value: null });
+      expect(byKey.FEATURE_PASSWORD).toMatchObject({ kind: 'secret', action: 'create' });
+      expect((await api.get('/applications/production-gateway/configurations')).data.some((c: any) => c.key === 'APP_MODE')).toBe(false);
+
+      const applied = await api.post(appUrl(false), { format: 'env', content, onConflict: 'overwrite' });
+      expect(applied.data.summary).toEqual({ create: 2, update: 1, unchanged: 0, skipped: 0 });
+      const configs = (await api.get('/applications/production-gateway/configurations')).data;
+      expect(configs).toContainEqual(expect.objectContaining({ key: 'APP_MODE', value: 'safe', environmentSlug: 'staging' }));
+      const versions = (await api.get('/applications/production-gateway/secrets/FEATURE_PASSWORD/versions/staging')).data;
+      expect(versions).toHaveLength(1);
+      const audit = (await api.get('/audit?action=import.apply')).data.items;
+      expect(audit[0]).toMatchObject({ application: 'production-gateway', environment: 'staging', target: 'env' });
+
+      const again = await api.post(appUrl(true), { format: 'env', content: 'APP_MODE=safe' });
+      expect(again.data.items[0].action).toBe('unchanged');
+    });
+
+    it('imports into Global environments', async () => {
+      const res = await api.post('/global/import?environment=*&dryRun=false', {
+        format: 'appsettings',
+        content: '{"Shared":{"Region":"eu"},"Api":{"Token":"t"}}',
+      });
+      expect(res.data.items.map((i: any) => [i.key, i.kind, i.action])).toEqual([
+        ['Shared:Region', 'configuration', 'create'],
+        ['Api:Token', 'secret', 'create'],
+      ]);
+      expect((await api.get('/global/configurations')).data).toContainEqual(
+        expect.objectContaining({ key: 'Shared:Region', environmentSlug: '*' })
+      );
+      expect((await api.get('/global/secrets/Api%3AToken/versions/*')).data).toHaveLength(1);
+    });
+
+    it('rejects bad requests', async () => {
+      expect(await status(api.post(appUrl(true, 'nope'), { format: 'env', content: 'A=1' }))).toBe(404);
+      expect(await status(api.post('/applications/nope/import?environment=x', { format: 'env', content: 'A=1' }))).toBe(404);
+      expect(await status(api.post(appUrl(true), { format: 'yaml', content: 'a: 1' }))).toBe(400);
+      expect(await status(api.post(appUrl(true), { format: 'env', content: '' }))).toBe(400);
+      expect(await status(api.post(appUrl(true), { format: 'php', content: '<?php return [];' }))).toBe(400);
+      expect(await status(api.post(appUrl(true), { format: 'json', content: '[1]' }))).toBe(400);
+      expect(await status(api.post('/global/import?environment=Bad Slug', { format: 'env', content: 'A=1' }))).toBe(400);
+    });
+  });
 });

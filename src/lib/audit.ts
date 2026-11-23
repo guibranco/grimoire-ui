@@ -56,6 +56,7 @@ global-configuration.update | Updated global configuration
 global-configuration.delete | Deleted global configuration
 global-configuration.rollback | Rolled back global configuration
 # Other | 
+import.apply | Imported values
 backup.create | Created backup
 rotation.remind | Sent rotation reminders
 auth.failed | Rejected unauthenticated request

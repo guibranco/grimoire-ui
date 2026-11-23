@@ -1,11 +1,13 @@
 import React from 'react';
 import { Application } from '@/types/api';
-import { Plus, Pencil } from 'lucide-react';
+import { FileUp, Plus, Pencil } from 'lucide-react';
 
 interface ApplicationHeaderProps {
   app: Application;
   onEditApp: () => void;
   onAddEnv: () => void;
+  /** Opens the import wizard; hidden while the application has no environments. */
+  onImport?: () => void;
   onRotateKey: () => void;
   onDeleteApp: () => void;
 }
@@ -14,6 +16,7 @@ export const ApplicationHeader: React.FC<ApplicationHeaderProps> = ({
   app, 
   onEditApp,
   onAddEnv, 
+  onImport,
   onRotateKey, 
   onDeleteApp 
 }) => {
@@ -42,6 +45,18 @@ export const ApplicationHeader: React.FC<ApplicationHeaderProps> = ({
           <Plus className="w-3.5 h-3.5" />
           Add Env
         </button>
+
+        {onImport && (
+          <button
+            type="button"
+            onClick={onImport}
+            title="Import a .env, appsettings.json or PHP config"
+            className="h-[32px] px-3 border border-border text-[11px] font-bold uppercase tracking-widest text-foreground hover:bg-zinc-800 transition-colors inline-flex items-center gap-1.5"
+          >
+            <FileUp className="w-3.5 h-3.5" aria-hidden="true" />
+            Import file
+          </button>
+        )}
 
         <button 
           onClick={onRotateKey}

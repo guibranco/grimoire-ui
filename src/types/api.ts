@@ -566,3 +566,37 @@ export interface TrustPolicyRequest {
   scopes: AccessTokenScope[];
   tokenLifetimeMinutes: number;
 }
+
+// ── Import (POST /management/applications/{slug}/import, guibranco/grimoire-api#82) ──
+
+export type ImportFormat = 'env' | 'appsettings' | 'php' | 'json';
+export type ImportKind = 'secret' | 'configuration';
+export type ImportAction = 'create' | 'update' | 'unchanged' | 'skip' | 'conflict' | 'excluded';
+
+export interface ImportRequest {
+  format: ImportFormat;
+  content: string;
+  secretKeys?: string[];
+  onConflict?: 'skip' | 'overwrite';
+  kinds?: Record<string, ImportKind>;
+  exclude?: string[];
+}
+
+export interface ImportPlanItem {
+  key: string;
+  kind: ImportKind;
+  action: ImportAction;
+  /** The configuration value; always `null` for secrets. */
+  value: string | null;
+  valueType: ConfigValueType | null;
+}
+
+export interface ImportPlan {
+  environment: string;
+  dryRun: boolean;
+  secretKeys: string[];
+  items: ImportPlanItem[];
+  summary: { create: number; update: number; unchanged: number; skipped: number };
+  /** Keys whose value isn't plain data (e.g. a PHP function call), so weren't read. */
+  skipped: string[];
+}
