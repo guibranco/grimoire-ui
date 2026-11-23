@@ -328,18 +328,38 @@ interface FlagRoute {
   env: string | null;
 }
 
-/** `/applications/{app}/feature-flags[/{key}[/history|/evaluate|/environments/{env}[/toggle]]]`. */
-function parseRoute(path: string): FlagRoute | null {
-  const parts = path.split('/').slice(1).map(decodeURIComponent);
-  if (parts[0] !== 'applications' || parts[2] !== 'feature-flags' || !parts[1]) return null;
-  const [, app, , key = null, ...rest] = parts;
-  if (rest.length === 0) return { app, key, sub: null, env: null };
-  if (rest.length === 1 && (rest[0] === 'history' || rest[0] === 'evaluate')) return { app, key, sub: rest[0], env: null };
-  if (rest[0] === 'environments' && rest[1] && rest.length <= 3) {
-    if (rest.length === 2) return { app, key, sub: 'environment', env: rest[1] };
-    if (rest[2] === 'toggle') return { app, key, sub: 'toggle', env: rest[1] };
+const decodeSegment = (segment: string): string | null => {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return null;
   }
-  return null;
+};
+
+/** The flag route's shape from raw (still encoded) segments; `null` for any other path. */
+function routeShape(rest: string[]): Pick<FlagRoute, 'sub'> & { env: string | null } | null {
+  if (rest.length === 0) return { sub: null, env: null };
+  if (rest.length === 1 && (rest[0] === 'history' || rest[0] === 'evaluate')) return { sub: rest[0], env: null };
+  if (rest[0] !== 'environments' || !rest[1] || rest.length > 3) return null;
+  if (rest.length === 2) return { sub: 'environment', env: rest[1] };
+  return rest[2] === 'toggle' ? { sub: 'toggle', env: rest[1] } : null;
+}
+
+/**
+ * `/applications/{app}/feature-flags[/{key}[/history|/evaluate|/environments/{env}[/toggle]]]`.
+ * The structure is checked on the raw path first and only the variable segments are decoded, so
+ * unrelated routes (even with malformed escapes) fall through to the other handlers.
+ */
+function parseRoute(path: string): FlagRoute | null {
+  const [, applications, rawApp, featureFlags, rawKey, ...rest] = path.split('/');
+  if (applications !== 'applications' || featureFlags !== 'feature-flags' || !rawApp) return null;
+  const shape = routeShape(rest);
+  if (!shape) return null;
+  const app = decodeSegment(rawApp);
+  const key = rawKey === undefined ? null : decodeSegment(rawKey);
+  const env = shape.env === null ? null : decodeSegment(shape.env);
+  if (app === null || (rawKey !== undefined && key === null) || (shape.env !== null && env === null)) return null;
+  return { app, key, sub: shape.sub, env };
 }
 
 type Envs = { slug: string }[];

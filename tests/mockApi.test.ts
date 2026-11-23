@@ -686,6 +686,14 @@ describe('Grimoire Mock API Integration Tests', () => {
       expect((await api.post(`${base}/nope/evaluate`, { environment: 'production' })).status).toBe(404);
     });
 
+    it('leaves unrelated and malformed routes to the other handlers', async () => {
+      const res = await api.get('/applications/demo%/configurations');
+      expect(res.status).not.toBe(500);
+      expect((await api.get('/applications/production-gateway/feature-flags/beta-dashboard/bogus')).status).toBe(404);
+      expect((await api.get('/applications/production-gateway/feature-flags/%E0%A4%A')).status).toBe(404);
+      expect((await api.get(`${base}/beta-dashboard`)).data.key).toBe('beta-dashboard');
+    });
+
     it('drops an application\'s flags with the application', async () => {
       await api.delete('/applications/production-gateway');
       await api.post('/applications', { name: 'Production Gateway' });
