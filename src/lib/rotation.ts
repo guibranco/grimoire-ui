@@ -164,7 +164,7 @@ export function parseExpiring(data: unknown): ExpiringSecretsResponse {
 }
 
 /** Parses a "rotate every N days" form field: a whole number 1–3650, `null` when empty or invalid. */
-export const rotationIntervalValue = (raw: unknown): number | null => {
+export const rotationIntervalValue = (raw: string | number | null | undefined): number | null => {
   if (raw === null || raw === undefined || String(raw).trim() === '') return null;
   const n = Number(raw);
   return Number.isInteger(n) && n >= 1 && n <= MAX_ROTATION_INTERVAL_DAYS ? n : null;

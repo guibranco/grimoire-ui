@@ -40,11 +40,13 @@ export const ActivityFeed: React.FC<{
       )
     }
   >
-    {events === null ? (
+    {events === null && (
       <p className="p-4 text-xs text-zinc-500">Audit log not enabled yet.</p>
-    ) : events.length === 0 ? (
+    )}
+    {events?.length === 0 && (
       <p className="p-4 text-xs text-zinc-500">No recent activity.</p>
-    ) : (
+    )}
+    {!!events?.length && (
       <ol aria-label="Recent activity" className="divide-y divide-zinc-900">
         {events.slice(0, 20).map((event, i) => {
           const to = activityLink(event);

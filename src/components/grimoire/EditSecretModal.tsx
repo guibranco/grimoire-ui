@@ -13,6 +13,7 @@ import { api } from '@/lib/api';
 import { isRotationIntervalInput, rotationIntervalValue, ROTATION_INTERVAL_MESSAGE } from '@/lib/rotation';
 import type { Secret, UpdateSecretRequest } from '@/types/api';
 import type { SecretModalScope } from './EditSecretValueModal';
+import { apiErrorMessage } from '@/lib/errors';
 
 const schema = z.object({
   description: z.string().max(1000, 'Up to 1000 characters'),
@@ -108,7 +109,7 @@ export const EditSecretModal: React.FC<EditSecretModalProps> = ({ scope, secretN
       toast.success('Secret updated');
       onOpenChange(false);
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || err?.response?.data?.title || 'Failed to update secret');
+      toast.error(apiErrorMessage(err, 'Failed to update secret'));
     } finally {
       setSaving(false);
     }

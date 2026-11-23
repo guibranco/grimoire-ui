@@ -23,6 +23,7 @@ import { appPath } from '@/lib/routes';
 import { APIKeyRevealModal } from './APIKeyRevealModal';
 import { Loader2, Box } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { apiErrorMessage } from '@/lib/errors';
 
 const schema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -77,7 +78,7 @@ export const CreateAppModal: React.FC<CreateAppModalProps> = ({ open, onOpenChan
         toast.error('Application created, but the API key was not returned by the server. Rotate the key to generate a new one.');
       }
     } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Failed to create application');
+      toast.error(apiErrorMessage(err, 'Failed to create application'));
     } finally {
       setLoading(false);
     }

@@ -230,7 +230,7 @@ function getStored<T>(key: string, defaultValue: T): T {
       }
     }
   }
-  return JSON.parse(JSON.stringify(defaultValue)); // deep clone
+  return structuredClone(defaultValue); // deep clone
 }
 
 function saveStored<T>(key: string, data: T): void {
@@ -321,14 +321,14 @@ function sanitizeSecretMetadata(secret: any) {
 
 // Reset handler (useful for testing)
 export function resetMockDatabase() {
-  applications = JSON.parse(JSON.stringify(DEFAULT_APPLICATIONS));
-  environments = JSON.parse(JSON.stringify(DEFAULT_ENVIRONMENTS));
-  secrets = JSON.parse(JSON.stringify(DEFAULT_SECRETS));
-  configurations = JSON.parse(JSON.stringify(DEFAULT_CONFIGURATIONS));
-  secretVersions = JSON.parse(JSON.stringify(DEFAULT_SECRET_VERSIONS));
-  globalConfigurations = JSON.parse(JSON.stringify(DEFAULT_GLOBAL_CONFIGURATIONS));
-  globalSecrets = JSON.parse(JSON.stringify(DEFAULT_GLOBAL_SECRETS));
-  globalSecretVersions = JSON.parse(JSON.stringify(DEFAULT_GLOBAL_SECRET_VERSIONS));
+  applications = structuredClone(DEFAULT_APPLICATIONS);
+  environments = structuredClone(DEFAULT_ENVIRONMENTS);
+  secrets = structuredClone(DEFAULT_SECRETS);
+  configurations = structuredClone(DEFAULT_CONFIGURATIONS);
+  secretVersions = structuredClone(DEFAULT_SECRET_VERSIONS);
+  globalConfigurations = structuredClone(DEFAULT_GLOBAL_CONFIGURATIONS);
+  globalSecrets = structuredClone(DEFAULT_GLOBAL_SECRETS);
+  globalSecretVersions = structuredClone(DEFAULT_GLOBAL_SECRET_VERSIONS);
   activityLog = seedActivity();
   if (isBrowser) {
     localStorage.removeItem('grm_mock_applications');
@@ -409,30 +409,53 @@ function seedActivity(): MockActivity[] {
 }
 activityLog = seedActivity();
 
+type MutationEntry = Omit<SeedActivity, 'occurredAt' | 'actor'>;
+type MutationRule = {
+  methods: readonly string[];
+  pattern: RegExp;
+  describe: (m: string[], verb: string, body: any) => MutationEntry;
+};
+
+const decode = (s: string) => decodeURIComponent(s);
+/** Path segment, or the body field when the segment is absent (e.g. POST to a collection). */
+const segOr = (segment: string | undefined, fallback: unknown) => (segment ? decode(segment) : (fallback as string) ?? null);
+const entry = (
+  action: string,
+  application: string | null,
+  environment: string | null,
+  target: string | null,
+  targetType: string | null
+): MutationEntry => ({ action, application, environment, target, targetType });
+
+const WRITE = ['POST', 'PUT', 'DELETE'] as const;
+const VERBS: Record<string, string> = { POST: 'Created', PUT: 'Updated', DELETE: 'Deleted', PATCH: 'Updated' };
+
+/** First matching rule wins, so specific paths come before the collections they belong to. */
+const MUTATION_RULES: MutationRule[] = [
+  { methods: ['PATCH'], pattern: /^\/applications\/([^/]+)\/secrets\/([^/]+)\/versions\/([^/]+)\/\d+$/, describe: (m) => entry('Updated secret version', decode(m[1]), decode(m[3]), decode(m[2]), 'secret') },
+  { methods: ['PATCH'], pattern: /^\/global\/secrets\/([^/]+)\/versions\/([^/]+)\/\d+$/, describe: (m) => entry('Updated global secret version', null, decode(m[2]), decode(m[1]), 'secret') },
+  { methods: ['PATCH'], pattern: /^\/applications\/([^/]+)\/secrets\/([^/]+)$/, describe: (m) => entry('Updated secret', decode(m[1]), null, decode(m[2]), 'secret') },
+  { methods: ['PATCH'], pattern: /^\/global\/secrets\/([^/]+)$/, describe: (m) => entry('Updated global secret', null, null, decode(m[1]), 'secret') },
+  { methods: ['POST'], pattern: /^\/secrets\/expiring\/notify$/, describe: () => entry('Sent rotation reminders', null, null, null, null) },
+  { methods: ['POST'], pattern: /^\/applications$/, describe: (_m, _v, body) => entry('Created application', body?.slug ?? null, null, null, null) },
+  { methods: WRITE, pattern: /^\/applications\/([^/]+)$/, describe: (m, verb) => entry(`${verb} application`, decode(m[1]), null, null, null) },
+  { methods: WRITE, pattern: /^\/applications\/([^/]+)\/rotate-key$/, describe: (m) => entry('Rotated API key', decode(m[1]), null, null, null) },
+  { methods: WRITE, pattern: /^\/applications\/([^/]+)\/environments(?:\/([^/]+))?$/, describe: (m, _v, body) => entry(`${m[2] ? 'Deleted' : 'Created'} environment`, decode(m[1]), segOr(m[2], body?.slug), null, null) },
+  { methods: WRITE, pattern: /^\/applications\/([^/]+)\/secrets\/([^/]+)\/values$/, describe: (m, _v, body) => entry('Added secret version', decode(m[1]), body?.environmentSlug ?? null, decode(m[2]), 'secret') },
+  { methods: WRITE, pattern: /^\/applications\/([^/]+)\/secrets(?:\/([^/]+))?$/, describe: (m, verb, body) => entry(`${verb} secret`, decode(m[1]), null, segOr(m[2], body?.name), 'secret') },
+  { methods: WRITE, pattern: /^\/applications\/([^/]+)\/configurations(?:\/([^/]+)\/([^/]+))?$/, describe: (m, verb, body) => entry(`${verb} configuration`, decode(m[1]), segOr(m[2], body?.environmentSlug), segOr(m[3], body?.key), 'configuration') },
+  { methods: WRITE, pattern: /^\/global\/configurations(?:\/([^/]+)\/([^/]+))?$/, describe: (m, verb, body) => entry(`${verb} global configuration`, null, segOr(m[1], body?.environmentSlug), segOr(m[2], body?.key), 'configuration') },
+  { methods: WRITE, pattern: /^\/global\/secrets\/([^/]+)\/values$/, describe: (m, _v, body) => entry('Added global secret version', null, body?.environmentSlug ?? null, decode(m[1]), 'secret') },
+  { methods: WRITE, pattern: /^\/global\/secrets(?:\/([^/]+))?$/, describe: (m, verb, body) => entry(`${verb} global secret`, null, null, segOr(m[1], body?.name), 'secret') },
+];
+
 /** Human-readable audit entry for a successful mutation, mirroring what the audit log will record. */
-function describeMutation(method: string, path: string, body: any): Omit<SeedActivity, 'occurredAt' | 'actor'> | null {
-  const d = (s: string) => decodeURIComponent(s);
-  let m: RegExpMatchArray | null;
-  if (method === 'PATCH') {
-    if ((m = path.match(/^\/applications\/([^/]+)\/secrets\/([^/]+)\/versions\/([^/]+)\/\d+$/))) return { action: 'Updated secret version', application: d(m[1]), environment: d(m[3]), target: d(m[2]), targetType: 'secret' };
-    if ((m = path.match(/^\/global\/secrets\/([^/]+)\/versions\/([^/]+)\/\d+$/))) return { action: 'Updated global secret version', application: null, environment: d(m[2]), target: d(m[1]), targetType: 'secret' };
-    if ((m = path.match(/^\/applications\/([^/]+)\/secrets\/([^/]+)$/))) return { action: 'Updated secret', application: d(m[1]), environment: null, target: d(m[2]), targetType: 'secret' };
-    if ((m = path.match(/^\/global\/secrets\/([^/]+)$/))) return { action: 'Updated global secret', application: null, environment: null, target: d(m[1]), targetType: 'secret' };
-    return null;
+function describeMutation(method: string, path: string, body: any): MutationEntry | null {
+  for (const rule of MUTATION_RULES) {
+    if (!rule.methods.includes(method)) continue;
+    const m = rule.pattern.exec(path);
+    if (m) return rule.describe(m, VERBS[method], body);
   }
-  if (method === 'POST' && path === '/secrets/expiring/notify') return { action: 'Sent rotation reminders', application: null, environment: null, target: null, targetType: null };
-  const verb = method === 'POST' ? 'Created' : method === 'PUT' ? 'Updated' : method === 'DELETE' ? 'Deleted' : null;
-  if (!verb) return null;
-  if (path === '/applications') return { action: 'Created application', application: body?.slug ?? null, environment: null, target: null, targetType: null };
-  if ((m = path.match(/^\/applications\/([^/]+)$/))) return { action: `${verb} application`, application: d(m[1]), environment: null, target: null, targetType: null };
-  if ((m = path.match(/^\/applications\/([^/]+)\/rotate-key$/))) return { action: 'Rotated API key', application: d(m[1]), environment: null, target: null, targetType: null };
-  if ((m = path.match(/^\/applications\/([^/]+)\/environments(?:\/([^/]+))?$/))) return { action: `${m[2] ? 'Deleted' : 'Created'} environment`, application: d(m[1]), environment: m[2] ? d(m[2]) : body?.slug ?? null, target: null, targetType: null };
-  if ((m = path.match(/^\/applications\/([^/]+)\/secrets\/([^/]+)\/values$/))) return { action: 'Added secret version', application: d(m[1]), environment: body?.environmentSlug ?? null, target: d(m[2]), targetType: 'secret' };
-  if ((m = path.match(/^\/applications\/([^/]+)\/secrets(?:\/([^/]+))?$/))) return { action: `${verb} secret`, application: d(m[1]), environment: null, target: m[2] ? d(m[2]) : body?.name ?? null, targetType: 'secret' };
-  if ((m = path.match(/^\/applications\/([^/]+)\/configurations(?:\/([^/]+)\/([^/]+))?$/))) return { action: `${verb} configuration`, application: d(m[1]), environment: m[2] ? d(m[2]) : body?.environmentSlug ?? null, target: m[3] ? d(m[3]) : body?.key ?? null, targetType: 'configuration' };
-  if ((m = path.match(/^\/global\/configurations(?:\/([^/]+)\/([^/]+))?$/))) return { action: `${verb} global configuration`, application: null, environment: m[1] ? d(m[1]) : body?.environmentSlug ?? null, target: m[2] ? d(m[2]) : body?.key ?? null, targetType: 'configuration' };
-  if ((m = path.match(/^\/global\/secrets\/([^/]+)\/values$/))) return { action: 'Added global secret version', application: null, environment: body?.environmentSlug ?? null, target: d(m[1]), targetType: 'secret' };
-  if ((m = path.match(/^\/global\/secrets(?:\/([^/]+))?$/))) return { action: `${verb} global secret`, application: null, environment: null, target: m[1] ? d(m[1]) : body?.name ?? null, targetType: 'secret' };
   return null;
 }
 
@@ -690,7 +713,7 @@ function buildSearch(query: string, limit: number) {
   return { query: term, results: ranked.slice(0, limit), truncated: ranked.length > limit };
 }
 
-const MOCK_AUDIT_OUTCOMES = ['success', 'notfound', 'forbidden', 'invalid', 'conflict', 'error'];
+const MOCK_AUDIT_OUTCOMES = new Set(['success', 'notfound', 'forbidden', 'invalid', 'conflict', 'error']);
 
 type AuditParam = (key: string) => string | null;
 
@@ -703,7 +726,7 @@ function validAuditQuery(param: AuditParam) {
   const to = param('to') ? Date.parse(param('to')!) : null;
   if (!Number.isInteger(page) || page < 1) return null;
   if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 200) return null;
-  if (outcome && !MOCK_AUDIT_OUTCOMES.includes(outcome)) return null;
+  if (outcome && !MOCK_AUDIT_OUTCOMES.has(outcome)) return null;
   if (from !== null && to !== null && from > to) return null;
   return { page, pageSize, from, to };
 }
@@ -833,7 +856,7 @@ function buildExpiring(withinDays: number) {
   const now = Date.now();
   const before = now + withinDays * DAY;
   const items: any[] = [];
-  const push = (secret: any, application: any | null, environment: string, versions: any[]) => {
+  const push = (secret: any, application: { slug: string; name: string } | null, environment: string, versions: any[]) => {
     const due = secretDue(versions, secret.rotationIntervalDays, now);
     if (!due || new Date(due.dueAt).getTime() > before) return;
     items.push({
@@ -894,7 +917,7 @@ export async function mockApiAdapter(config: AxiosRequestConfig): Promise<AxiosR
   const method = (config.method || 'GET').toUpperCase();
   if (method !== 'GET' && response.status >= 200 && response.status < 300) {
     const path = new URL(
-      (config.url || '').replace(/^(https?:\/\/[^\/]+)?\/?/, '/').replace(/^\/management\//, '/'),
+      (config.url || '').replace(/^(https?:\/\/[^/]+)?\/?/, '/').replace(/^\/management\//, '/'),
       'http://localhost'
     ).pathname;
     let body: any = config.data;
@@ -914,7 +937,7 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
   }
   
   // Normalize leading slash and remove domain or /management prefix if any
-  path = path.replace(/^(https?:\/\/[^\/]+)?\/?/, '/');
+  path = path.replace(/^(https?:\/\/[^/]+)?\/?/, '/');
   if (path.startsWith('/management/')) {
     path = path.substring('/management'.length);
   }
@@ -1022,7 +1045,7 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
   }
 
   // 3. GET /applications/:appSlug
-  let match = cleanPath.match(/^\/applications\/([^\/]+)$/);
+  let match = /^\/applications\/([^/]+)$/.exec(cleanPath);
   if (match && method === 'GET') {
     const slug = match[1];
     const app = applications.find(a => a.slug === slug);
@@ -1068,14 +1091,14 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
   }
 
   // 5. POST /applications/:appSlug/rotate-key
-  match = cleanPath.match(/^\/applications\/([^\/]+)\/rotate-key$/);
+  match = /^\/applications\/([^/]+)\/rotate-key$/.exec(cleanPath);
   if (match && method === 'POST') {
     const newKey = `grm_sec_key_${Math.random().toString(36).substring(2, 12)}`;
     return makeResponse(200, { plainApiKey: newKey }, config);
   }
 
   // 6. GET /applications/:appSlug/environments
-  match = cleanPath.match(/^\/applications\/([^\/]+)\/environments$/);
+  match = /^\/applications\/([^/]+)\/environments$/.exec(cleanPath);
   if (match && method === 'GET') {
     const slug = match[1];
     const appEnvs = environments[slug] || [];
@@ -1098,7 +1121,7 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
   }
 
   // 7b. DELETE /applications/:appSlug/environments/:envSlug
-  match = cleanPath.match(/^\/applications\/([^\/]+)\/environments\/([^\/]+)$/);
+  match = /^\/applications\/([^/]+)\/environments\/([^/]+)$/.exec(cleanPath);
   if (match && method === 'DELETE') {
     const appSlug = match[1];
     const envSlug = match[2];
@@ -1119,7 +1142,7 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
   }
 
   // 8. GET /applications/:appSlug/secrets
-  match = cleanPath.match(/^\/applications\/([^\/]+)\/secrets$/);
+  match = /^\/applications\/([^/]+)\/secrets$/.exec(cleanPath);
   if (match && method === 'GET') {
     const slug = match[1];
     const appSecrets = (secrets[slug] || []).map(sanitizeSecretMetadata);
@@ -1153,7 +1176,7 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
   }
 
   // 10. POST /applications/:appSlug/secrets/:secretName/values
-  match = cleanPath.match(/^\/applications\/([^\/]+)\/secrets\/([^\/]+)\/values$/);
+  match = /^\/applications\/([^/]+)\/secrets\/([^/]+)\/values$/.exec(cleanPath);
   if (match && method === 'POST') {
     const appSlug = match[1];
     const secretName = decodeURIComponent(match[2]);
@@ -1194,7 +1217,7 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
   }
 
   // 10b. GET /applications/:appSlug/secrets/:secretName/versions/:envSlug
-  match = cleanPath.match(/^\/applications\/([^\/]+)\/secrets\/([^\/]+)\/versions\/([^\/]+)$/);
+  match = /^\/applications\/([^/]+)\/secrets\/([^/]+)\/versions\/([^/]+)$/.exec(cleanPath);
   if (match && method === 'GET') {
     const appSlug = match[1];
     const secretName = decodeURIComponent(match[2]);
@@ -1205,14 +1228,14 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
   }
 
   // 10b2. PATCH /applications/:appSlug/secrets/:secretName/versions/:envSlug/:version
-  match = cleanPath.match(/^\/applications\/([^\/]+)\/secrets\/([^\/]+)\/versions\/([^\/]+)\/(\d+)$/);
+  match = /^\/applications\/([^/]+)\/secrets\/([^/]+)\/versions\/([^/]+)\/(\d+)$/.exec(cleanPath);
   if (match && method === 'PATCH') {
     const key = `${match[1]}:${decodeURIComponent(match[2])}:${decodeURIComponent(match[3])}`;
     return updateMockVersion(secretVersions, key, Number(match[4]), body, searchParams, config, 'secret_versions');
   }
 
   // 10c. GET /applications/:appSlug/configurations/effective?environment=
-  match = cleanPath.match(/^\/applications\/([^\/]+)\/configurations\/effective$/);
+  match = /^\/applications\/([^/]+)\/configurations\/effective$/.exec(cleanPath);
   if (match && method === 'GET') {
     const appSlug = match[1];
     const app = applications.find(a => a.slug === appSlug);
@@ -1297,7 +1320,7 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
   }
 
   // 10d. GET /applications/:appSlug/secrets/effective
-  match = cleanPath.match(/^\/applications\/([^\/]+)\/secrets\/effective$/);
+  match = /^\/applications\/([^/]+)\/secrets\/effective$/.exec(cleanPath);
   if (match && method === 'GET') {
     const appSlug = match[1];
     const app = applications.find(a => a.slug === appSlug);
@@ -1356,7 +1379,7 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
   }
 
   // 11a. GET /applications/:appSlug/secrets/:secretName
-  match = cleanPath.match(/^\/applications\/([^\/]+)\/secrets\/([^\/]+)$/);
+  match = /^\/applications\/([^/]+)\/secrets\/([^/]+)$/.exec(cleanPath);
   if (match && method === 'GET') {
     const appSlug = match[1];
     const secretName = decodeURIComponent(match[2]);
@@ -1396,7 +1419,7 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
   }
 
   // 12. GET /applications/:appSlug/configurations
-  match = cleanPath.match(/^\/applications\/([^\/]+)\/configurations$/);
+  match = /^\/applications\/([^/]+)\/configurations$/.exec(cleanPath);
   if (match && method === 'GET') {
     const appSlug = match[1];
     const appConfigs = configurations[appSlug] || [];
@@ -1445,7 +1468,7 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
   }
 
   // 14. PUT /applications/:appSlug/configurations/:envSlug/:key
-  match = cleanPath.match(/^\/applications\/([^\/]+)\/configurations\/([^\/]+)\/([^\/]+)$/);
+  match = /^\/applications\/([^/]+)\/configurations\/([^/]+)\/([^/]+)$/.exec(cleanPath);
   if (match && method === 'PUT') {
     const appSlug = match[1];
     const envSlug = decodeURIComponent(match[2]);
@@ -1549,7 +1572,7 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
   }
 
   // 21. PUT & DELETE /global/configurations/:envSlug/:key
-  match = cleanPath.match(/^\/global\/configurations\/([^\/]+)\/([^\/]+)$/);
+  match = /^\/global\/configurations\/([^/]+)\/([^/]+)$/.exec(cleanPath);
   if (match && method === 'PUT') {
     const envSlug = decodeURIComponent(match[1]);
     const key = decodeURIComponent(match[2]);
@@ -1608,7 +1631,7 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
   }
 
   // 23. POST /global/secrets/:name/values
-  match = cleanPath.match(/^\/global\/secrets\/([^\/]+)\/values$/);
+  match = /^\/global\/secrets\/([^/]+)\/values$/.exec(cleanPath);
   if (match && method === 'POST') {
     const secretName = decodeURIComponent(match[1]);
     const secret = globalSecrets.find((s: any) => s.name === secretName);
@@ -1642,7 +1665,7 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
   }
 
   // 24. GET /global/secrets/:name/versions/:envSlug
-  match = cleanPath.match(/^\/global\/secrets\/([^\/]+)\/versions\/([^\/]+)$/);
+  match = /^\/global\/secrets\/([^/]+)\/versions\/([^/]+)$/.exec(cleanPath);
   if (match && method === 'GET') {
     const secretName = decodeURIComponent(match[1]);
     const envSlug = decodeURIComponent(match[2]);
@@ -1651,14 +1674,14 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
   }
 
   // 24b. PATCH /global/secrets/:name/versions/:envSlug/:version
-  match = cleanPath.match(/^\/global\/secrets\/([^\/]+)\/versions\/([^\/]+)\/(\d+)$/);
+  match = /^\/global\/secrets\/([^/]+)\/versions\/([^/]+)\/(\d+)$/.exec(cleanPath);
   if (match && method === 'PATCH') {
     const key = `${decodeURIComponent(match[1])}:${decodeURIComponent(match[2])}`;
     return updateMockVersion(globalSecretVersions, key, Number(match[3]), body, searchParams, config, 'global_secret_versions');
   }
 
   // 25. GET & DELETE /global/secrets/:name
-  match = cleanPath.match(/^\/global\/secrets\/([^\/]+)$/);
+  match = /^\/global\/secrets\/([^/]+)$/.exec(cleanPath);
   if (match && method === 'GET') {
     const secretName = decodeURIComponent(match[1]);
     const secret = globalSecrets.find((s: any) => s.name === secretName);

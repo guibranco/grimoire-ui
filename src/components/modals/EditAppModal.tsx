@@ -20,6 +20,7 @@ import { Application } from '@/types/api';
 import { useQueryClient } from '@tanstack/react-query';
 import { Loader2, Box } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { apiErrorMessage } from '@/lib/errors';
 
 const schema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -78,7 +79,7 @@ export const EditAppModal: React.FC<EditAppModalProps> = ({ app, open, onOpenCha
       onOpenChange(false);
       toast.success('Application updated');
     } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Failed to update application');
+      toast.error(apiErrorMessage(err, 'Failed to update application'));
     } finally {
       setLoading(false);
     }

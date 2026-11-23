@@ -49,6 +49,7 @@ import { ConfirmationModal } from '@/components/shared/ConfirmationModal';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import toast from 'react-hot-toast';
+import { apiErrorMessage } from '@/lib/errors';
 
 interface GrimoireTabProps {
   appSlug: string;
@@ -320,8 +321,8 @@ export const GrimoireTab: React.FC<GrimoireTabProps> = ({ appSlug, highlightedNa
       await queryClient.invalidateQueries({ queryKey: ['effective-configurations', appSlug] });
       await queryClient.invalidateQueries({ queryKey: ['effective-secrets', appSlug] });
       toast.success('Global inheritance enabled');
-    } catch {
-      toast.error('Failed to enable global inheritance');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to enable global inheritance'));
     } finally {
       setEnablingInheritance(false);
     }
@@ -341,8 +342,8 @@ export const GrimoireTab: React.FC<GrimoireTabProps> = ({ appSlug, highlightedNa
       }
       toast.success(wasOverride ? 'Global value is active again' : 'Secret deleted');
       setDeletingSecret(null);
-    } catch {
-      toast.error('Failed to delete secret');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to delete secret'));
     }
   };
 

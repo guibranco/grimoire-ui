@@ -17,7 +17,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ConfigValueCell, ConfigValueField, useConfigValue } from '@/components/shared/ConfigValueEditor';
-import { exportValue, importEntry, saveErrorMessage, valueTypeOf } from '@/lib/configValue';
+import { exportValue, importEntry, valueTypeOf } from '@/lib/configValue';
 import { Badge } from '@/components/ui/badge';
 import {
   Table,
@@ -31,6 +31,7 @@ import { ConfirmationModal } from '@/components/shared/ConfirmationModal';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import toast from 'react-hot-toast';
+import { apiErrorMessage } from '@/lib/errors';
 
 interface GlobalConfigTabProps {
   highlightedKey?: string | null;
@@ -158,8 +159,8 @@ export const GlobalConfigTab: React.FC<GlobalConfigTabProps> = ({
       a.click();
       URL.revokeObjectURL(url);
       toast.success('Global configurations exported');
-    } catch {
-      toast.error('Failed to export global configurations');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to export global configurations'));
     }
   };
 
@@ -195,8 +196,8 @@ export const GlobalConfigTab: React.FC<GlobalConfigTabProps> = ({
         await queryClient.invalidateQueries({ queryKey: ['global-configurations'] });
         await queryClient.invalidateQueries({ queryKey: ['effective-configurations'] });
         toast.success(`Imported ${requests.length} global configurations`);
-      } catch {
-        toast.error('Failed to import JSON. Expected format: { "<envSlug>": { "key": "value" } }.');
+      } catch (err) {
+        toast.error(apiErrorMessage(err, 'Failed to import JSON. Expected format: { "<envSlug>": { "key": "value" } }.'));
       }
     };
     reader.readAsText(file);
@@ -216,8 +217,8 @@ export const GlobalConfigTab: React.FC<GlobalConfigTabProps> = ({
       await queryClient.invalidateQueries({ queryKey: ['effective-configurations'] });
       toast.success('Global configuration deleted');
       setDeletingItem(null);
-    } catch {
-      toast.error('Failed to delete global configuration');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to delete global configuration'));
     }
   };
 
@@ -535,7 +536,7 @@ const GlobalConfigRow: React.FC<GlobalConfigRowProps> = ({
       if (err?.response?.status === 409) {
         toast.error('Global configuration key already exists for this environment');
       } else {
-        toast.error(err?.response?.data?.message || saveErrorMessage(err, 'Failed to save global configuration'));
+        toast.error(apiErrorMessage(err, 'Failed to save global configuration'));
       }
     } finally {
       setLoading(false);

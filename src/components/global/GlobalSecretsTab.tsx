@@ -38,6 +38,7 @@ import { ConfirmationModal } from '@/components/shared/ConfirmationModal';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import toast from 'react-hot-toast';
+import { apiErrorMessage } from '@/lib/errors';
 
 interface GlobalSecretsTabProps {
   highlightedName?: string | null;
@@ -244,8 +245,8 @@ export const GlobalSecretsTab: React.FC<GlobalSecretsTabProps> = ({
       }
       toast.success('Global secret deleted');
       setDeletingSecret(null);
-    } catch {
-      toast.error('Failed to delete global secret');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to delete global secret'));
     }
   };
 

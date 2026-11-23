@@ -18,6 +18,7 @@ import {
 } from '@/lib/rotation';
 import type { ExpiringSecret, RotationReminderRun } from '@/types/api';
 import { useExpiringSecrets } from './useExpiringSecrets';
+import { apiErrorMessage } from '@/lib/errors';
 
 const chip = 'h-[26px] px-2.5 border text-[10px] font-bold uppercase tracking-widest transition-colors';
 
@@ -36,24 +37,24 @@ const DueCell: React.FC<{ item: ExpiringSecret }> = ({ item }) => {
 const ReminderStatus: React.FC<{ run: RotationReminderRun }> = ({ run }) => {
   if (!run.webhookConfigured) {
     return (
-      <p role="status" className="text-[11px] text-amber-400">
+      <output className="block text-[11px] text-amber-400">
         {run.due} due, but no webhook is configured: set <code className="font-mono">RotationReminders:WebhookUrl</code> on
         the API to send reminders.
-      </p>
+      </output>
     );
   }
   if (!run.delivered) {
     return (
-      <p role="status" className="text-[11px] text-red-400">
+      <output className="block text-[11px] text-red-400">
         The webhook call failed. Nothing was marked as sent; the next run will retry.
-      </p>
+      </output>
     );
   }
   return (
-    <p role="status" className="text-[11px] text-emerald-400">
+    <output className="block text-[11px] text-emerald-400">
       Sent {run.sent} reminder{run.sent === 1 ? '' : 's'}
       {run.alreadySent > 0 && <span className="text-zinc-500"> · {run.alreadySent} already sent before</span>}
-    </p>
+    </output>
   );
 };
 
@@ -74,7 +75,7 @@ export const RotationView: React.FC = () => {
     onSuccess: (run) => setLastRun(run),
     onError: (err: any) => {
       if (err?.response?.status === 502 && err.response.data) setLastRun(err.response.data);
-      else toast.error('Failed to run rotation reminders');
+      else toast.error(apiErrorMessage(err, 'Failed to run rotation reminders'));
     },
   });
 
@@ -86,6 +87,98 @@ export const RotationView: React.FC = () => {
   };
 
   const items = data?.items ?? [];
+
+  let content: React.ReactNode;
+  if (isPending) {
+    content = (
+      <div className="flex items-center justify-center py-16" aria-busy="true" aria-label="Loading expiring secrets">
+        <Loader2 className="w-5 h-5 animate-spin text-zinc-500" />
+      </div>
+    );
+  } else if (error || !data) {
+    content = (
+      <div role="alert" className="flex flex-col items-center gap-3 py-16 border border-red-500/30 bg-red-500/5 text-center">
+        <AlertOctagon className="w-6 h-6 text-red-400" aria-hidden="true" />
+        <h3 className="text-sm font-bold text-zinc-100">Couldn't load expiring secrets</h3>
+        <p className="text-xs text-zinc-500 max-w-sm">
+          Check the connection, or that the API is recent enough to provide{' '}
+          <code className="font-mono text-zinc-400">/management/secrets/expiring</code>.
+        </p>
+      </div>
+    );
+  } else if (items.length === 0) {
+    content = (
+      <div className="flex items-center gap-3 p-4 border border-border bg-card/60 text-sm text-emerald-400">
+        <CheckCircle2 className="w-4 h-4" aria-hidden="true" />
+        <span className="font-semibold">Nothing due</span>
+        <span className="text-xs text-zinc-500">No secret expires or needs rotating in the next {within} days.</span>
+      </div>
+    );
+  } else {
+    content = (
+      <div className="border border-border overflow-x-auto">
+        <table className="w-full text-left" aria-label="Expiring secrets">
+          <thead className="bg-black/40">
+            <tr className="text-[10px] uppercase font-bold tracking-widest text-zinc-500">
+              <th scope="col" className="px-4 h-8">Due</th>
+              <th scope="col" className="px-4 h-8">Secret</th>
+              <th scope="col" className="px-4 h-8">Where</th>
+              <th scope="col" className="px-4 h-8">Reason</th>
+              <th scope="col" className="px-4 h-8 hidden md:table-cell">Version</th>
+              <th scope="col" className="px-4 h-8 hidden md:table-cell">Rotate every</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item) => {
+              const bucket = dueBucket(item);
+              return (
+                <tr
+                  key={`${item.isGlobal ? 'g' : item.application}:${item.secret}:${item.environment}`}
+                  data-bucket={bucket}
+                  className={cn('border-t border-zinc-900 hover:bg-zinc-900/60 border-l-2', {
+                    'border-l-red-500': bucket === 'overdue',
+                    'border-l-amber-500': bucket === 'week',
+                    'border-l-yellow-400': bucket === 'month',
+                    'border-l-zinc-700': bucket === 'later',
+                  })}
+                >
+                  <td className="px-4 py-2 whitespace-nowrap"><DueCell item={item} /></td>
+                  <td className="px-4 py-2">
+                    <Link to={expiringSecretLink(item)} className="font-mono text-sm text-zinc-200 hover:text-grimoire break-all">
+                      {item.secret}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-2 text-xs text-zinc-400">
+                    {item.isGlobal ? (
+                      <span className="inline-flex items-center gap-1 text-global">
+                        <Globe className="w-3 h-3" aria-hidden="true" />
+                        Global
+                      </span>
+                    ) : (
+                      item.applicationName ?? item.application
+                    )}
+                    <span className="font-mono text-zinc-500">
+                      {' / '}
+                      {item.environment === '*' ? 'all environments' : item.environment}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2">
+                    <span className={cn('px-1.5 py-0.5 border text-[10px] font-bold uppercase tracking-widest whitespace-nowrap', BUCKET_STYLES[bucket].badge)}>
+                      {reasonLabel(item.reason)}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2 hidden md:table-cell font-mono text-xs text-zinc-400">v{item.version}</td>
+                  <td className="px-4 py-2 hidden md:table-cell font-mono text-xs text-zinc-400">
+                    {item.rotationIntervalDays ? `${item.rotationIntervalDays} days` : '—'}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 overflow-auto bg-[#0A0A0B]">
@@ -102,7 +195,8 @@ export const RotationView: React.FC = () => {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <div role="group" aria-label="Due within" className="flex items-center gap-1">
+            <fieldset className="flex items-center gap-1 border-0 p-0 m-0">
+              <legend className="sr-only">Due within</legend>
               {ROTATION_WINDOWS.map((days) => (
                 <button
                   key={days}
@@ -119,7 +213,7 @@ export const RotationView: React.FC = () => {
                   {days} days
                 </button>
               ))}
-            </div>
+            </fieldset>
             <button
               type="button"
               onClick={() => void refetch()}
@@ -144,88 +238,7 @@ export const RotationView: React.FC = () => {
 
         {lastRun && <ReminderStatus run={lastRun} />}
 
-        {isPending ? (
-          <div className="flex items-center justify-center py-16" aria-busy="true" aria-label="Loading expiring secrets">
-            <Loader2 className="w-5 h-5 animate-spin text-zinc-500" />
-          </div>
-        ) : error || !data ? (
-          <div role="alert" className="flex flex-col items-center gap-3 py-16 border border-red-500/30 bg-red-500/5 text-center">
-            <AlertOctagon className="w-6 h-6 text-red-400" aria-hidden="true" />
-            <h3 className="text-sm font-bold text-zinc-100">Couldn't load expiring secrets</h3>
-            <p className="text-xs text-zinc-500 max-w-sm">
-              Check the connection, or that the API is recent enough to provide{' '}
-              <code className="font-mono text-zinc-400">/management/secrets/expiring</code>.
-            </p>
-          </div>
-        ) : items.length === 0 ? (
-          <div className="flex items-center gap-3 p-4 border border-border bg-card/60 text-sm text-emerald-400">
-            <CheckCircle2 className="w-4 h-4" aria-hidden="true" />
-            <span className="font-semibold">Nothing due</span>
-            <span className="text-xs text-zinc-500">No secret expires or needs rotating in the next {within} days.</span>
-          </div>
-        ) : (
-          <div className="border border-border overflow-x-auto">
-            <table className="w-full text-left" aria-label="Expiring secrets">
-              <thead className="bg-black/40">
-                <tr className="text-[10px] uppercase font-bold tracking-widest text-zinc-500">
-                  <th scope="col" className="px-4 h-8">Due</th>
-                  <th scope="col" className="px-4 h-8">Secret</th>
-                  <th scope="col" className="px-4 h-8">Where</th>
-                  <th scope="col" className="px-4 h-8">Reason</th>
-                  <th scope="col" className="px-4 h-8 hidden md:table-cell">Version</th>
-                  <th scope="col" className="px-4 h-8 hidden md:table-cell">Rotate every</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item) => {
-                  const bucket = dueBucket(item);
-                  return (
-                    <tr
-                      key={`${item.isGlobal ? 'g' : item.application}:${item.secret}:${item.environment}`}
-                      data-bucket={bucket}
-                      className={cn('border-t border-zinc-900 hover:bg-zinc-900/60 border-l-2', {
-                        'border-l-red-500': bucket === 'overdue',
-                        'border-l-amber-500': bucket === 'week',
-                        'border-l-yellow-400': bucket === 'month',
-                        'border-l-zinc-700': bucket === 'later',
-                      })}
-                    >
-                      <td className="px-4 py-2 whitespace-nowrap"><DueCell item={item} /></td>
-                      <td className="px-4 py-2">
-                        <Link to={expiringSecretLink(item)} className="font-mono text-sm text-zinc-200 hover:text-grimoire break-all">
-                          {item.secret}
-                        </Link>
-                      </td>
-                      <td className="px-4 py-2 text-xs text-zinc-400">
-                        {item.isGlobal ? (
-                          <span className="inline-flex items-center gap-1 text-global">
-                            <Globe className="w-3 h-3" aria-hidden="true" />
-                            Global
-                          </span>
-                        ) : (
-                          item.applicationName ?? item.application
-                        )}
-                        <span className="font-mono text-zinc-500">
-                          {' / '}
-                          {item.environment === '*' ? 'all environments' : item.environment}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2">
-                        <span className={cn('px-1.5 py-0.5 border text-[10px] font-bold uppercase tracking-widest whitespace-nowrap', BUCKET_STYLES[bucket].badge)}>
-                          {reasonLabel(item.reason)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2 hidden md:table-cell font-mono text-xs text-zinc-400">v{item.version}</td>
-                      <td className="px-4 py-2 hidden md:table-cell font-mono text-xs text-zinc-400">
-                        {item.rotationIntervalDays ? `${item.rotationIntervalDays} days` : '—'}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+        {content}
       </div>
     </div>
   );
