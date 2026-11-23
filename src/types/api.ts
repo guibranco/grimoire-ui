@@ -538,3 +538,31 @@ export interface CreateAccessTokenResponse {
   token: AccessToken;
   plainToken: string;
 }
+
+/** Which GitHub Actions runs may exchange their OIDC token for an access token (guibranco/grimoire-api#75). */
+export interface TrustPolicy {
+  id: string;
+  name: string;
+  /** `owner/repo`. */
+  repository: string;
+  /** e.g. `refs/heads/main`, `refs/tags/v*`; `null` for any ref. */
+  refPattern: string | null;
+  /** The job's GitHub environment; `null` for any. */
+  gitHubEnvironment: string | null;
+  /** Grimoire environments the issued token may read; `null` for all. */
+  environments: string[] | null;
+  scopes: AccessTokenScope[];
+  tokenLifetimeMinutes: number;
+  lastUsedAt: string | null;
+  createdAt: string;
+}
+
+export interface TrustPolicyRequest {
+  name: string;
+  repository: string;
+  refPattern: string | null;
+  gitHubEnvironment: string | null;
+  environments: string[] | null;
+  scopes: AccessTokenScope[];
+  tokenLifetimeMinutes: number;
+}

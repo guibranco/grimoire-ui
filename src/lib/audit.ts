@@ -20,6 +20,16 @@ export const AUDIT_ACTION_GROUPS: { label: string; prefix: string; actions: { co
       { code: 'access-token.create', label: 'Created access token' },
       { code: 'access-token.revoke', label: 'Revoked access token' },
       { code: 'access-token.denied', label: 'Denied access token request' },
+      { code: 'access-token.oidc-exchange', label: 'Exchanged GitHub OIDC token' },
+    ],
+  },
+  {
+    label: 'Trust policies',
+    prefix: 'trust-policy.*',
+    actions: [
+      { code: 'trust-policy.create', label: 'Created trust policy' },
+      { code: 'trust-policy.update', label: 'Updated trust policy' },
+      { code: 'trust-policy.delete', label: 'Deleted trust policy' },
     ],
   },
   {
