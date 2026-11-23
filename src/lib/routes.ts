@@ -6,12 +6,12 @@
  * so encoding and defaults stay consistent.
  */
 
-export type AppTab = 'config' | 'secrets' | 'activity';
+export type AppTab = 'config' | 'secrets' | 'activity' | 'compare';
 /** Tabs that list entries (and can highlight one with `?key=`). */
 export type EntryTab = 'config' | 'secrets';
 export type GlobalTab = 'config' | 'secrets';
 
-export const APP_TABS: readonly AppTab[] = ['config', 'secrets', 'activity'];
+export const APP_TABS: readonly AppTab[] = ['config', 'secrets', 'activity', 'compare'];
 export const GLOBAL_TABS: readonly GlobalTab[] = ['config', 'secrets'];
 
 export const DEFAULT_APP_TAB: AppTab = 'config';
@@ -46,6 +46,10 @@ export const appPath = (
   if (key) path += `?${new URLSearchParams({ key }).toString()}`;
   return path;
 };
+
+/** `/apps/:appSlug/:from/compare[?to=...]` — the environment comparison tab. */
+export const comparePath = (appSlug: string, from: string, to?: string | null) =>
+  `/apps/${seg(appSlug)}/${seg(from)}/compare${to ? `?${new URLSearchParams({ to }).toString()}` : ''}`;
 
 /** `/global[/:tab][?key=...]`. `key` highlights a config key or secret name. */
 export const globalPath = (tab?: GlobalTab | null, key?: string | null) => {

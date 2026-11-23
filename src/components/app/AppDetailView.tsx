@@ -9,7 +9,8 @@ import { ApplicationHeader } from '@/components/layout/ApplicationHeader';
 import { GrimoireTab } from '@/components/grimoire/GrimoireTab';
 import { ConfigTab } from '@/components/config/ConfigTab';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Flag, History, Lock, Settings, Loader2 } from 'lucide-react';
+import { Flag, GitCompare, History, Lock, Settings, Loader2 } from 'lucide-react';
+import { CompareTab } from '@/components/compare/CompareTab';
 import { AuditLogPanel } from '@/components/audit/AuditLogPanel';
 import { ConfirmationModal } from '@/components/shared/ConfirmationModal';
 import { NotFoundView } from '@/components/shared/NotFoundView';
@@ -229,6 +230,13 @@ const AppDetail: React.FC<{ appSlug: string }> = ({ appSlug }) => {
               <History className="w-3.5 h-3.5" />
               Activity
             </TabsTrigger>
+            <TabsTrigger
+              value="compare"
+              className="px-4 md:px-6 shrink-0 h-full bg-transparent border-r border-border data-[state=active]:bg-config/5 data-[state=active]:border-b-2 data-[state=active]:border-b-config data-[state=active]:text-config rounded-none font-bold uppercase tracking-tight text-[11px] gap-2 transition-all shadow-none"
+            >
+              <GitCompare className="w-3.5 h-3.5" />
+              Compare
+            </TabsTrigger>
           </TabsList>
         </div>
 
@@ -250,6 +258,9 @@ const AppDetail: React.FC<{ appSlug: string }> = ({ appSlug }) => {
           </TabsContent>
           <TabsContent value="activity" className="m-0 min-h-full p-4 md:p-6">
             {activeTab === 'activity' && <AuditLogPanel application={app.slug} />}
+          </TabsContent>
+          <TabsContent value="compare" className="m-0 min-h-full">
+            {activeTab === 'compare' && <CompareTab appSlug={app.slug} envs={safeEnvs} fromSlug={activeEnvSlug} />}
           </TabsContent>
         </div>
       </Tabs>

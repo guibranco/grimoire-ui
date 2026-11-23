@@ -312,6 +312,8 @@ let secretVersions = getStored<Record<string, any[]>>('secret_versions', DEFAULT
 let globalConfigurations = getStored('global_configurations', DEFAULT_GLOBAL_CONFIGURATIONS);
 let globalSecrets = getStored('global_secrets', DEFAULT_GLOBAL_SECRETS);
 let globalSecretVersions = getStored<Record<string, any[]>>('global_secret_versions', DEFAULT_GLOBAL_SECRET_VERSIONS);
+/** Configuration revisions (guibranco/grimoire-api#77), keyed by `a:{app}:{env}:{key}` or `g:{env}:{key}`. */
+let configRevisions = getStored<Record<string, any[]>>('config_revisions', {});
 
 function sanitizeSecretMetadata(secret: any) {
   if (!secret) return secret;
@@ -329,6 +331,7 @@ export function resetMockDatabase() {
   globalConfigurations = structuredClone(DEFAULT_GLOBAL_CONFIGURATIONS);
   globalSecrets = structuredClone(DEFAULT_GLOBAL_SECRETS);
   globalSecretVersions = structuredClone(DEFAULT_GLOBAL_SECRET_VERSIONS);
+  configRevisions = {};
   activityLog = seedActivity();
   if (isBrowser) {
     localStorage.removeItem('grm_mock_applications');
@@ -339,6 +342,7 @@ export function resetMockDatabase() {
     localStorage.removeItem('grm_mock_global_configurations');
     localStorage.removeItem('grm_mock_global_secrets');
     localStorage.removeItem('grm_mock_global_secret_versions');
+    localStorage.removeItem('grm_mock_config_revisions');
   }
 }
 
@@ -437,6 +441,10 @@ const MUTATION_RULES: MutationRule[] = [
   { methods: ['PATCH'], pattern: /^\/applications\/([^/]+)\/secrets\/([^/]+)$/, describe: (m) => entry('Updated secret', decode(m[1]), null, decode(m[2]), 'secret') },
   { methods: ['PATCH'], pattern: /^\/global\/secrets\/([^/]+)$/, describe: (m) => entry('Updated global secret', null, null, decode(m[1]), 'secret') },
   { methods: ['POST'], pattern: /^\/secrets\/expiring\/notify$/, describe: () => entry('Sent rotation reminders', null, null, null, null) },
+  { methods: ['POST'], pattern: /^\/applications\/([^/]+)\/configurations\/([^/]+)\/([^/]+)\/rollback\/\d+$/, describe: (m) => entry('Rolled back configuration', decode(m[1]), decode(m[2]), decode(m[3]), 'configuration') },
+  { methods: ['POST'], pattern: /^\/global\/configurations\/([^/]+)\/([^/]+)\/rollback\/\d+$/, describe: (m) => entry('Rolled back global configuration', null, decode(m[1]), decode(m[2]), 'configuration') },
+  { methods: ['POST'], pattern: /^\/applications\/([^/]+)\/secrets\/([^/]+)\/versions\/([^/]+)\/\d+\/rollback$/, describe: (m) => entry('Rolled back secret', decode(m[1]), decode(m[3]), decode(m[2]), 'secret') },
+  { methods: ['POST'], pattern: /^\/global\/secrets\/([^/]+)\/versions\/([^/]+)\/\d+\/rollback$/, describe: (m) => entry('Rolled back global secret', null, decode(m[2]), decode(m[1]), 'secret') },
   { methods: ['POST'], pattern: /^\/applications$/, describe: (_m, _v, body) => entry('Created application', body?.slug ?? null, null, null, null) },
   { methods: WRITE, pattern: /^\/applications\/([^/]+)$/, describe: (m, verb) => entry(`${verb} application`, decode(m[1]), null, null, null) },
   { methods: WRITE, pattern: /^\/applications\/([^/]+)\/rotate-key$/, describe: (m) => entry('Rotated API key', decode(m[1]), null, null, null) },
@@ -823,6 +831,203 @@ function updateMockVersion(
   Object.assign(target, next);
   saveStored(storageKey, store);
   return makeResponse(200, withStatus(versions).find((v) => v.version === version), config);
+}
+
+
+// ── Configuration history (guibranco/grimoire-api#77) ─────────────────────────
+
+const revisionKey = (appSlug: string | null, envSlug: string, key: string) =>
+  appSlug ? `a:${appSlug}:${envSlug}:${key}` : `g:${envSlug}:${key}`;
+
+const revisionOf = (entry: any, revision: number, change: string, changedBy = 'admin', rolledBackFrom: number | null = null) => ({
+  revision,
+  change,
+  value: change === 'delete' ? null : entry.value,
+  valueType: entry.valueType ?? 'string',
+  description: entry.description || null,
+  rolledBackFrom,
+  changedBy,
+  changedAt: change === 'baseline' ? entry.updatedAt ?? entry.createdAt ?? new Date().toISOString() : new Date().toISOString(),
+});
+
+/** Revisions oldest first; entries that predate history get a `baseline`, like the API migration. */
+function revisionsFor(k: string, current: any | undefined): any[] {
+  if (!configRevisions[k] && current) configRevisions[k] = [revisionOf(current, 1, 'baseline', 'system')];
+  return configRevisions[k] ?? [];
+}
+
+/** Appends a revision when value, type or description changed (or on create/delete). */
+function recordConfigRevision(k: string, before: any | undefined, after: any | undefined, rolledBackFrom: number | null = null) {
+  const list = revisionsFor(k, before);
+  const same =
+    before && after && before.value === after.value && (before.valueType ?? 'string') === (after.valueType ?? 'string') &&
+    (before.description || null) === (after.description || null);
+  if (same) return;
+  let change = 'update';
+  if (!after) change = 'delete';
+  else if (rolledBackFrom !== null) change = 'rollback';
+  else if (!before) change = 'create';
+  list.push(revisionOf(after ?? before, list.length + 1, change, 'admin', rolledBackFrom));
+  configRevisions[k] = list;
+  saveStored('config_revisions', configRevisions);
+}
+
+const snapshot = (entry: any) => (entry ? { ...entry } : undefined);
+
+function historyResponse(k: string, current: any, config: AxiosRequestConfig) {
+  const list = revisionsFor(k, current);
+  if (list.length === 0) return makeResponse(404, { title: 'Not Found', status: 404, detail: 'Configuration not found.' }, config);
+  return makeResponse(200, [...list].reverse(), config);
+}
+
+/** Restores a revision into `entries` (creating the entry if it was deleted), recording a rollback. */
+function rollbackConfig(
+  k: string,
+  entries: any[],
+  find: (e: any) => boolean,
+  create: () => any,
+  revision: number,
+  config: AxiosRequestConfig,
+  save: () => void
+) {
+  const current = entries.find(find);
+  const target = revisionsFor(k, current).find((r) => r.revision === revision);
+  if (!target) return makeResponse(404, { title: 'Not Found', status: 404, detail: 'Revision not found.' }, config);
+  if (target.value === null) {
+    return makeResponse(400, { title: 'Bad Request', status: 400, detail: `Revision ${revision} deleted the key, so it has no value to restore.` }, config);
+  }
+  const before = snapshot(current);
+  const entry = current ?? create();
+  if (!current) entries.push(entry);
+  entry.value = target.value;
+  entry.valueType = target.valueType;
+  entry.description = target.description ?? '';
+  entry.updatedAt = new Date().toISOString();
+  recordConfigRevision(k, before, entry, revision);
+  save();
+  return makeResponse(200, entry, config);
+}
+
+/** Mirrors `GET …/configurations/diff`: effective configuration of two environments, key by key. */
+function buildConfigDiff(appSlug: string, from: string, to: string, includeUnchanged: boolean) {
+  const left = new Map<string, any>(effectiveConfigFor(appSlug, from).map((e) => [e.key, e]));
+  const right = new Map<string, any>(effectiveConfigFor(appSlug, to).map((e) => [e.key, e]));
+  const side = (e: any) =>
+    e ? { value: e.value, valueType: e.valueType ?? 'string', source: e.source, globalEnvironmentSlug: e.globalEnvironmentSlug ?? null } : null;
+  const status = (a: any, b: any) => {
+    if (!a) return 'added';
+    if (!b) return 'removed';
+    return a.value === b.value && (a.valueType ?? 'string') === (b.valueType ?? 'string') ? 'unchanged' : 'changed';
+  };
+  const keys = [...new Set([...left.keys(), ...right.keys()])].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  return keys
+    .map((key) => ({ key, status: status(left.get(key), right.get(key)), from: side(left.get(key)), to: side(right.get(key)) }))
+    .filter((d) => includeUnchanged || d.status !== 'unchanged');
+}
+
+/** Copies a version's stored value into a new current version (the demo stores values in clear). */
+function rollbackSecret(store: Record<string, any[]>, k: string, version: number, body: any, config: AxiosRequestConfig, save: () => void) {
+  const versions = store[k] || [];
+  const source = versions.find((v: any) => v.version === version);
+  if (!source) return makeResponse(404, { title: 'Not Found', status: 404, detail: 'Secret version not found.' }, config);
+  const next = Math.max(...versions.map((v: any) => v.version)) + 1;
+  applyGracePeriod(versions, body?.previousVersionGraceDays);
+  const created = {
+    ...source,
+    id: `ver-${Date.now()}`,
+    version: next,
+    isEnabled: true,
+    expiresAt: null,
+    notBefore: null,
+    createdAt: new Date().toISOString(),
+  };
+  versions.unshift(created);
+  store[k] = versions;
+  save();
+  const { value: _hidden, ...metadata } = withStatus(versions).find((v: any) => v.version === next) as any;
+  return makeResponse(200, metadata, config);
+}
+
+/** Mirrors the API's effective configuration: application values, then the env-slug global, then `*`. */
+function effectiveConfigFor(appSlug: string, envSlug: string): any[] {
+  const app = applications.find(a => a.slug === appSlug);
+  const appConfigs = (configurations[appSlug] || []).filter(c => !envSlug || c.environmentSlug === envSlug);
+  const inherits = app ? app.inheritGlobals !== false : true;
+
+  if (!inherits) {
+    const appOnly = appConfigs.map(c => ({
+      key: c.key,
+      value: c.value,
+      valueType: c.valueType ?? 'string',
+      description: c.description,
+      source: 'application',
+      globalEnvironmentSlug: null,
+      overridesGlobal: false,
+    }));
+    return appOnly;
+  }
+
+  const globalStarMap = new Map<string, any>();
+  const globalEnvMap = new Map<string, any>();
+  globalConfigurations.forEach((gc: any) => {
+    if (gc.environmentSlug === '*') {
+      globalStarMap.set(gc.key, gc);
+    } else if (envSlug && gc.environmentSlug === envSlug) {
+      globalEnvMap.set(gc.key, gc);
+    }
+  });
+
+  const appConfigMap = new Map<string, any>();
+  appConfigs.forEach((c: any) => appConfigMap.set(c.key, c));
+
+  const allKeys = new Set<string>([
+    ...appConfigMap.keys(),
+    ...globalEnvMap.keys(),
+    ...globalStarMap.keys(),
+  ]);
+
+  const effective = Array.from(allKeys).map((key) => {
+    const appItem = appConfigMap.get(key);
+    const envGlobal = globalEnvMap.get(key);
+    const starGlobal = globalStarMap.get(key);
+    const hasGlobal = !!(envGlobal || starGlobal);
+
+    if (appItem) {
+      return {
+        key: appItem.key,
+        value: appItem.value,
+        valueType: appItem.valueType ?? 'string',
+        description: appItem.description,
+        source: 'application',
+        globalEnvironmentSlug: null,
+        overridesGlobal: hasGlobal,
+      };
+    }
+
+    if (envGlobal) {
+      return {
+        key: envGlobal.key,
+        value: envGlobal.value,
+        valueType: envGlobal.valueType ?? 'string',
+        description: envGlobal.description,
+        source: 'global',
+        globalEnvironmentSlug: envGlobal.environmentSlug,
+        overridesGlobal: false,
+      };
+    }
+
+    return {
+      key: starGlobal.key,
+      value: starGlobal.value,
+      valueType: starGlobal.valueType ?? 'string',
+      description: starGlobal.description,
+      source: 'global',
+      globalEnvironmentSlug: '*',
+      overridesGlobal: false,
+    };
+  });
+
+  return effective;
 }
 
 /** PATCH a secret's description / rotation interval, validated like the API. */
@@ -1237,86 +1442,8 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
   // 10c. GET /applications/:appSlug/configurations/effective?environment=
   match = /^\/applications\/([^/]+)\/configurations\/effective$/.exec(cleanPath);
   if (match && method === 'GET') {
-    const appSlug = match[1];
-    const app = applications.find(a => a.slug === appSlug);
     const envSlug = searchParams.get('environment') || config.params?.environment || '';
-    const appConfigs = (configurations[appSlug] || []).filter(c => !envSlug || c.environmentSlug === envSlug);
-    const inherits = app ? app.inheritGlobals !== false : true;
-
-    if (!inherits) {
-      const appOnly = appConfigs.map(c => ({
-        key: c.key,
-        value: c.value,
-        valueType: c.valueType ?? 'string',
-        description: c.description,
-        source: 'application',
-        globalEnvironmentSlug: null,
-        overridesGlobal: false,
-      }));
-      return makeResponse(200, appOnly, config);
-    }
-
-    const globalStarMap = new Map<string, any>();
-    const globalEnvMap = new Map<string, any>();
-    globalConfigurations.forEach((gc: any) => {
-      if (gc.environmentSlug === '*') {
-        globalStarMap.set(gc.key, gc);
-      } else if (envSlug && gc.environmentSlug === envSlug) {
-        globalEnvMap.set(gc.key, gc);
-      }
-    });
-
-    const appConfigMap = new Map<string, any>();
-    appConfigs.forEach((c: any) => appConfigMap.set(c.key, c));
-
-    const allKeys = new Set<string>([
-      ...appConfigMap.keys(),
-      ...globalEnvMap.keys(),
-      ...globalStarMap.keys(),
-    ]);
-
-    const effective = Array.from(allKeys).map((key) => {
-      const appItem = appConfigMap.get(key);
-      const envGlobal = globalEnvMap.get(key);
-      const starGlobal = globalStarMap.get(key);
-      const hasGlobal = !!(envGlobal || starGlobal);
-
-      if (appItem) {
-        return {
-          key: appItem.key,
-          value: appItem.value,
-          valueType: appItem.valueType ?? 'string',
-          description: appItem.description,
-          source: 'application',
-          globalEnvironmentSlug: null,
-          overridesGlobal: hasGlobal,
-        };
-      }
-
-      if (envGlobal) {
-        return {
-          key: envGlobal.key,
-          value: envGlobal.value,
-          valueType: envGlobal.valueType ?? 'string',
-          description: envGlobal.description,
-          source: 'global',
-          globalEnvironmentSlug: envGlobal.environmentSlug,
-          overridesGlobal: false,
-        };
-      }
-
-      return {
-        key: starGlobal.key,
-        value: starGlobal.value,
-        valueType: starGlobal.valueType ?? 'string',
-        description: starGlobal.description,
-        source: 'global',
-        globalEnvironmentSlug: '*',
-        overridesGlobal: false,
-      };
-    });
-
-    return makeResponse(200, effective, config);
+    return makeResponse(200, effectiveConfigFor(match[1], envSlug), config);
   }
 
   // 10d. GET /applications/:appSlug/secrets/effective
@@ -1418,6 +1545,74 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
     return makeResponse(200, { message: `Secret ${secretName} deleted successfully` }, config);
   }
 
+  // Configuration history, rollback and environment diff (guibranco/grimoire-api#77)
+  if (/^\/applications\/[^/]+\/configurations\/diff$/.test(cleanPath) && method === 'GET') {
+    const appSlug = cleanPath.split('/')[2];
+    const from = String(searchParams.get('from') ?? config.params?.from ?? '');
+    const to = String(searchParams.get('to') ?? config.params?.to ?? '');
+    const known = new Set((environments[appSlug] || []).map((e: any) => e.slug));
+    if (!known.has(from) || !known.has(to)) {
+      return makeResponse(404, { title: 'Not Found', status: 404, detail: 'Environment not found.' }, config);
+    }
+    const includeUnchanged = String(searchParams.get('includeUnchanged') ?? config.params?.includeUnchanged) === 'true';
+    return makeResponse(200, { from, to, items: buildConfigDiff(appSlug, from, to, includeUnchanged) }, config);
+  }
+
+  match = /^\/applications\/([^/]+)\/configurations\/([^/]+)\/([^/]+)\/history$/.exec(cleanPath);
+  if (match && method === 'GET') {
+    const [appSlug, envSlug, key] = [match[1], decodeURIComponent(match[2]), decodeURIComponent(match[3])];
+    const current = (configurations[appSlug] || []).find((c: any) => c.environmentSlug === envSlug && c.key === key);
+    return historyResponse(revisionKey(appSlug, envSlug, key), current, config);
+  }
+
+  match = /^\/applications\/([^/]+)\/configurations\/([^/]+)\/([^/]+)\/rollback\/(\d+)$/.exec(cleanPath);
+  if (match && method === 'POST') {
+    const [appSlug, envSlug, key] = [match[1], decodeURIComponent(match[2]), decodeURIComponent(match[3])];
+    configurations[appSlug] = configurations[appSlug] || [];
+    return rollbackConfig(
+      revisionKey(appSlug, envSlug, key),
+      configurations[appSlug],
+      (c) => c.environmentSlug === envSlug && c.key === key,
+      () => ({ key, environmentSlug: envSlug, value: '', valueType: 'string', description: '' }),
+      Number(match[4]),
+      config,
+      () => saveStored('configurations', configurations)
+    );
+  }
+
+  match = /^\/global\/configurations\/([^/]+)\/([^/]+)\/history$/.exec(cleanPath);
+  if (match && method === 'GET') {
+    const [envSlug, key] = [decodeURIComponent(match[1]), decodeURIComponent(match[2])];
+    const current = globalConfigurations.find((c: any) => c.environmentSlug === envSlug && c.key === key);
+    return historyResponse(revisionKey(null, envSlug, key), current, config);
+  }
+
+  match = /^\/global\/configurations\/([^/]+)\/([^/]+)\/rollback\/(\d+)$/.exec(cleanPath);
+  if (match && method === 'POST') {
+    const [envSlug, key] = [decodeURIComponent(match[1]), decodeURIComponent(match[2])];
+    return rollbackConfig(
+      revisionKey(null, envSlug, key),
+      globalConfigurations,
+      (c) => c.environmentSlug === envSlug && c.key === key,
+      () => ({ id: `gcfg-${Date.now()}`, environmentSlug: envSlug, key, createdAt: new Date().toISOString() }),
+      Number(match[3]),
+      config,
+      () => saveStored('global_configurations', globalConfigurations)
+    );
+  }
+
+  match = /^\/applications\/([^/]+)\/secrets\/([^/]+)\/versions\/([^/]+)\/(\d+)\/rollback$/.exec(cleanPath);
+  if (match && method === 'POST') {
+    const k = `${match[1]}:${decodeURIComponent(match[2])}:${decodeURIComponent(match[3])}`;
+    return rollbackSecret(secretVersions, k, Number(match[4]), body, config, () => saveStored('secret_versions', secretVersions));
+  }
+
+  match = /^\/global\/secrets\/([^/]+)\/versions\/([^/]+)\/(\d+)\/rollback$/.exec(cleanPath);
+  if (match && method === 'POST') {
+    const k = `${decodeURIComponent(match[1])}:${decodeURIComponent(match[2])}`;
+    return rollbackSecret(globalSecretVersions, k, Number(match[3]), body, config, () => saveStored('global_secret_versions', globalSecretVersions));
+  }
+
   // 12. GET /applications/:appSlug/configurations
   match = /^\/applications\/([^/]+)\/configurations$/.exec(cleanPath);
   if (match && method === 'GET') {
@@ -1447,6 +1642,7 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
       c => c.key === newConfigKey && c.environmentSlug === envSlug
     );
     
+    const previous = snapshot(configurations[appSlug][existingIndex]);
     const newConfigType = body.valueType || 'string';
     const newConfig = {
       key: newConfigKey,
@@ -1462,6 +1658,7 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
     } else {
       configurations[appSlug].push(newConfig);
     }
+    recordConfigRevision(revisionKey(appSlug, envSlug, newConfigKey), previous, newConfig);
     
     saveStored('configurations', configurations);
     return makeResponse(201, newConfig, config);
@@ -1481,11 +1678,13 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
       return makeResponse(404, { message: `Configuration for key ${key} in environment ${envSlug} not found` }, config);
     }
     
+    const previous = snapshot(configItem);
     if (body.valueType !== undefined) configItem.valueType = body.valueType;
     configItem.value =
       body.value !== undefined ? storedValue(configItem.valueType, body.value) : configItem.value;
     configItem.description = body.description !== undefined ? body.description : configItem.description;
     configItem.updatedAt = new Date().toISOString();
+    recordConfigRevision(revisionKey(appSlug, envSlug, key), previous, configItem);
     
     saveStored('configurations', configurations);
     return makeResponse(200, configItem, config);
@@ -1504,6 +1703,7 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
       return makeResponse(404, { message: `Configuration for key ${key} in environment ${envSlug} not found` }, config);
     }
     
+    recordConfigRevision(revisionKey(appSlug, envSlug, key), snapshot(appConfigs[index]), undefined);
     appConfigs.splice(index, 1);
     saveStored('configurations', configurations);
     return makeResponse(200, { message: `Configuration key ${key} deleted successfully` }, config);
@@ -1567,6 +1767,7 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
       updatedAt: nowIso,
     };
     globalConfigurations.push(newConfig);
+    recordConfigRevision(revisionKey(null, envSlug, key), undefined, newConfig);
     saveStored('global_configurations', globalConfigurations);
     return makeResponse(201, newConfig, config);
   }
@@ -1582,10 +1783,12 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
     if (!item) {
       return makeResponse(404, { message: `Global configuration ${key} not found` }, config);
     }
+    const previous = snapshot(item);
     if (body.valueType !== undefined) item.valueType = body.valueType;
     if (body.value !== undefined) item.value = storedValue(item.valueType, body.value);
     if (body.description !== undefined) item.description = body.description;
     item.updatedAt = new Date().toISOString();
+    recordConfigRevision(revisionKey(null, envSlug, key), previous, item);
     saveStored('global_configurations', globalConfigurations);
     return makeResponse(200, item, config);
   }
@@ -1599,6 +1802,7 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
     if (index === -1) {
       return makeResponse(404, { message: `Global configuration ${key} not found` }, config);
     }
+    recordConfigRevision(revisionKey(null, envSlug, key), snapshot(globalConfigurations[index]), undefined);
     globalConfigurations.splice(index, 1);
     saveStored('global_configurations', globalConfigurations);
     return makeResponse(204, null, config);

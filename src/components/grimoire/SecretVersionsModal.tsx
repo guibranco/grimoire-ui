@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/table';
 import { api, toApiDateTime } from '@/lib/api';
 import { SecretVersion, SecretVersionStatus, UpdateSecretVersionRequest } from '@/types/api';
-import { AlertTriangle, CalendarClock, Check, ChevronRight, Globe, History, Loader2, Power, X } from 'lucide-react';
+import { AlertTriangle, CalendarClock, Check, ChevronRight, Globe, History, Loader2, Power, RotateCcw, X } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import { ConfirmationModal } from '@/components/shared/ConfirmationModal';
@@ -72,6 +72,7 @@ export const SecretVersionsModal: React.FC<SecretVersionsModalProps> = ({
   const [busyVersion, setBusyVersion] = useState<number | null>(null);
   const [editing, setEditing] = useState<{ version: number; notBefore: string; expiresAt: string } | null>(null);
   const [pendingForce, setPendingForce] = useState<PendingForce | null>(null);
+  const [rollingBack, setRollingBack] = useState<number | null>(null);
   const [graceDays, setGraceDays] = useState(7);
 
   const base = isGlobal
@@ -96,6 +97,21 @@ export const SecretVersionsModal: React.FC<SecretVersionsModalProps> = ({
     queryClient.invalidateQueries({ queryKey: ['effective-secrets'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     queryClient.invalidateQueries({ queryKey: ['audit'] });
+  };
+
+  /** Copies an older version's value into a new current version (the value stays hidden). */
+  const rollbackTo = async (version: number) => {
+    setBusyVersion(version);
+    try {
+      const res = await api.post<SecretVersion>(`${base}/${version}/rollback`);
+      if (res.status >= 400) throw Object.assign(new Error(`Request failed with status ${res.status}`), { response: res });
+      toast.success(`v${version} restored as v${res.data?.version ?? 'new'}`);
+      refresh();
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to roll back'));
+    } finally {
+      setBusyVersion(null);
+    }
   };
 
   /** PATCH one version. Returns `'conflict'` when the API refuses to leave no valid version. */
@@ -362,6 +378,21 @@ export const SecretVersionsModal: React.FC<SecretVersionsModalProps> = ({
                                 {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Power className="w-3 h-3" />}
                                 {ver.isEnabled ? 'Disable' : 'Enable'}
                               </Button>
+                              {!ver.isCurrent && (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  disabled={busyVersion !== null}
+                                  aria-label={`Roll back to v${ver.version}`}
+                                  title="Copy this version's value into a new current version"
+                                  onClick={() => setRollingBack(ver.version)}
+                                  className="h-7 px-2 text-[10px] uppercase font-bold tracking-widest gap-1"
+                                >
+                                  <RotateCcw className="w-3 h-3" />
+                                  Roll back
+                                </Button>
+                              )}
                             </span>
                           )}
                         </TableCell>
@@ -401,6 +432,19 @@ export const SecretVersionsModal: React.FC<SecretVersionsModalProps> = ({
           const { version, body } = pendingForce;
           setPendingForce(null);
           await update(version, body, `v${version} updated`, true);
+        }}
+      />
+
+      <ConfirmationModal
+        open={rollingBack !== null}
+        onOpenChange={(o) => !o && setRollingBack(null)}
+        title={`Roll back to v${rollingBack ?? ''}?`}
+        description={`v${rollingBack ?? ''}'s value is copied into a new version of ${secretName}${envSuffix}, which consumers get from now on. Older versions are left as they are; the value is never shown.`}
+        confirmText="Roll back"
+        onConfirm={async () => {
+          const version = rollingBack;
+          setRollingBack(null);
+          if (version !== null) await rollbackTo(version);
         }}
       />
     </Dialog>

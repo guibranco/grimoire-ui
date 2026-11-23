@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { globalPath } from '@/lib/routes';
 import {
   Search,
+  History,
   Edit2,
   Trash2,
   Check,
@@ -44,6 +45,7 @@ import { exportValue, importEntry, valueTypeOf } from '@/lib/configValue';
 import { cn } from '@/lib/utils';
 import toast from 'react-hot-toast';
 import { apiErrorMessage } from '@/lib/errors';
+import { ConfigHistoryModal } from '@/components/history/ConfigHistoryModal';
 
 interface ConfigTabProps {
   appSlug: string;
@@ -70,6 +72,7 @@ export const ConfigTab: React.FC<ConfigTabProps> = ({
   const [search, setSearch] = useState('');
   const [showInherited, setShowInherited] = useState(true);
   const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [historyKey, setHistoryKey] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [overridePrefill, setOverridePrefill] = useState<{
     key: string;
@@ -515,6 +518,15 @@ export const ConfigTab: React.FC<ConfigTabProps> = ({
                             >
                               <button
                                 type="button"
+                                aria-label={`History of ${config.key}`}
+                                title="History"
+                                className="text-zinc-500 hover:text-config transition-colors"
+                                onClick={() => setHistoryKey(config.key)}
+                              >
+                                <History className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
                                 aria-label={`Edit ${config.key}`}
                                 className="text-zinc-500 hover:text-config transition-colors"
                                 onClick={() => setEditingKey(config.key)}
@@ -565,6 +577,14 @@ export const ConfigTab: React.FC<ConfigTabProps> = ({
         confirmText="Delete Environment"
         variant="destructive"
       />
+      {historyKey && activeEnvironmentSlug && (
+        <ConfigHistoryModal
+          scope={{ appSlug, envSlug: activeEnvironmentSlug }}
+          configKey={historyKey}
+          open={!!historyKey}
+          onOpenChange={(open) => !open && setHistoryKey(null)}
+        />
+      )}
     </div>
   );
 };
