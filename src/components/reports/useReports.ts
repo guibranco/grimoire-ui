@@ -34,7 +34,7 @@ export const useDependencyGraph = () =>
  * `['environments', slug]` cache with the application view.
  */
 export function useFirstEnvironments(slugs: readonly string[]): Record<string, string | undefined> {
-  const unique = [...new Set(slugs)].sort();
+  const unique = [...new Set(slugs)].sort((a, b) => a.localeCompare(b));
   const results = useQueries({
     queries: unique.map((slug) => ({
       queryKey: ['environments', slug],
