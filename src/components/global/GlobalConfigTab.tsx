@@ -5,6 +5,7 @@ import { api } from '@/lib/api';
 import { GlobalConfiguration, GlobalEnvironment } from '@/types/api';
 import {
   Search,
+  History,
   Globe,
   Edit2,
   Trash2,
@@ -32,6 +33,7 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import toast from 'react-hot-toast';
 import { apiErrorMessage } from '@/lib/errors';
+import { ConfigHistoryModal } from '@/components/history/ConfigHistoryModal';
 
 interface GlobalConfigTabProps {
   highlightedKey?: string | null;
@@ -55,6 +57,7 @@ export const GlobalConfigTab: React.FC<GlobalConfigTabProps> = ({
   }, [startCreating]);
   const [editingItem, setEditingItem] = useState<{ environmentSlug: string; key: string } | null>(null);
   const [deletingItem, setDeletingItem] = useState<GlobalConfiguration | null>(null);
+  const [historyItem, setHistoryItem] = useState<{ environmentSlug: string; key: string } | null>(null);
   const [localCustomSlugs, setLocalCustomSlugs] = useState<string[]>([]);
   const [customSlugInput, setCustomSlugInput] = useState('');
   const [showCustomSlugInput, setShowCustomSlugInput] = useState(false);
@@ -437,6 +440,15 @@ export const GlobalConfigTab: React.FC<GlobalConfigTabProps> = ({
                         <div className="flex justify-end gap-2 pr-1 opacity-80 group-hover:opacity-100 transition-opacity">
                           <button
                             type="button"
+                            aria-label={`History of ${config.key}`}
+                            title="History"
+                            className="text-zinc-500 hover:text-global transition-colors"
+                            onClick={() => setHistoryItem({ environmentSlug: config.environmentSlug, key: config.key })}
+                          >
+                            <History className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
                             aria-label={`Edit ${config.key}`}
                             className="text-zinc-500 hover:text-global transition-colors"
                             onClick={() => setEditingItem({ environmentSlug: config.environmentSlug, key: config.key })}
@@ -471,6 +483,14 @@ export const GlobalConfigTab: React.FC<GlobalConfigTabProps> = ({
         confirmText="Delete Global"
         variant="destructive"
       />
+      {historyItem && (
+        <ConfigHistoryModal
+          scope={{ global: true, envSlug: historyItem.environmentSlug }}
+          configKey={historyItem.key}
+          open={!!historyItem}
+          onOpenChange={(open) => !open && setHistoryItem(null)}
+        />
+      )}
     </div>
   );
 };

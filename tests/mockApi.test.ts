@@ -401,6 +401,77 @@ describe('Grimoire Mock API Integration Tests', () => {
       expect(delRes.status).toBe(204);
     });
   });
+  describe('Configuration history API (guibranco/grimoire-api#77)', () => {
+    const base = '/applications/production-gateway/configurations';
+
+    it('starts seeded entries with a baseline and records every change', async () => {
+      await api.put(`${base}/production/MAX_DB_CONNECTIONS`, { value: '150' });
+      await api.put(`${base}/production/MAX_DB_CONNECTIONS`, { value: '150' }); // no change
+      const history = (await api.get(`${base}/production/MAX_DB_CONNECTIONS/history`)).data as any[];
+      expect(history.map((h) => [h.revision, h.change, h.value])).toEqual([
+        [2, 'update', '150'],
+        [1, 'baseline', '100'],
+      ]);
+      expect(history[1].changedBy).toBe('system');
+    });
+
+    it('records creates and deletes, and 404s keys without history', async () => {
+      await api.post(base, { environmentSlug: 'staging', key: 'NEW_KEY', value: 'v1' });
+      await api.delete(`${base}/staging/NEW_KEY`);
+      const history = (await api.get(`${base}/staging/NEW_KEY/history`)).data as any[];
+      expect(history.map((h) => [h.change, h.value])).toEqual([
+        ['delete', null],
+        ['create', 'v1'],
+      ]);
+      expect((await api.get(`${base}/staging/NEVER/history`)).status).toBe(404);
+    });
+
+    it('rolls back to an older revision, re-creating deleted keys', async () => {
+      await api.put(`${base}/staging/MAX_DB_CONNECTIONS`, { value: '25' });
+      const res = await api.post(`${base}/staging/MAX_DB_CONNECTIONS/rollback/1`);
+      expect(res.status).toBe(200);
+      expect(res.data.value).toBe('20');
+      const latest = (await api.get(`${base}/staging/MAX_DB_CONNECTIONS/history`)).data[0];
+      expect(latest).toMatchObject({ revision: 3, change: 'rollback', rolledBackFrom: 1, value: '20' });
+
+      await api.delete(`${base}/production/COMPRESSION_ENABLED`);
+      expect((await api.post(`${base}/production/COMPRESSION_ENABLED/rollback/2`)).status).toBe(400);
+      expect((await api.post(`${base}/production/COMPRESSION_ENABLED/rollback/9`)).status).toBe(404);
+      expect((await api.post(`${base}/production/COMPRESSION_ENABLED/rollback/1`)).status).toBe(200);
+      const list = (await api.get(base)).data as any[];
+      expect(list.some((c) => c.key === 'COMPRESSION_ENABLED' && c.environmentSlug === 'production')).toBe(true);
+    });
+
+    it('keeps history for global configuration too', async () => {
+      await api.post('/global/configurations', { environmentSlug: '*', key: 'G_KEY', value: 'one' });
+      await api.put('/global/configurations/*/G_KEY', { value: 'two' });
+      expect((await api.post('/global/configurations/*/G_KEY/rollback/1')).data.value).toBe('one');
+      const history = (await api.get('/global/configurations/*/G_KEY/history')).data as any[];
+      expect(history.map((h) => h.change)).toEqual(['rollback', 'update', 'create']);
+    });
+
+    it('compares the effective configuration of two environments', async () => {
+      const res = await api.get(`${base}/diff`, { params: { from: 'staging', to: 'production' } });
+      const byKey = new Map((res.data.items as any[]).map((i) => [i.key, i]));
+      expect(byKey.get('MAX_DB_CONNECTIONS')).toMatchObject({ status: 'changed', from: { value: '20' }, to: { value: '100' } });
+      expect(byKey.get('COMPRESSION_ENABLED')).toMatchObject({ status: 'added', from: null });
+      expect([...byKey.values()].every((i) => i.status !== 'unchanged')).toBe(true);
+
+      const all = await api.get(`${base}/diff`, { params: { from: 'staging', to: 'production', includeUnchanged: true } });
+      expect((all.data.items as any[]).some((i) => i.status === 'unchanged')).toBe(true);
+      expect((await api.get(`${base}/diff`, { params: { from: 'staging', to: 'nope' } })).status).toBe(404);
+    });
+
+    it('rolls a secret back into a new current version without returning the value', async () => {
+      const url = '/applications/auth-provider-security/secrets/JWT_SIGNING_SECRET/versions/production';
+      const res = await api.post(`${url}/1/rollback`);
+      expect(res.status).toBe(200);
+      expect(res.data).toMatchObject({ version: 4, isCurrent: true, isEnabled: true });
+      expect(res.data.value).toBeUndefined();
+      expect((await api.post(`${url}/9/rollback`)).status).toBe(404);
+    });
+  });
+
   describe('Rotation API (guibranco/grimoire-api#78)', () => {
     it('lists expiring, rotation-due and expired secrets, soonest first', async () => {
       const res = await api.get('/secrets/expiring', { params: { withinDays: 30 } });

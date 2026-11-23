@@ -142,6 +142,44 @@ export interface EffectiveConfiguration {
   overridesGlobal: boolean;
 }
 
+// ── Configuration history (guibranco/grimoire-api#77) ──────────────────────
+
+export type ConfigurationChange = 'baseline' | 'create' | 'update' | 'delete' | 'rollback';
+
+/** One change to a configuration key. `value` is `null` for deletes. */
+export interface ConfigurationRevision {
+  revision: number;
+  change: ConfigurationChange | (string & {});
+  value: string | null;
+  valueType: ConfigValueType;
+  description: string | null;
+  rolledBackFrom: number | null;
+  changedBy: string;
+  changedAt: string;
+}
+
+export type ConfigurationDiffStatus = 'added' | 'removed' | 'changed' | 'unchanged';
+
+export interface ConfigurationDiffSide {
+  value: string;
+  valueType: ConfigValueType;
+  source: ValueSource;
+  globalEnvironmentSlug: string | null;
+}
+
+export interface ConfigurationDiffItem {
+  key: string;
+  status: ConfigurationDiffStatus | (string & {});
+  from: ConfigurationDiffSide | null;
+  to: ConfigurationDiffSide | null;
+}
+
+export interface ConfigurationDiffResponse {
+  from: string;
+  to: string;
+  items: ConfigurationDiffItem[];
+}
+
 export interface EffectiveSecret {
   id?: string;
   name: string;
