@@ -83,6 +83,8 @@ const SidebarNavItem: React.FC<SidebarNavItemProps> = ({
   onNavigate,
 }) => {
   const isGlobal = accent === 'global';
+  const activeClass = isGlobal ? 'border-global text-global' : 'border-grimoire text-grimoire';
+  const hoverClass = isGlobal ? 'hover:text-global' : 'hover:text-foreground';
   return (
     <NavLink
       to={to}
@@ -91,11 +93,8 @@ const SidebarNavItem: React.FC<SidebarNavItemProps> = ({
       className={({ isActive }) => cn(
         "w-full flex items-center gap-2.5 px-3 py-2 md:py-1.5 text-[13px] font-medium transition-all border-l-2",
         isActive
-          ? cn("bg-zinc-900", isGlobal ? "border-global text-global" : "border-grimoire text-grimoire")
-          : cn(
-              "border-transparent text-sidebar-foreground hover:bg-sidebar-accent",
-              isGlobal ? "hover:text-global" : "hover:text-foreground"
-            )
+          ? cn("bg-zinc-900", activeClass)
+          : cn("border-transparent text-sidebar-foreground hover:bg-sidebar-accent", hoverClass)
       )}
     >
       <Icon className={cn("w-3.5 h-3.5 shrink-0", isGlobal && "text-global")} aria-hidden="true" />
@@ -178,6 +177,48 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCreateApp, open = false, onC
     'flex items-center gap-1 w-fit max-w-full hover:text-zinc-300 hover:underline underline-offset-2 transition-colors focus-visible:outline-none focus-visible:text-zinc-300 focus-visible:underline';
 
   const close = () => onClose?.();
+
+  const renderApplications = () => {
+    if (isLoading) {
+      return (
+        <div className="flex items-center justify-center py-6">
+          <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+        </div>
+      );
+    }
+    if (sortedApps.length === 0) {
+      return (
+        <button
+          type="button"
+          onClick={() => {
+            close();
+            onCreateApp();
+          }}
+          className="w-full mt-1 flex items-center justify-center gap-2 px-3 py-2 border border-dashed border-zinc-700 text-zinc-500 text-[10px] font-bold tracking-widest uppercase hover:border-zinc-500 hover:text-zinc-300 transition-colors"
+        >
+          <Plus className="w-3 h-3" />
+          New Application
+        </button>
+      );
+    }
+    return sortedApps.map((app) => (
+      <NavLink
+        key={app.slug}
+        to={appPath(app.slug)}
+        onClick={close}
+        title={app.name}
+        className={({ isActive }) => cn(
+          "w-full flex items-center gap-2.5 px-3 py-2.5 md:py-1.5 text-[13px] font-medium transition-all border-l-2",
+          isActive
+            ? "bg-zinc-900 border-grimoire text-grimoire"
+            : "border-transparent text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"
+        )}
+      >
+        <span className="truncate flex-1 text-left font-sans">{app.name}</span>
+      </NavLink>
+    ));
+  };
+  const applicationsContent = renderApplications();
 
   return (
     <>
@@ -269,40 +310,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCreateApp, open = false, onC
               </button>
             }
           >
-            {isLoading ? (
-              <div className="flex items-center justify-center py-6">
-                <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-              </div>
-            ) : sortedApps.length === 0 ? (
-              <button
-                type="button"
-                onClick={() => {
-                  close();
-                  onCreateApp();
-                }}
-                className="w-full mt-1 flex items-center justify-center gap-2 px-3 py-2 border border-dashed border-zinc-700 text-zinc-500 text-[10px] font-bold tracking-widest uppercase hover:border-zinc-500 hover:text-zinc-300 transition-colors"
-              >
-                <Plus className="w-3 h-3" />
-                New Application
-              </button>
-            ) : (
-              sortedApps.map((app) => (
-                <NavLink
-                  key={app.slug}
-                  to={appPath(app.slug)}
-                  onClick={close}
-                  title={app.name}
-                  className={({ isActive }) => cn(
-                    "w-full flex items-center gap-2.5 px-3 py-2.5 md:py-1.5 text-[13px] font-medium transition-all border-l-2",
-                    isActive
-                      ? "bg-zinc-900 border-grimoire text-grimoire"
-                      : "border-transparent text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"
-                  )}
-                >
-                  <span className="truncate flex-1 text-left font-sans">{app.name}</span>
-                </NavLink>
-              ))
-            )}
+            {applicationsContent}
           </SidebarSection>
         </div>
       </ScrollArea>
