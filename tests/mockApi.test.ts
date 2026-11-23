@@ -782,6 +782,9 @@ describe('Grimoire Mock API Integration Tests', () => {
         { ...body, environments: ['missing'] },
         { ...body, tokenLifetimeMinutes: 0 },
         { ...body, tokenLifetimeMinutes: 61 },
+        { ...body, repository: ['guibranco/app'] },
+        { ...body, refPattern: 7 },
+        { ...body, gitHubEnvironment: 42 },
       ])
         expect((await api.post(pbase, bad)).status).toBe(400);
     });

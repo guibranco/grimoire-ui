@@ -153,8 +153,12 @@ function validatePolicy(body: any, envSlugs: string[]): Record<string, string[]>
   const errors = validateScopesAndEnvironments(body, envSlugs);
   const name = typeof body?.name === 'string' ? body.name.trim() : '';
   if (!name || name.length > 100) errors.Name = ['Name must be 1 to 100 characters.'];
-  if (!REPOSITORY.test(String(body?.repository ?? '').trim())) errors.Repository = ['Use owner/repo.'];
-  if (body?.refPattern && !String(body.refPattern).startsWith('refs/')) errors.RefPattern = ['Use a full ref.'];
+  if (typeof body?.repository !== 'string' || !REPOSITORY.test(body.repository.trim()))
+    errors.Repository = ['Use owner/repo.'];
+  const optionalString = (v: unknown) => v === null || v === undefined || typeof v === 'string';
+  if (!optionalString(body?.refPattern) || (body?.refPattern && !body.refPattern.trim().startsWith('refs/')))
+    errors.RefPattern = ['Use a full ref.'];
+  if (!optionalString(body?.gitHubEnvironment)) errors.GitHubEnvironment = ['Use a GitHub environment name.'];
   const lifetime = body?.tokenLifetimeMinutes;
   if (lifetime !== null && lifetime !== undefined && !(Number.isInteger(lifetime) && lifetime >= 1 && lifetime <= 60))
     errors.TokenLifetimeMinutes = ['Use 1 to 60 minutes.'];

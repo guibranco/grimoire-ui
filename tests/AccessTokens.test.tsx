@@ -158,6 +158,10 @@ describe('Access tokens', () => {
       expect(within(dialog).getByText('Give the policy a name.')).toBeTruthy();
       expect(within(dialog).getByText(/Use owner\/repo/)).toBeTruthy();
       expect(within(dialog).getByText(/Use a full ref/)).toBeTruthy();
+      fireEvent.change(within(dialog).getByLabelText('Token lifetime (minutes)'), { target: { value: '90' } });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Create policy' }));
+      const lifetime = within(dialog).getByLabelText('Token lifetime (minutes)');
+      expect(document.getElementById(lifetime.getAttribute('aria-describedby') ?? '')?.textContent).toMatch(/1 to 60/);
 
       fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'release tags' } });
       fireEvent.change(within(dialog).getByLabelText('Repository'), { target: { value: 'guibranco/gateway' } });

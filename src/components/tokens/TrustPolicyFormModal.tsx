@@ -148,9 +148,10 @@ export const TrustPolicyFormModal: React.FC<Props> = ({ appSlug, envs, policy, t
                 value={draft.lifetime}
                 onChange={(e) => set({ lifetime: e.target.value })}
                 aria-invalid={!!errors.lifetime}
+                aria-describedby={errors.lifetime ? 'policy-lifetime-error' : undefined}
                 className={inputClass}
               />
-              <FieldError errors={errors} path="lifetime" />
+              <FieldError errors={errors} path="lifetime" id="policy-lifetime-error" />
             </div>
           </div>
           <DialogFooter className="mx-0 mb-0 bg-muted/30 p-4 border-t border-border sm:justify-end gap-2">
