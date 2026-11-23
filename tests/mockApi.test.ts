@@ -534,6 +534,68 @@ describe('Grimoire Mock API Integration Tests', () => {
     });
   });
 
+  describe('Reports API (guibranco/grimoire-api#84)', () => {
+    it('lists never-read secrets first, then the longest unread', async () => {
+      const res = await api.get('/reports/unused-secrets');
+      expect(res.status).toBe(200);
+      expect(res.data.days).toBe(90);
+      const items = res.data.items as any[];
+      expect(items.map((i) => i.secret)).toEqual(['REDIS_CACHE_TOKEN', 'JWT_SIGNING_SECRET']);
+      expect(items[0]).toMatchObject({ application: 'production-gateway', lastReadAt: null, readCount: 0, reads: [] });
+      expect(items[1]).toMatchObject({ application: 'auth-provider-security', readCount: 52 });
+      expect(items[1].reads[0]).toMatchObject({ environment: 'production', readCount: 52 });
+      expect(items.every((i) => !('value' in i))).toBe(true);
+    });
+
+    it('applies the window and validates it', async () => {
+      const names = async (days: number) =>
+        ((await api.get('/reports/unused-secrets', { params: { days } })).data.items as any[]).map((i) => i.secret);
+      expect(await names(5)).toEqual(['REDIS_CACHE_TOKEN', 'JWT_SIGNING_SECRET']);
+      expect(await names(200)).toEqual(['REDIS_CACHE_TOKEN']);
+      expect((await api.get('/reports/unused-secrets', { params: { days: 0 } })).status).toBe(400);
+      expect((await api.get('/reports/unused-secrets', { params: { days: 4000 } })).status).toBe(400);
+    });
+
+    it('lists a never-read global secret with no application', async () => {
+      await api.post('/global/secrets', { name: 'IDLE_GLOBAL', description: 'x' });
+      const items = (await api.get('/reports/unused-secrets')).data.items as any[];
+      expect(items.find((i) => i.secret === 'IDLE_GLOBAL')).toMatchObject({ isGlobal: true, application: null, applicationName: null, lastReadAt: null });
+    });
+
+    it('forgets reads of deleted secrets', async () => {
+      await api.delete('/applications/auth-provider-security/secrets/JWT_SIGNING_SECRET');
+      const items = (await api.get('/reports/unused-secrets')).data.items as any[];
+      expect(items.some((i) => i.secret === 'JWT_SIGNING_SECRET')).toBe(false);
+      const graph = (await api.get('/reports/dependencies')).data;
+      expect(graph.edges.some((e: any) => e.target === 'secret:auth-provider-security/JWT_SIGNING_SECRET')).toBe(false);
+    });
+
+    it('builds the dependency graph with owns, reads, overrides and inherits', async () => {
+      await api.post('/applications/production-gateway/configurations', { environmentSlug: 'production', key: 'Smtp', value: '{}' });
+      const graph = (await api.get('/reports/dependencies')).data;
+      const ids = graph.nodes.map((n: any) => n.id);
+      expect(ids).toEqual([...ids].sort());
+      expect(ids).toContain('app:production-gateway');
+      expect(graph.nodes.find((n: any) => n.id === 'config:production-gateway/MAX_DB_CONNECTIONS').environments.length).toBeGreaterThan(0);
+      const has = (source: string, target: string, kind: string) =>
+        graph.edges.some((e: any) => e.source === source && e.target === target && e.kind === kind);
+      expect(has('app:production-gateway', 'secret:production-gateway/DATABASE_PASSWORDS', 'owns')).toBe(true);
+      expect(has('config:production-gateway/Smtp', 'global-config:Smtp', 'overrides')).toBe(true);
+      expect(has('app:production-gateway', 'global-config:Smtp', 'inherits')).toBe(false);
+      expect(has('app:auth-provider-security', 'global-config:Smtp', 'inherits')).toBe(true);
+      const read = graph.edges.find((e: any) => e.source === 'app:production-gateway' && e.target === 'secret:production-gateway/DATABASE_PASSWORDS' && e.kind === 'reads');
+      expect(read).toMatchObject({ environments: ['production', 'staging'], readCount: 19343 });
+    });
+
+    it('marks an application secret that shadows a global as overriding it', async () => {
+      await api.post('/applications/production-gateway/secrets', { name: 'Sentry--Dsn', description: 'own' });
+      const graph = (await api.get('/reports/dependencies')).data;
+      expect(
+        graph.edges.some((e: any) => e.source === 'secret:production-gateway/Sentry--Dsn' && e.target === 'global-secret:Sentry--Dsn' && e.kind === 'overrides')
+      ).toBe(true);
+    });
+  });
+
   describe('Dashboard API', () => {
     it('returns totals, per-application and per-environment counts', async () => {
       const res = await api.get('/dashboard');

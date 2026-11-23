@@ -5,6 +5,7 @@ import { AppDetailView } from './components/app/AppDetailView';
 import { GlobalView } from './components/global/GlobalView';
 import { AuditView } from './components/audit/AuditView';
 import { RotationView } from './components/rotation/RotationView';
+import { ReportsView } from './components/reports/ReportsView';
 import { NotFoundView } from './components/shared/NotFoundView';
 
 /**
@@ -21,6 +22,7 @@ export const routes: RouteObject[] = [
       { path: 'global/:tab?', element: <GlobalView /> },
       { path: 'audit', element: <AuditView /> },
       { path: 'rotation', element: <RotationView /> },
+      { path: 'reports/:tab?', element: <ReportsView /> },
       { path: '*', element: <NotFoundView /> },
     ],
   },

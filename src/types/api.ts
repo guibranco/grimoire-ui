@@ -357,3 +357,64 @@ export interface AuditPage {
   pageSize: number;
   totalCount: number;
 }
+
+/** Last read of a secret by one application environment (guibranco/grimoire-api#84). */
+export interface SecretReadInfo {
+  application: string;
+  environment: string;
+  lastReadAt: string;
+  readCount: number;
+}
+
+/** A secret with no Consumer API read in the report window. Never carries a value. */
+export interface UnusedSecret {
+  /** Owning application slug; `null` for a global secret. */
+  application: string | null;
+  applicationName: string | null;
+  secret: string;
+  isGlobal: boolean;
+  createdAt: string;
+  /** `null` when never read. */
+  lastReadAt: string | null;
+  readCount: number;
+  reads: SecretReadInfo[];
+}
+
+/** `GET /management/reports/unused-secrets?days=N`. */
+export interface UnusedSecretsResponse {
+  generatedAt: string;
+  days: number;
+  since: string;
+  items: UnusedSecret[];
+}
+
+export type DependencyNodeType = 'application' | 'secret' | 'global-secret' | 'config-key' | 'global-config-key';
+export type DependencyEdgeKind = 'owns' | 'reads' | 'overrides' | 'inherits';
+
+export interface DependencyNode {
+  /** `app:{slug}`, `secret:{slug}/{name}`, `global-secret:{name}`, `config:{slug}/{key}` or `global-config:{key}`. */
+  id: string;
+  type: DependencyNodeType;
+  label: string;
+  /** Owning application slug for secrets and keys. */
+  application: string | null;
+  /** Environments a configuration key exists in. */
+  environments: string[];
+}
+
+export interface DependencyEdge {
+  source: string;
+  target: string;
+  kind: DependencyEdgeKind;
+  /** For `reads`: the reading environments. */
+  environments: string[];
+  lastReadAt: string | null;
+  readCount: number | null;
+}
+
+/** `GET /management/reports/dependencies`. */
+export interface DependencyGraph {
+  generatedAt: string;
+  nodes: DependencyNode[];
+  edges: DependencyEdge[];
+}

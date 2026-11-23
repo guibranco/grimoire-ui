@@ -216,6 +216,19 @@ const MOCK_LAST_SEEN: Record<string, string> = {
   "auth-provider-security:staging": daysFromLoad(-0.1),
 };
 
+/**
+ * Demo Consumer API secret reads for the usage reports (guibranco/grimoire-api#84): one entry per
+ * reading application environment and secret. REDIS_CACHE_TOKEN is never read and
+ * JWT_SIGNING_SECRET hasn't been read for months, so the unused-secrets report has something to show.
+ */
+const MOCK_SECRET_READS: { application: string; environment: string; secret: string; isGlobal: boolean; lastReadAt: string; readCount: number }[] = [
+  { application: "production-gateway", environment: "production", secret: "DATABASE_PASSWORDS", isGlobal: false, lastReadAt: daysFromLoad(-0.02), readCount: 18432 },
+  { application: "production-gateway", environment: "staging", secret: "DATABASE_PASSWORDS", isGlobal: false, lastReadAt: daysFromLoad(-3), readCount: 911 },
+  { application: "production-gateway", environment: "production", secret: "Sentry--Dsn", isGlobal: true, lastReadAt: daysFromLoad(-0.02), readCount: 4210 },
+  { application: "auth-provider-security", environment: "production", secret: "Sentry--Dsn", isGlobal: true, lastReadAt: daysFromLoad(-10), readCount: 377 },
+  { application: "auth-provider-security", environment: "production", secret: "JWT_SIGNING_SECRET", isGlobal: false, lastReadAt: daysFromLoad(-120), readCount: 52 },
+];
+
 // Storage Helpers
 const isBrowser = typeof window !== 'undefined';
 
@@ -1111,6 +1124,114 @@ function buildExpiring(withinDays: number) {
   );
 }
 
+/** Reads of live secrets by live applications (the demo's deletions drop their reads). */
+function liveSecretReads() {
+  const appSlugs = new Set(applications.map((a: any) => a.slug));
+  return MOCK_SECRET_READS.filter((r) => {
+    if (!appSlugs.has(r.application)) return false;
+    if (r.isGlobal) return globalSecrets.some((g: any) => g.name === r.secret);
+    return (secrets[r.application] || []).some((x: any) => x.name === r.secret);
+  });
+}
+
+/** Mirrors `GET /management/reports/unused-secrets`: never read first, then the longest unread. */
+function buildUnusedSecrets(days: number) {
+  const since = Date.now() - days * DAY;
+  const reads = liveSecretReads();
+  const items: any[] = [];
+  const push = (application: any | null, secret: any) => {
+    const own = reads
+      .filter((r) => r.secret === secret.name && (application ? !r.isGlobal && r.application === application.slug : r.isGlobal))
+      .sort((a, b) => b.lastReadAt.localeCompare(a.lastReadAt))
+      .map(({ application: app, environment, lastReadAt, readCount }) => ({ application: app, environment, lastReadAt, readCount }));
+    const lastReadAt = own[0]?.lastReadAt ?? null;
+    if (lastReadAt && new Date(lastReadAt).getTime() >= since) return;
+    items.push({
+      application: application?.slug ?? null,
+      applicationName: application?.name ?? null,
+      secret: secret.name,
+      isGlobal: !application,
+      createdAt: secret.createdAt,
+      lastReadAt,
+      readCount: own.reduce((sum, r) => sum + r.readCount, 0),
+      reads: own,
+    });
+  };
+  applications.forEach((app: any) => (secrets[app.slug] || []).forEach((secret: any) => push(app, secret)));
+  globalSecrets.forEach((secret: any) => push(null, secret));
+  const rank = (i: any) => (i.lastReadAt ? new Date(i.lastReadAt).getTime() : -Infinity);
+  return items.sort(
+    (a, b) =>
+      rank(a) - rank(b) ||
+      Number(a.isGlobal) - Number(b.isGlobal) ||
+      String(a.application ?? '').localeCompare(String(b.application ?? '')) ||
+      a.secret.localeCompare(b.secret)
+  );
+}
+
+/** Mirrors `GET /management/reports/dependencies`. */
+function buildDependencies() {
+  const nodes = new Map<string, any>();
+  const edges: any[] = [];
+  const node = (id: string, type: string, label: string, application: string | null, envs: string[] = []) =>
+    nodes.set(id, { id, type, label, application, environments: [...new Set(envs)].sort() });
+  const edge = (source: string, target: string, kind: string, extra: Partial<Record<string, any>> = {}) =>
+    edges.push({ source, target, kind, environments: [], lastReadAt: null, readCount: null, ...extra });
+
+  const globalSecretNames = new Set(globalSecrets.map((g: any) => g.name));
+  globalSecrets.forEach((g: any) => node(`global-secret:${g.name}`, 'global-secret', g.name, null));
+  const globalKeys = new Map<string, string[]>();
+  globalConfigurations.forEach((c: any) => globalKeys.set(c.key, [...(globalKeys.get(c.key) ?? []), c.environmentSlug]));
+  globalKeys.forEach((envs, key) => node(`global-config:${key}`, 'global-config-key', key, null, envs));
+
+  applications.forEach((app: any) => {
+    const appId = `app:${app.slug}`;
+    const inherits = app.inheritGlobals !== false;
+    node(appId, 'application', app.name, null);
+    (secrets[app.slug] || []).forEach((secret: any) => {
+      const id = `secret:${app.slug}/${secret.name}`;
+      node(id, 'secret', secret.name, app.slug);
+      edge(appId, id, 'owns');
+      if (inherits && globalSecretNames.has(secret.name)) edge(id, `global-secret:${secret.name}`, 'overrides');
+    });
+    const keys = new Map<string, string[]>();
+    (configurations[app.slug] || []).forEach((c: any) => keys.set(c.key, [...(keys.get(c.key) ?? []), c.environmentSlug]));
+    keys.forEach((envs, key) => {
+      const id = `config:${app.slug}/${key}`;
+      node(id, 'config-key', key, app.slug, envs);
+      edge(appId, id, 'owns');
+      if (inherits && globalKeys.has(key)) edge(id, `global-config:${key}`, 'overrides');
+    });
+    if (inherits) {
+      globalKeys.forEach((_, key) => {
+        if (!keys.has(key)) edge(appId, `global-config:${key}`, 'inherits');
+      });
+    }
+  });
+
+  const grouped = new Map<string, typeof MOCK_SECRET_READS>();
+  liveSecretReads().forEach((r) => {
+    const target = r.isGlobal ? `global-secret:${r.secret}` : `secret:${r.application}/${r.secret}`;
+    const k = `app:${r.application}|${target}`;
+    grouped.set(k, [...(grouped.get(k) ?? []), r]);
+  });
+  grouped.forEach((rs, k) => {
+    const [source, target] = k.split('|');
+    edge(source, target, 'reads', {
+      environments: [...new Set(rs.map((r) => r.environment))].sort(),
+      lastReadAt: rs.map((r) => r.lastReadAt).sort().at(-1),
+      readCount: rs.reduce((sum, r) => sum + r.readCount, 0),
+    });
+  });
+
+  const byId = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+  return {
+    generatedAt: new Date().toISOString(),
+    nodes: [...nodes.values()].sort((a, b) => byId(a.id, b.id)),
+    edges: edges.sort((a, b) => byId(a.source, b.source) || byId(a.target, b.target) || byId(a.kind, b.kind)),
+  };
+}
+
 const parseDays = (raw: unknown, fallback: number, min: number) => {
   const n = Number(raw);
   return raw === undefined || raw === null || raw === '' || !Number.isInteger(n) ? fallback : Math.max(min, Math.min(3650, n));
@@ -1190,6 +1311,26 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
       return makeResponse(400, { title: 'One or more validation errors occurred.', status: 400, errors: { withinDays: ['Must be between 0 and 3650.'] } }, config);
     }
     return makeResponse(200, { generatedAt: new Date().toISOString(), withinDays, items: buildExpiring(withinDays) }, config);
+  }
+
+  // GET /reports/unused-secrets?days=90 (guibranco/grimoire-api#84)
+  if (cleanPath === '/reports/unused-secrets' && method === 'GET') {
+    const raw = searchParams.get('days') ?? config.params?.days;
+    const days = raw === undefined || raw === null || raw === '' ? 90 : Number(raw);
+    if (!Number.isInteger(days) || days < 1 || days > 3650) {
+      return makeResponse(400, { title: 'One or more validation errors occurred.', status: 400, errors: { days: ['Must be between 1 and 3650.'] } }, config);
+    }
+    const now = Date.now();
+    return makeResponse(
+      200,
+      { generatedAt: new Date(now).toISOString(), days, since: new Date(now - days * DAY).toISOString(), items: buildUnusedSecrets(days) },
+      config
+    );
+  }
+
+  // GET /reports/dependencies (guibranco/grimoire-api#84)
+  if (cleanPath === '/reports/dependencies' && method === 'GET') {
+    return makeResponse(200, buildDependencies(), config);
   }
 
   // POST /secrets/expiring/notify — the demo has no webhook, like an API without RotationReminders:WebhookUrl.

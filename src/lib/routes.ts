@@ -76,6 +76,28 @@ export const DEFAULT_ROTATION_WINDOW = 30;
 export const rotationPath = (within?: number | null) =>
   within && within !== DEFAULT_ROTATION_WINDOW ? `/rotation?within=${within}` : '/rotation';
 
+export type ReportTab = 'unused' | 'dependencies';
+export const REPORT_TABS: readonly ReportTab[] = ['unused', 'dependencies'];
+export const DEFAULT_REPORT_TAB: ReportTab = 'unused';
+/** Default window of the unused-secrets report, in days. */
+export const DEFAULT_UNUSED_WINDOW = 90;
+
+export const isReportTab = (value: unknown): value is ReportTab =>
+  typeof value === 'string' && (REPORT_TABS as readonly string[]).includes(value);
+
+/**
+ * `/reports[/dependencies]` (guibranco/grimoire-ui#451). Unused secrets take `?days=N` (default
+ * omitted); the dependency graph takes `?focus=<node id>`.
+ */
+export const reportsPath = (tab?: ReportTab | null, params?: { days?: number | null; focus?: string | null }) => {
+  const path = tab && tab !== DEFAULT_REPORT_TAB ? `/reports/${tab}` : '/reports';
+  const query = new URLSearchParams();
+  if (params?.days && params.days !== DEFAULT_UNUSED_WINDOW) query.set('days', String(params.days));
+  if (params?.focus) query.set('focus', params.focus);
+  const qs = query.toString();
+  return qs ? `${path}?${qs}` : path;
+};
+
 /** `/global[/:tab]?new=1` — opens Global with the create form for that tab. */
 export const globalCreatePath = (tab: GlobalTab) => {
   const base = globalPath(tab);
