@@ -133,4 +133,40 @@ describe('GlobalConfigTab', () => {
       );
     });
   });
+
+  it('imports a JSON file of environment → key → value', async () => {
+    setupDefaultMocks();
+    const mockPost = api.post as ReturnType<typeof vi.fn>;
+    mockPost.mockResolvedValue({ status: 201, data: {} });
+    const { container } = render(
+      <QueryClientProvider client={client.current}>
+        <GlobalConfigTab />
+      </QueryClientProvider>
+    );
+    await waitFor(() => expect(screen.getByText('LogStream:Url')).toBeDefined());
+
+    const file = new File([JSON.stringify({ '*': { Region: 'eu' }, staging: { Debug: true } })], 'globals.json');
+    fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [file] } });
+
+    await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(2));
+    expect(mockPost).toHaveBeenCalledWith(
+      '/global/configurations',
+      expect.objectContaining({ environmentSlug: 'staging', key: 'Debug' })
+    );
+  });
+
+  it('rejects a file that is not an object of environments', async () => {
+    setupDefaultMocks();
+    const { container } = render(
+      <QueryClientProvider client={client.current}>
+        <GlobalConfigTab />
+      </QueryClientProvider>
+    );
+    await waitFor(() => expect(screen.getByText('LogStream:Url')).toBeDefined());
+
+    const file = new File(['[1, 2]'], 'globals.json');
+    fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [file] } });
+
+    await waitFor(() => expect(api.post).not.toHaveBeenCalled());
+  });
 });

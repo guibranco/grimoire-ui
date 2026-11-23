@@ -1,7 +1,7 @@
-import fs from 'fs';
+import fs from 'node:fs';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import { fileURLToPath } from 'url';
+import { fileURLToPath } from 'node:url';
 import { defineConfig, loadEnv } from 'vite';
 
 const pkg = JSON.parse(fs.readFileSync(new URL('./package.json', import.meta.url), 'utf-8'));

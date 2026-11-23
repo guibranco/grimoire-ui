@@ -41,6 +41,19 @@ interface GlobalConfigTabProps {
   startCreating?: boolean;
 }
 
+/** A global value's environment; `*` reads "All environments". */
+const EnvSlugBadge: React.FC<{ slug: string }> = ({ slug }) =>
+  slug === '*' ? (
+    <Badge variant="outline" className="border-global/40 bg-global/10 text-global text-[10px] font-mono gap-1">
+      <Globe className="w-3 h-3" />
+      All environments
+    </Badge>
+  ) : (
+    <Badge variant="outline" className="border-zinc-800 bg-zinc-900 text-zinc-300 text-[10px] font-mono">
+      {slug}
+    </Badge>
+  );
+
 export const GlobalConfigTab: React.FC<GlobalConfigTabProps> = ({
   highlightedKey = null,
   startCreating = false,
@@ -154,40 +167,36 @@ export const GlobalConfigTab: React.FC<GlobalConfigTabProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      try {
-        const content = event.target?.result as string;
-        const data = JSON.parse(content) as Record<string, Record<string, unknown>>;
-        if (!data || typeof data !== 'object' || Array.isArray(data)) {
-          throw new Error('Invalid JSON structure');
-        }
-
-        const requests: Promise<any>[] = [];
-        Object.entries(data).forEach(([envSlug, entries]) => {
-          if (!entries || typeof entries !== 'object' || Array.isArray(entries)) return;
-          Object.entries(entries).forEach(([key, raw]) => {
-            requests.push(
-              api.post('/global/configurations', {
-                environmentSlug: envSlug,
-                key,
-                ...importEntry(raw),
-                description: 'Imported global configuration',
-              })
-            );
-          });
-        });
-
-        await Promise.all(requests);
-        await queryClient.invalidateQueries({ queryKey: ['global-configurations'] });
-        await queryClient.invalidateQueries({ queryKey: ['effective-configurations'] });
-        toast.success(`Imported ${requests.length} global configurations`);
-      } catch (err) {
-        toast.error(apiErrorMessage(err, 'Failed to import JSON. Expected format: { "<envSlug>": { "key": "value" } }.'));
-      }
-    };
-    reader.readAsText(file);
     if (fileInputRef.current) fileInputRef.current.value = '';
+    try {
+      const content = await file.text();
+      const data = JSON.parse(content) as Record<string, Record<string, unknown>>;
+      if (!data || typeof data !== 'object' || Array.isArray(data)) {
+        throw new Error('Invalid JSON structure');
+      }
+
+      const requests: Promise<any>[] = [];
+      Object.entries(data).forEach(([envSlug, entries]) => {
+        if (!entries || typeof entries !== 'object' || Array.isArray(entries)) return;
+        Object.entries(entries).forEach(([key, raw]) => {
+          requests.push(
+            api.post('/global/configurations', {
+              environmentSlug: envSlug,
+              key,
+              ...importEntry(raw),
+              description: 'Imported global configuration',
+            })
+          );
+        });
+      });
+
+      await Promise.all(requests);
+      await queryClient.invalidateQueries({ queryKey: ['global-configurations'] });
+      await queryClient.invalidateQueries({ queryKey: ['effective-configurations'] });
+      toast.success(`Imported ${requests.length} global configurations`);
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to import JSON. Expected format: { "<envSlug>": { "key": "value" } }.'));
+    }
   };
 
   const handleDelete = async () => {
@@ -323,19 +332,7 @@ export const GlobalConfigTab: React.FC<GlobalConfigTabProps> = ({
                       )}
                     >
                       <TableCell className="pl-6">
-                        {config.environmentSlug === '*' ? (
-                          <Badge
-                            variant="outline"
-                            className="border-global/40 bg-global/10 text-global text-[10px] font-mono gap-1"
-                          >
-                            <Globe className="w-3 h-3" />
-                            All environments
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="border-zinc-800 bg-zinc-900 text-zinc-300 text-[10px] font-mono">
-                            {config.environmentSlug}
-                          </Badge>
-                        )}
+                        <EnvSlugBadge slug={config.environmentSlug} />
                       </TableCell>
                       <TableCell className="font-mono text-[13px] font-bold text-global tracking-tight">{config.key}</TableCell>
                       <TableCell className="font-mono text-xs text-zinc-300">
@@ -476,16 +473,7 @@ const GlobalConfigRow: React.FC<GlobalConfigRowProps> = ({
     <TableRow className="bg-global/5 border-global/20 border-x-2 border-x-global/30 align-top">
       <TableCell className="py-2 pl-6">
         {initialData ? (
-          initialData.environmentSlug === '*' ? (
-            <Badge variant="outline" className="border-global/40 bg-global/10 text-global text-[10px] font-mono gap-1">
-              <Globe className="w-3 h-3" />
-              All environments
-            </Badge>
-          ) : (
-            <Badge variant="outline" className="border-zinc-800 bg-zinc-900 text-zinc-300 text-[10px] font-mono">
-              {initialData.environmentSlug}
-            </Badge>
-          )
+          <EnvSlugBadge slug={initialData.environmentSlug} />
         ) : (
           <select
             aria-label="Global Environment"

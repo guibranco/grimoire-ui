@@ -11,7 +11,6 @@ import {
   ChevronDown,
   ChevronUp,
   Loader2,
-  History,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -35,6 +34,7 @@ import { EditSecretModal } from '@/components/grimoire/EditSecretModal';
 import { ConfirmationModal } from '@/components/shared/ConfirmationModal';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { VersionHistoryButton } from '@/components/shared/VersionHistoryButton';
 import { secretStatusOf } from '@/lib/secretVersions';
 import { fetchSecretVersions, globalSecretVersionsUrl } from '@/lib/secretVersionsApi';
 import { SecretStatusIndicator } from '@/components/shared/SecretStatusIndicator';
@@ -210,6 +210,24 @@ export const GlobalSecretsTab: React.FC<GlobalSecretsTabProps> = ({
     }
   };
 
+
+  let placeholder: React.ReactNode = null;
+  if (secretsLoading) {
+    placeholder = (
+      <div className="p-12 flex flex-col items-center justify-center gap-4 text-muted-foreground">
+        <Loader2 className="w-8 h-8 animate-spin text-global" />
+        <span className="text-[10px] uppercase font-bold tracking-widest font-mono text-zinc-700">Syncing Global Secrets...</span>
+      </div>
+    );
+  } else if (filteredSecrets.length === 0) {
+    placeholder = (
+      <div className="flex flex-col items-center justify-center p-12 text-center h-full opacity-50">
+        <Lock className="w-12 h-12 mb-4 text-muted-foreground" />
+        <h3 className="text-lg font-bold tracking-tight uppercase">Global vault is empty</h3>
+        <p className="text-xs text-muted-foreground uppercase tracking-widest mt-1">No global secrets defined</p>
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col h-full">
       <div className="border-b border-border bg-[#121214] px-4 md:px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 shrink-0">
@@ -241,18 +259,7 @@ export const GlobalSecretsTab: React.FC<GlobalSecretsTabProps> = ({
       </div>
 
       <div className="flex-1 overflow-auto scroll-area">
-        {secretsLoading ? (
-          <div className="p-12 flex flex-col items-center justify-center gap-4 text-muted-foreground">
-            <Loader2 className="w-8 h-8 animate-spin text-global" />
-            <span className="text-[10px] uppercase font-bold tracking-widest font-mono text-zinc-700">Syncing Global Secrets...</span>
-          </div>
-        ) : filteredSecrets.length === 0 ? (
-          <div className="flex flex-col items-center justify-center p-12 text-center h-full opacity-50">
-            <Lock className="w-12 h-12 mb-4 text-muted-foreground" />
-            <h3 className="text-lg font-bold tracking-tight uppercase">Global vault is empty</h3>
-            <p className="text-xs text-muted-foreground uppercase tracking-widest mt-1">No global secrets defined</p>
-          </div>
-        ) : (
+        {placeholder ?? (
           <Table>
             <TableHeader className="bg-zinc-900/50">
               <TableRow className="hover:bg-transparent border-zinc-800 h-10">
@@ -436,19 +443,11 @@ export const GlobalSecretsTab: React.FC<GlobalSecretsTabProps> = ({
                                               <SecretStatusIndicator status={status} />
                                             </td>
                                             <td className="px-4 font-mono text-[10px] text-zinc-600">
-                                              {latestVersion ? (
-                                                <button
-                                                  type="button"
-                                                  onClick={() => setViewingVersions({ secretName: secret.name, envSlug: env.slug })}
-                                                  className="inline-flex items-center gap-1 text-zinc-400 hover:text-global transition-colors"
-                                                  title="View version history"
-                                                >
-                                                  <span>v{latestVersion.version}</span>
-                                                  <History className="w-3 h-3" />
-                                                </button>
-                                              ) : (
-                                                '—'
-                                              )}
+                                              <VersionHistoryButton
+                                                version={latestVersion?.version}
+                                                global
+                                                onClick={() => setViewingVersions({ secretName: secret.name, envSlug: env.slug })}
+                                              />
                                             </td>
                                             <td className="text-right pr-4">
                                               <button

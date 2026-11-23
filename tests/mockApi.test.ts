@@ -157,7 +157,7 @@ describe('Grimoire Mock API Integration Tests', () => {
         params: { environmentSlug: 'production' }
       });
       expect(res.status).toBe(200);
-      expect(res.data.length).toBe(2);
+      expect(res.data).toHaveLength(2);
       expect(res.data[0]).toHaveProperty('key', 'MAX_DB_CONNECTIONS');
       expect(res.data[0]).toHaveProperty('environmentSlug', 'production');
     });
@@ -261,7 +261,7 @@ describe('Grimoire Mock API Integration Tests', () => {
       const versionsRes = await api.get('/applications/production-gateway/secrets/DATABASE_PASSWORDS/versions/staging');
       expect(versionsRes.status).toBe(200);
       expect(Array.isArray(versionsRes.data)).toBe(true);
-      expect(versionsRes.data.length).toBe(2);
+      expect(versionsRes.data).toHaveLength(2);
       expect(versionsRes.data[0].version).toBe(2);
     });
   });

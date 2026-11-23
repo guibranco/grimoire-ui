@@ -211,7 +211,7 @@ export const ApplicationsSection: React.FC<{
             />
           </label>
           <label className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-zinc-500">
-            Sort
+            <span>Sort</span>
             <select
               value={sort}
               onChange={(e) => setSort(e.target.value as DashboardAppsSort)}
@@ -224,26 +224,24 @@ export const ApplicationsSection: React.FC<{
               ))}
             </select>
           </label>
-          <div className="flex" role="group" aria-label="Layout">
+          <fieldset className="flex border-0 p-0 m-0 min-w-0" aria-label="Layout">
             {toggle('grid', 'Grid view', <LayoutGrid className="w-3.5 h-3.5" />)}
             {toggle('list', 'List view', <List className="w-3.5 h-3.5" />)}
-          </div>
+          </fieldset>
         </div>
       }
     >
       {visible.length === 0 ? (
         <p className="p-8 text-center text-xs text-zinc-500">No applications match “{filter}”.</p>
-      ) : view === 'grid' ? (
-        <ul aria-label="Applications" className="grid gap-3 p-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3">
-          {visible.map((app) => (
-            <AppCard key={app.slug} app={app} attention={attentionByApp.get(app.slug)} />
-          ))}
-        </ul>
       ) : (
-        <ul aria-label="Applications">
-          {visible.map((app) => (
-            <AppRow key={app.slug} app={app} attention={attentionByApp.get(app.slug)} />
-          ))}
+        <ul
+          aria-label="Applications"
+          className={view === 'grid' ? 'grid gap-3 p-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3' : undefined}
+        >
+          {visible.map((app) => {
+            const Item = view === 'grid' ? AppCard : AppRow;
+            return <Item key={app.slug} app={app} attention={attentionByApp.get(app.slug)} />;
+          })}
         </ul>
       )}
     </Panel>

@@ -171,3 +171,34 @@ describe('ConfigTab', () => {
     });
   });
 });
+
+describe('ConfigTab import', () => {
+  const client = useTestQueryClient();
+
+  it('reads the chosen JSON file and creates each key in the active environment', async () => {
+    routeGet(api.get, {
+      [APP]: { id: '1', name: 'My App', slug: 'my-app', inheritGlobals: true },
+      [`${APP}/environments`]: [{ name: 'Production', slug: 'production' }],
+      [EFFECTIVE]: [],
+    });
+    const mockPost = api.post as ReturnType<typeof vi.fn>;
+    mockPost.mockResolvedValue({ status: 201, data: {} });
+    const { container } = render(
+      <QueryClientProvider client={client.current}>
+        <MemoryRouter>
+          <ConfigTab appSlug="my-app" />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith(EFFECTIVE));
+
+    const file = new File([JSON.stringify({ Mode: 'safe', Limit: 5 })], 'config.json', { type: 'application/json' });
+    fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [file] } });
+
+    await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(2));
+    expect(mockPost).toHaveBeenCalledWith(
+      `${APP}/configurations`,
+      expect.objectContaining({ environmentSlug: 'production', key: 'Mode', description: 'Imported configuration' })
+    );
+  });
+});

@@ -18,7 +18,6 @@ import {
   ChevronDown,
   ChevronUp,
   Loader2,
-  History,
   Globe,
   ArrowUpRight,
   ExternalLink,
@@ -47,6 +46,7 @@ import { EditSecretModal } from './EditSecretModal';
 import { ConfirmationModal } from '@/components/shared/ConfirmationModal';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { VersionHistoryButton } from '@/components/shared/VersionHistoryButton';
 import { InheritGlobalsBanner } from '@/components/shared/InheritGlobalsBanner';
 import { secretStatusOf } from '@/lib/secretVersions';
 import { appSecretVersionsUrl, fetchSecretVersions, globalSecretVersionsUrl } from '@/lib/secretVersionsApi';
@@ -59,6 +59,23 @@ interface GrimoireTabProps {
   /** Secret name to highlight and expand (from `?key=`). */
   highlightedName?: string | null;
 }
+
+/** The environments a secret has a value in, as three-letter chips. */
+const EnvPresence: React.FC<{ slugs: string[]; global: boolean }> = ({ slugs, global }) => (
+  <>
+    {slugs.map((slug) => (
+      <div
+        key={slug}
+        className={cn(
+          'px-1.5 py-0.5 border text-[9px] font-bold font-mono uppercase tracking-tighter',
+          global ? 'border-global/30 text-global/80' : 'border-zinc-800 text-zinc-500'
+        )}
+      >
+        {slug.substring(0, 3)}
+      </div>
+    ))}
+  </>
+);
 
 export const GrimoireTab: React.FC<GrimoireTabProps> = ({ appSlug, highlightedName = null }) => {
   const navigate = useNavigate();
@@ -280,6 +297,144 @@ export const GrimoireTab: React.FC<GrimoireTabProps> = ({ appSlug, highlightedNa
     }
   };
 
+
+  /** The expanded panel under a secret's row: its metadata and per-environment values. */
+  const renderSecretDetails = (
+    secret: EffectiveSecret,
+    isGlobal: boolean,
+    resolvedMetadata: EffectiveSecret & Pick<Secret, 'rotationIntervalDays'>
+  ) => (
+    <TableRow className="bg-[#080809] border-zinc-900 hover:bg-[#080809]">
+      <TableCell colSpan={4} className="p-0">
+        <div className={cn("p-4 md:p-8 border-l-2", isGlobal ? "border-global" : "border-grimoire")}>
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 md:gap-12">
+            <div>
+              <h4 className="text-[10px] uppercase font-bold tracking-[0.25em] text-zinc-600 mb-6 flex items-center gap-2">
+                <div className={cn("w-1 h-3", isGlobal ? "bg-global" : "bg-grimoire")} />
+                Secret Metadata
+              </h4>
+              <div className="grid grid-cols-2 gap-4 md:gap-6 bg-black/20 p-4 md:p-6 border border-zinc-900">
+                <div className="col-span-2">
+                  <p className="text-[11px] font-bold text-zinc-700 uppercase mb-1">Identifier</p>
+                  <p className="font-mono text-base text-zinc-200 tracking-tight break-all">{secret.name}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] font-bold text-zinc-700 uppercase mb-1">Created</p>
+                  <p className="font-mono text-xs text-zinc-400">{formatDate(resolvedMetadata.createdAt)}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] font-bold text-zinc-700 uppercase mb-1">Audit ID</p>
+                  <p className="font-mono text-xs text-zinc-400">#{resolvedMetadata.id?.substring(0, 8) || 'N/A'}</p>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-[11px] font-bold text-zinc-700 uppercase mb-1">Description</p>
+                  <p className="text-sm text-zinc-400 leading-relaxed">{resolvedMetadata.description || '—'}</p>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-[11px] font-bold text-zinc-700 uppercase mb-1">Rotation</p>
+                  <p className="font-mono text-xs text-zinc-400">
+                    {resolvedMetadata.rotationIntervalDays ? `Every ${resolvedMetadata.rotationIntervalDays} days` : 'No schedule'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-6">
+              <h4 className="text-[10px] uppercase font-bold tracking-[0.25em] text-zinc-600 flex items-center gap-2">
+                <div className="w-1 h-3 bg-zinc-800" />
+                Environment Logic
+                {(expandedSecretLoading || expandedVersionsLoading) && (
+                  <Loader2 className={cn("w-3 h-3 animate-spin ml-1", isGlobal ? "text-global" : "text-grimoire")} />
+                )}
+              </h4>
+              <div className="border border-zinc-900 overflow-hidden">
+                <Table>
+                  <TableHeader className="bg-black/40">
+                    <TableRow className="hover:bg-transparent border-zinc-900">
+                      <TableHead className="text-[10px] uppercase font-bold tracking-widest text-zinc-500 h-8">ENV</TableHead>
+                      <TableHead className="text-[10px] uppercase font-bold tracking-widest text-zinc-500 h-8">STATUS</TableHead>
+                      <TableHead className="text-[10px] uppercase font-bold tracking-widest text-zinc-500 h-8">VERSION</TableHead>
+                      <TableHead className="text-right text-[10px] uppercase font-bold tracking-widest text-zinc-500 h-8 pr-4">ACTIONS</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {safeEnvs.map(env => {
+                      const { version: latestVersion, resolvedEnvSlug } = resolveSecretVersion(secret, env.slug);
+                      const status = computeStatusFromVersion(latestVersion);
+                      return (
+                        <TableRow key={env.slug} className="border-zinc-900 hover:bg-zinc-900/30 h-12 transition-colors">
+                          <td className="px-4 font-mono text-[11px] font-bold">{env.name}</td>
+                          <td className="px-4">
+                            <SecretStatusIndicator status={status} />
+                          </td>
+                          <td className="px-4 font-mono text-[10px] text-zinc-600">
+                            <VersionHistoryButton
+                              version={latestVersion?.version}
+                              global={isGlobal}
+                              onClick={() =>
+                                setViewingVersions({
+                                  secretName: secret.name,
+                                  envSlug: resolvedEnvSlug,
+                                  scope: isGlobal ? 'global' : { appSlug },
+                                })
+                              }
+                            />
+                          </td>
+                          <td className="text-right pr-4">
+                            {isGlobal ? (
+                              <button
+                                type="button"
+                                className="text-[10px] font-bold uppercase tracking-widest text-grimoire hover:text-grimoire/80 transition-colors"
+                                onClick={() => {
+                                  setOverrideTarget({
+                                    name: secret.name,
+                                    description: secret.description || '',
+                                  });
+                                  setIsAddSecretOpen(true);
+                                }}
+                              >
+                                OVERRIDE
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 hover:text-grimoire transition-colors"
+                                onClick={() => setEditingValue({ secretName: secret.name, envSlug: env.slug })}
+                              >
+                                {status === SecretStatus.MISSING ? '+ SET' : 'UPDATE'}
+                              </button>
+                            )}
+                          </td>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+
+  let placeholder: React.ReactNode = null;
+  if (secretsLoading) {
+    placeholder = (
+      <div className="p-12 flex flex-col items-center justify-center gap-4 text-muted-foreground">
+        <Loader2 className="w-8 h-8 animate-spin" />
+        <span className="text-[10px] uppercase font-bold tracking-widest font-mono text-zinc-700">Syncing Secrets...</span>
+      </div>
+    );
+  } else if (filteredSecrets.length === 0) {
+    placeholder = (
+      <div className="flex flex-col items-center justify-center p-12 text-center h-full opacity-50">
+        <Lock className="w-12 h-12 mb-4 text-muted-foreground" />
+        <h3 className="text-lg font-bold tracking-tight uppercase">Secrets vault is empty</h3>
+        <p className="text-xs text-muted-foreground uppercase tracking-widest mt-1">No secrets defined</p>
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col h-full">
       <div className="min-h-[48px] border-b border-border bg-[#121214] flex flex-wrap items-center justify-between px-4 md:px-6 py-2 shrink-0 gap-x-4 gap-y-2">
@@ -326,18 +481,7 @@ export const GrimoireTab: React.FC<GrimoireTabProps> = ({ appSlug, highlightedNa
       {appSlug && <InheritGlobalsBanner appSlug={appSlug} />}
 
       <div className="flex-1 overflow-auto scroll-area">
-        {secretsLoading ? (
-          <div className="p-12 flex flex-col items-center justify-center gap-4 text-muted-foreground">
-            <Loader2 className="w-8 h-8 animate-spin" />
-            <span className="text-[10px] uppercase font-bold tracking-widest font-mono text-zinc-700">Syncing Secrets...</span>
-          </div>
-        ) : filteredSecrets.length === 0 ? (
-          <div className="flex flex-col items-center justify-center p-12 text-center h-full opacity-50">
-            <Lock className="w-12 h-12 mb-4 text-muted-foreground" />
-            <h3 className="text-lg font-bold tracking-tight uppercase">Secrets vault is empty</h3>
-            <p className="text-xs text-muted-foreground uppercase tracking-widest mt-1">No secrets defined</p>
-          </div>
-        ) : (
+        {placeholder ?? (
           <div className="p-0">
             <Table>
               <TableHeader className="bg-zinc-900/50">
@@ -393,11 +537,8 @@ export const GrimoireTab: React.FC<GrimoireTabProps> = ({ appSlug, highlightedNa
                               <span
                                 className={cn(
                                   "font-mono text-sm font-medium transition-colors",
-                                  isGlobal
-                                    ? "text-zinc-300"
-                                    : isExpanded
-                                      ? "text-grimoire"
-                                      : "text-zinc-200"
+                                  isGlobal && "text-zinc-300",
+                                  !isGlobal && (isExpanded ? "text-grimoire" : "text-zinc-200")
                                 )}
                               >
                                 {secret.name}
@@ -426,34 +567,22 @@ export const GrimoireTab: React.FC<GrimoireTabProps> = ({ appSlug, highlightedNa
                         </TableCell>
                         <TableCell className="hidden lg:table-cell">
                           <div className="flex gap-1">
-                            {safeEnvs.map(env => {
-                              const status = getSecretStatus(secret, env.slug);
-                              if (status === SecretStatus.MISSING) return null;
-                              return (
-                                <div
-                                  key={env.slug}
-                                  className={cn(
-                                    "px-1.5 py-0.5 border text-[9px] font-bold font-mono uppercase tracking-tighter",
-                                    isGlobal ? "border-global/30 text-global/80" : "border-zinc-800 text-zinc-500"
-                                  )}
-                                >
-                                  {env.slug.substring(0, 3)}
-                                </div>
-                              );
-                            })}
+                            <EnvPresence
+                              slugs={safeEnvs
+                                .map((env) => env.slug)
+                                .filter((slug) => getSecretStatus(secret, slug) !== SecretStatus.MISSING)}
+                              global={isGlobal}
+                            />
                           </div>
                         </TableCell>
                         <TableCell className="text-right px-6">
                           {isGlobal ? (
-                            <div
-                              className="flex justify-end items-center gap-2"
-                              // Keep clicks and key presses on these actions from toggling the row.
-                              onClick={(e) => e.stopPropagation()}
-                              onKeyDown={(e) => e.stopPropagation()}
-                            >
+                            <div className="flex justify-end items-center gap-2">
+                              {/* Each action stops its click so it doesn't also toggle the row. */}
                               <button
                                 type="button"
-                                onClick={() => {
+                                onClick={(e) => {
+                                  e.stopPropagation();
                                   setOverrideTarget({
                                     name: secret.name,
                                     description: secret.description || '',
@@ -467,7 +596,10 @@ export const GrimoireTab: React.FC<GrimoireTabProps> = ({ appSlug, highlightedNa
                               </button>
                               <button
                                 type="button"
-                                onClick={() => navigate(globalPath('secrets', secret.name))}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigate(globalPath('secrets', secret.name));
+                                }}
                                 className="px-2 py-0.5 border border-global/30 text-[10px] font-bold uppercase tracking-widest text-global hover:bg-global/10 transition-colors inline-flex items-center gap-1"
                               >
                                 <ExternalLink className="w-3 h-3" />
@@ -519,131 +651,7 @@ export const GrimoireTab: React.FC<GrimoireTabProps> = ({ appSlug, highlightedNa
                           )}
                         </TableCell>
                       </TableRow>
-                      {isExpanded && (
-                        <TableRow className="bg-[#080809] border-zinc-900 hover:bg-[#080809]">
-                          <TableCell colSpan={4} className="p-0">
-                            <div className={cn("p-4 md:p-8 border-l-2", isGlobal ? "border-global" : "border-grimoire")}>
-                              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 md:gap-12">
-                                <div>
-                                  <h4 className="text-[10px] uppercase font-bold tracking-[0.25em] text-zinc-600 mb-6 flex items-center gap-2">
-                                    <div className={cn("w-1 h-3", isGlobal ? "bg-global" : "bg-grimoire")} />
-                                    Secret Metadata
-                                  </h4>
-                                  <div className="grid grid-cols-2 gap-4 md:gap-6 bg-black/20 p-4 md:p-6 border border-zinc-900">
-                                    <div className="col-span-2">
-                                      <p className="text-[11px] font-bold text-zinc-700 uppercase mb-1">Identifier</p>
-                                      <p className="font-mono text-base text-zinc-200 tracking-tight break-all">{secret.name}</p>
-                                    </div>
-                                    <div>
-                                      <p className="text-[11px] font-bold text-zinc-700 uppercase mb-1">Created</p>
-                                      <p className="font-mono text-xs text-zinc-400">{formatDate(resolvedMetadata.createdAt)}</p>
-                                    </div>
-                                    <div>
-                                      <p className="text-[11px] font-bold text-zinc-700 uppercase mb-1">Audit ID</p>
-                                      <p className="font-mono text-xs text-zinc-400">#{resolvedMetadata.id?.substring(0, 8) || 'N/A'}</p>
-                                    </div>
-                                    <div className="col-span-2">
-                                      <p className="text-[11px] font-bold text-zinc-700 uppercase mb-1">Description</p>
-                                      <p className="text-sm text-zinc-400 leading-relaxed">{resolvedMetadata.description || '—'}</p>
-                                    </div>
-                                    <div className="col-span-2">
-                                      <p className="text-[11px] font-bold text-zinc-700 uppercase mb-1">Rotation</p>
-                                      <p className="font-mono text-xs text-zinc-400">
-                                        {resolvedMetadata.rotationIntervalDays ? `Every ${resolvedMetadata.rotationIntervalDays} days` : 'No schedule'}
-                                      </p>
-                                    </div>
-                                  </div>
-                                </div>
-
-                                <div className="space-y-6">
-                                  <h4 className="text-[10px] uppercase font-bold tracking-[0.25em] text-zinc-600 flex items-center gap-2">
-                                    <div className="w-1 h-3 bg-zinc-800" />
-                                    Environment Logic
-                                    {(expandedSecretLoading || expandedVersionsLoading) && (
-                                      <Loader2 className={cn("w-3 h-3 animate-spin ml-1", isGlobal ? "text-global" : "text-grimoire")} />
-                                    )}
-                                  </h4>
-                                  <div className="border border-zinc-900 overflow-hidden">
-                                    <Table>
-                                      <TableHeader className="bg-black/40">
-                                        <TableRow className="hover:bg-transparent border-zinc-900">
-                                          <TableHead className="text-[10px] uppercase font-bold tracking-widest text-zinc-500 h-8">ENV</TableHead>
-                                          <TableHead className="text-[10px] uppercase font-bold tracking-widest text-zinc-500 h-8">STATUS</TableHead>
-                                          <TableHead className="text-[10px] uppercase font-bold tracking-widest text-zinc-500 h-8">VERSION</TableHead>
-                                          <TableHead className="text-right text-[10px] uppercase font-bold tracking-widest text-zinc-500 h-8 pr-4">ACTIONS</TableHead>
-                                        </TableRow>
-                                      </TableHeader>
-                                      <TableBody>
-                                        {safeEnvs.map(env => {
-                                          const { version: latestVersion, resolvedEnvSlug } = resolveSecretVersion(secret, env.slug);
-                                          const status = computeStatusFromVersion(latestVersion);
-                                          return (
-                                            <TableRow key={env.slug} className="border-zinc-900 hover:bg-zinc-900/30 h-12 transition-colors">
-                                              <td className="px-4 font-mono text-[11px] font-bold">{env.name}</td>
-                                              <td className="px-4">
-                                                <SecretStatusIndicator status={status} />
-                                              </td>
-                                              <td className="px-4 font-mono text-[10px] text-zinc-600">
-                                                {latestVersion ? (
-                                                  <button
-                                                    type="button"
-                                                    onClick={() =>
-                                                      setViewingVersions({
-                                                        secretName: secret.name,
-                                                        envSlug: resolvedEnvSlug,
-                                                        scope: isGlobal ? 'global' : { appSlug },
-                                                      })
-                                                    }
-                                                    className={cn(
-                                                      "inline-flex items-center gap-1 text-zinc-400 transition-colors",
-                                                      isGlobal ? "hover:text-global" : "hover:text-grimoire"
-                                                    )}
-                                                    title="View version history"
-                                                  >
-                                                    <span>v{latestVersion.version}</span>
-                                                    <History className="w-3 h-3" />
-                                                  </button>
-                                                ) : (
-                                                  '—'
-                                                )}
-                                              </td>
-                                              <td className="text-right pr-4">
-                                                {isGlobal ? (
-                                                  <button
-                                                    type="button"
-                                                    className="text-[10px] font-bold uppercase tracking-widest text-grimoire hover:text-grimoire/80 transition-colors"
-                                                    onClick={() => {
-                                                      setOverrideTarget({
-                                                        name: secret.name,
-                                                        description: secret.description || '',
-                                                      });
-                                                      setIsAddSecretOpen(true);
-                                                    }}
-                                                  >
-                                                    OVERRIDE
-                                                  </button>
-                                                ) : (
-                                                  <button
-                                                    type="button"
-                                                    className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 hover:text-grimoire transition-colors"
-                                                    onClick={() => setEditingValue({ secretName: secret.name, envSlug: env.slug })}
-                                                  >
-                                                    {status === SecretStatus.MISSING ? '+ SET' : 'UPDATE'}
-                                                  </button>
-                                                )}
-                                              </td>
-                                            </TableRow>
-                                          );
-                                        })}
-                                      </TableBody>
-                                    </Table>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      )}
+                      {isExpanded && renderSecretDetails(secret, isGlobal, resolvedMetadata)}
                     </React.Fragment>
                   );
                 })}

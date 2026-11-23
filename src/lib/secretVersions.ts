@@ -7,9 +7,12 @@ import { SecretStatus, type SecretVersion, type SecretVersionStatus } from '@/ty
  */
 export const MAX_GRACE_DAYS = 3650;
 
+/** The fields that decide whether a version is served. */
+type VersionWindow = Pick<SecretVersion, 'isEnabled' | 'notBefore' | 'expiresAt'>;
+
 const time = (v: string | null | undefined) => (v ? new Date(v).getTime() : null);
 
-export function isValidVersion(v: Pick<SecretVersion, 'isEnabled' | 'notBefore' | 'expiresAt'>, now = Date.now()) {
+export function isValidVersion(v: VersionWindow, now = Date.now()) {
   const nb = time(v.notBefore);
   const exp = time(v.expiresAt);
   return v.isEnabled && (nb === null || nb <= now) && (exp === null || exp >= now);
@@ -55,7 +58,7 @@ export function versionsToExpire<T extends Pick<SecretVersion, 'isEnabled' | 'ex
 export function wouldLeaveNoValidVersion(
   versions: SecretVersion[],
   target: number,
-  next: Pick<SecretVersion, 'isEnabled' | 'notBefore' | 'expiresAt'>,
+  next: VersionWindow,
   now = Date.now()
 ) {
   if (currentVersion(versions, now) === null) return false;
@@ -73,7 +76,7 @@ export const STATUS_LABELS: Record<SecretVersionStatus, string> = {
 
 /** A secret's status in one environment, from the version that environment serves. */
 export function secretStatusOf(
-  v: Pick<SecretVersion, 'isEnabled' | 'notBefore' | 'expiresAt'> | undefined,
+  v: VersionWindow | undefined,
   now = Date.now()
 ): SecretStatus {
   if (!v) return SecretStatus.MISSING;

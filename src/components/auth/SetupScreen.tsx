@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Key, ArrowRight, Loader2, Globe, Eye, EyeOff } from 'lucide-react';
 import { useStore } from '@/store/useStore';
-import { UI_VERSION } from '@/lib/api';
+import { UI_VERSION, resolveApiBaseUrl } from '@/lib/api';
 import toast from 'react-hot-toast';
 import logoMark from '@/assets/logo-mark.svg';
 
@@ -16,12 +16,20 @@ export const SetupScreen: React.FC = () => {
 
   const setAdminAuthenticated = useStore((state) => state.setAdminAuthenticated);
 
-  const handleConnect = async (e: React.FormEvent) => {
+  // Start on the URL field (a ref rather than `autoFocus`, which screen readers can trip over).
+  const urlRef = useRef<HTMLInputElement>(null);
+  useEffect(() => urlRef.current?.focus(), []);
+
+  const handleConnect = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     let hasError = false;
+    const baseUrl = resolveApiBaseUrl(url);
     if (!url.trim()) {
       setUrlError('Instance URL is required');
+      hasError = true;
+    } else if (!baseUrl) {
+      setUrlError('Enter an http:// or https:// URL');
       hasError = true;
     } else {
       setUrlError('');
@@ -34,17 +42,17 @@ export const SetupScreen: React.FC = () => {
       setKeyError('');
     }
 
-    if (hasError) return;
+    if (hasError || !baseUrl) return;
 
     setLoading(true);
     try {
-      const sanitizedUrl = url.trim().endsWith('/') ? url.trim().slice(0, -1) : url.trim();
-      localStorage.setItem('grimoire_api_url', sanitizedUrl);
+      localStorage.setItem('grimoire_api_url', baseUrl);
       localStorage.setItem('grimoire_api_key', key.trim());
       setAdminAuthenticated(true);
       toast.success('Connected successfully');
     } catch (err) {
-      toast.error('Failed to connect');
+      // Storage can be full or blocked (e.g. some private-browsing modes).
+      toast.error(`Failed to save the connection: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setLoading(false);
     }
@@ -67,26 +75,28 @@ export const SetupScreen: React.FC = () => {
         <form onSubmit={handleConnect} className="p-8 space-y-6">
           <div className="space-y-4">
             <div className="space-y-2 text-left">
-              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Instance URL</label>
+              <label htmlFor="setup-url" className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Instance URL</label>
               <div className="relative">
                 <Globe className="absolute left-3 top-3 w-4 h-4 text-zinc-700" />
                 <input
+                  id="setup-url"
+                  ref={urlRef}
                   type="text"
                   placeholder="http://localhost:5000"
                   className={`w-full h-10 pl-10 pr-3 bg-zinc-900 border ${urlError ? 'border-destructive' : 'border-zinc-800'} text-zinc-200 font-mono text-sm focus:border-grimoire transition-colors rounded-none outline-none`}
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
-                  autoFocus
                 />
               </div>
               {urlError && <p className="text-[10px] text-destructive uppercase font-bold tracking-widest mt-1">{urlError}</p>}
             </div>
 
             <div className="space-y-2 text-left">
-              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Admin API Key</label>
+              <label htmlFor="setup-key" className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Admin API Key</label>
               <div className="relative">
                 <Key className="absolute left-3 top-3 w-4 h-4 text-zinc-700" />
                 <input
+                  id="setup-key"
                   type={showKey ? "text" : "password"}
                   placeholder="grimoire_admin_..."
                   className={`w-full h-10 pl-10 pr-10 bg-zinc-900 border ${keyError ? 'border-destructive' : 'border-zinc-800'} text-zinc-200 font-mono text-sm focus:border-grimoire transition-colors rounded-none outline-none`}

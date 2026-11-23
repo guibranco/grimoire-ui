@@ -35,16 +35,17 @@ const RevisionDiff: React.FC<{ revision: ConfigurationRevision; previous?: Confi
   if (revision.change === 'delete') {
     return <p className="text-[11px] text-zinc-500">Key deleted.</p>;
   }
-  const lines = lineDiff(previous?.value ?? null, revision.value);
+  // A diff is rendered once and never reordered, so each line's position is a stable key.
+  const lines = lineDiff(previous?.value ?? null, revision.value).map((line, position) => ({ ...line, position }));
   const notes: string[] = [];
   if (previous && previous.valueType !== revision.valueType) notes.push(`type ${previous.valueType} → ${revision.valueType}`);
   if (previous && (previous.description ?? '') !== (revision.description ?? '')) notes.push('description changed');
   return (
     <div className="space-y-1">
       <pre aria-label={`Value at revision ${revision.revision}`} className="font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-all bg-black/40 border border-zinc-900 p-2 max-h-48 overflow-auto">
-        {lines.map((line, i) => (
+        {lines.map((line) => (
           <span
-            key={i}
+            key={line.position}
             className={cn(
               'block',
               line.kind === 'added' && previous && 'bg-emerald-500/10 text-emerald-300',

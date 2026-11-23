@@ -13,7 +13,7 @@ const DEFAULT_API_URL = 'http://localhost:5000';
 export function resolveApiBaseUrl(stored: string | null | undefined): string | null {
   const raw = stored?.trim();
   if (!raw || raw === 'mock://') return null;
-  const withScheme = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(raw) ? raw : `https://${raw}`;
+  const withScheme = raw.includes('://') ? raw : `https://${raw}`;
   let parsed: URL;
   try {
     parsed = new URL(withScheme);
@@ -52,7 +52,7 @@ export function extractPlainApiKey(data: unknown): string | null {
 }
 
 export function toApiDateTime(value?: string | null): string | null {
-  if (!value || !value.trim()) return null;
+  if (!value?.trim()) return null;
   const trimmed = value.trim();
   const parsed = /^\d{4}-\d{2}-\d{2}$/.test(trimmed)
     ? new Date(`${trimmed}T00:00:00.000Z`)

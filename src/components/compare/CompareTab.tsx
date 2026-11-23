@@ -177,7 +177,7 @@ export const CompareTab: React.FC<{ appSlug: string; envs: Environment[]; fromSl
         </label>
         <label className="ml-2 flex items-center gap-2 text-[11px] text-zinc-400">
           <input type="checkbox" checked={showUnchanged} onChange={(e) => setParam('unchanged', e.target.checked ? '1' : null)} />
-          Show unchanged
+          <span>Show unchanged</span>
         </label>
         {data && (
           <p className="ml-auto text-[11px] font-mono text-zinc-500" aria-live="polite">

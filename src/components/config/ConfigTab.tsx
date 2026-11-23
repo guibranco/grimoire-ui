@@ -146,31 +146,27 @@ export const ConfigTab: React.FC<ConfigTabProps> = ({
     const file = e.target.files?.[0];
     if (!file || !activeEnvironmentSlug) return;
 
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      try {
-        const content = event.target?.result as string;
-        const data = JSON.parse(content);
-
-        const promises = Object.entries(data).map(([key, raw]) =>
-          api.post(`/applications/${appSlug}/configurations`, {
-            environmentSlug: activeEnvironmentSlug,
-            key,
-            ...importEntry(raw),
-            description: 'Imported configuration'
-          })
-        );
-
-        await Promise.all(promises);
-        await queryClient.invalidateQueries({ queryKey: ['effective-configurations', appSlug] });
-        await queryClient.invalidateQueries({ queryKey: ['configurations', appSlug] });
-        toast.success(`Imported ${promises.length} configurations`);
-      } catch (err) {
-        toast.error(apiErrorMessage(err, 'Failed to import JSON. Ensure it is a flat key-value object.'));
-      }
-    };
-    reader.readAsText(file);
     if (fileInputRef.current) fileInputRef.current.value = '';
+    try {
+      const content = await file.text();
+      const data = JSON.parse(content);
+
+      const promises = Object.entries(data).map(([key, raw]) =>
+        api.post(`/applications/${appSlug}/configurations`, {
+          environmentSlug: activeEnvironmentSlug,
+          key,
+          ...importEntry(raw),
+          description: 'Imported configuration'
+        })
+      );
+
+      await Promise.all(promises);
+      await queryClient.invalidateQueries({ queryKey: ['effective-configurations', appSlug] });
+      await queryClient.invalidateQueries({ queryKey: ['configurations', appSlug] });
+      toast.success(`Imported ${promises.length} configurations`);
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to import JSON. Ensure it is a flat key-value object.'));
+    }
   };
 
   const handleDelete = async () => {
@@ -198,8 +194,7 @@ export const ConfigTab: React.FC<ConfigTabProps> = ({
       await queryClient.invalidateQueries({ queryKey: ['configurations', appSlug] });
       await queryClient.invalidateQueries({ queryKey: ['global-environments'] });
       if (activeEnvironmentSlug === deletingEnv.slug) {
-        const remaining = safeEnvs.filter(e => e.slug !== deletingEnv.slug);
-        setSelectedEnvironmentSlug(remaining[0]?.slug || null);
+        setSelectedEnvironmentSlug(safeEnvs.find((e) => e.slug !== deletingEnv.slug)?.slug || null);
       }
       toast.success(`Environment "${deletingEnv.name}" deleted`);
     } catch (err: any) {
@@ -207,6 +202,23 @@ export const ConfigTab: React.FC<ConfigTabProps> = ({
     }
   };
 
+
+  let placeholder: React.ReactNode = null;
+  if (!activeEnvironmentSlug) {
+    placeholder = (
+      <div className="flex flex-col items-center justify-center p-12 text-center h-full opacity-50">
+        <h3 className="text-lg font-bold tracking-tight uppercase">No Env Selected</h3>
+        <p className="text-xs text-muted-foreground uppercase tracking-widest mt-1 font-sans">Select or create an environment above</p>
+      </div>
+    );
+  } else if (configsLoading) {
+    placeholder = (
+      <div className="p-12 flex flex-col items-center justify-center gap-4 text-muted-foreground">
+        <Loader2 className="w-8 h-8 animate-spin" />
+        <span className="text-[10px] uppercase font-bold tracking-widest font-mono">Syncing Registry...</span>
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col h-full">
       <div className="min-h-[48px] border-b border-border bg-[#121214] flex flex-wrap items-center justify-between px-4 md:px-6 py-2 shrink-0 gap-x-4 gap-y-2">
@@ -315,17 +327,7 @@ export const ConfigTab: React.FC<ConfigTabProps> = ({
       {appSlug && <InheritGlobalsBanner appSlug={appSlug} />}
 
       <div className="flex-1 overflow-auto scroll-area">
-        {!activeEnvironmentSlug ? (
-          <div className="flex flex-col items-center justify-center p-12 text-center h-full opacity-50">
-            <h3 className="text-lg font-bold tracking-tight uppercase">No Env Selected</h3>
-            <p className="text-xs text-muted-foreground uppercase tracking-widest mt-1 font-sans">Select or create an environment above</p>
-          </div>
-        ) : configsLoading ? (
-          <div className="p-12 flex flex-col items-center justify-center gap-4 text-muted-foreground">
-            <Loader2 className="w-8 h-8 animate-spin" />
-            <span className="text-[10px] uppercase font-bold tracking-widest font-mono">Syncing Registry...</span>
-          </div>
-        ) : (
+        {placeholder ?? (activeEnvironmentSlug && (
           <div className="p-0">
             <Table>
               <TableHeader className="bg-zinc-900/50">
@@ -507,7 +509,7 @@ export const ConfigTab: React.FC<ConfigTabProps> = ({
               </TableBody>
             </Table>
           </div>
-        )}
+        ))}
       </div>
 
       <ConfirmationModal
