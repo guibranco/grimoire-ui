@@ -205,21 +205,21 @@ const AppDetail: React.FC<{ appSlug: string }> = ({ appSlug }) => {
               className="px-4 md:px-6 shrink-0 h-full bg-transparent border-r border-border data-[state=active]:bg-config/5 data-[state=active]:border-b-2 data-[state=active]:border-b-config data-[state=active]:text-config rounded-none font-bold uppercase tracking-tight text-[11px] gap-2 transition-all shadow-none"
             >
               <Settings className="w-3.5 h-3.5" />
-              ⚙️ Configuration
+              Configuration
             </TabsTrigger>
             <TabsTrigger
               value="flags"
               className="px-4 md:px-6 shrink-0 h-full bg-transparent border-r border-border data-[state=active]:bg-flags/5 data-[state=active]:border-b-2 data-[state=active]:border-b-flags data-[state=active]:text-flags rounded-none font-bold uppercase tracking-tight text-[11px] gap-2 transition-all shadow-none"
             >
               <Flag className="w-3.5 h-3.5" />
-              🚩 Feature Flags
+              Feature Flags
             </TabsTrigger>
             <TabsTrigger 
               value="secrets" 
               className="px-4 md:px-6 shrink-0 h-full bg-transparent border-r border-border data-[state=active]:bg-grimoire/5 data-[state=active]:border-b-2 data-[state=active]:border-b-grimoire data-[state=active]:text-grimoire rounded-none font-bold uppercase tracking-tight text-[11px] gap-2 transition-all shadow-none"
             >
               <Lock className="w-3.5 h-3.5" />
-              🔐 Secrets
+              Secrets
             </TabsTrigger>
             <TabsTrigger
               value="activity"
