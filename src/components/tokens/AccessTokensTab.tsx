@@ -58,8 +58,10 @@ export const AccessTokensTab: React.FC<Props> = ({ appSlug, envs, onRotateKey })
             <span className="mr-2 px-1.5 py-0.5 border border-zinc-700 text-[10px] font-bold uppercase tracking-widest text-zinc-400">
               Legacy
             </span>
-            The application API key reads every environment, and rotating it breaks every consumer at once. Prefer
-            an access token per consumer, limited to the environments and data it needs.
+            <span>
+              The application API key reads every environment, and rotating it breaks every consumer at once.
+              Prefer an access token per consumer, limited to the environments and data it needs.
+            </span>
           </p>
         </div>
         <button
@@ -86,7 +88,7 @@ export const AccessTokensTab: React.FC<Props> = ({ appSlug, envs, onRotateKey })
 
       {isError && (
         <div role="alert" className="flex items-center gap-3 text-xs text-red-400">
-          Couldn't load the access tokens.
+          <span>Couldn't load the access tokens.</span>
           <button type="button" onClick={() => void refetch()} className="inline-flex items-center gap-1 underline">
             <RefreshCw className="w-3 h-3" aria-hidden="true" /> Retry
           </button>

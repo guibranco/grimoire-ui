@@ -100,11 +100,13 @@ export function forgetMockAccessTokens(appSlug: string) {
 const randomString = (length: number) =>
   Array.from(crypto.getRandomValues(new Uint8Array(length)), (b) => BASE62[b % BASE62.length]).join('');
 
+function statusOf(t: AccessToken): AccessToken['status'] {
+  if (t.revokedAt) return 'revoked';
+  return t.expiresAt && Date.parse(t.expiresAt) <= Date.now() ? 'expired' : 'active';
+}
+
 /** Status as of now, so expiry shows without a write. */
-const withStatus = (t: AccessToken): AccessToken => ({
-  ...t,
-  status: t.revokedAt ? 'revoked' : t.expiresAt && new Date(t.expiresAt) <= new Date() ? 'expired' : 'active',
-});
+const withStatus = (t: AccessToken): AccessToken => ({ ...t, status: statusOf(t) });
 
 const ok = (data: unknown, status = 200): MockTokenResponse => ({ status, data });
 const notFound = (detail: string): MockTokenResponse => ({
@@ -133,8 +135,57 @@ function validate(body: any, envSlugs: string[]): Record<string, string[]> {
       if (unknown.length) errors.Environments = [`Unknown environment(s): ${unknown.join(', ')}.`];
     }
   }
-  if (body?.expiresAt && !(new Date(body.expiresAt) > new Date())) errors.ExpiresAt = ['The expiry must be in the future.'];
+  if (body?.expiresAt) {
+    const expires = Date.parse(body.expiresAt);
+    if (Number.isNaN(expires) || expires <= Date.now()) errors.ExpiresAt = ['The expiry must be in the future.'];
+  }
   return errors;
+}
+
+/** `{ app, id }` for `/applications/{slug}/access-tokens[/{id}/revoke]`; `null` for any other path. */
+function parseRoute(path: string): { app: string; id?: string } | null {
+  const match = /^\/applications\/([^/]+)\/access-tokens(?:\/([^/]+)\/revoke)?$/.exec(path);
+  if (!match) return null;
+  try {
+    return { app: decodeURIComponent(match[1]), id: match[2] === undefined ? undefined : decodeURIComponent(match[2]) };
+  } catch {
+    return null;
+  }
+}
+
+function createToken(app: string, list: AccessToken[], envSlugs: string[], body: any): MockTokenResponse {
+  const errors = validate(body, envSlugs);
+  if (Object.keys(errors).length) return invalid(errors);
+  const name = body.name.trim();
+  if (list.some((t) => t.name === name))
+    return { status: 409, data: { title: 'Conflict', status: 409, detail: 'An access token with this name already exists.' } };
+  const secret = randomString(40);
+  const environments: string[] | null = body.environments
+    ? [...new Set<string>(body.environments.map((e: string) => e.toLowerCase()))].sort((a, b) => a.localeCompare(b))
+    : null;
+  const token: AccessToken = {
+    id: crypto.randomUUID(),
+    name,
+    prefix: secret.slice(0, 8),
+    environments,
+    scopes: KNOWN_SCOPES.filter((s) => body.scopes.includes(s)),
+    expiresAt: body.expiresAt ?? null,
+    lastUsedAt: null,
+    revokedAt: null,
+    createdAt: new Date().toISOString(),
+    status: 'active',
+  };
+  tokens[app] = [token, ...list];
+  persist();
+  return ok({ token, plainToken: TOKEN_PREFIX + secret }, 201);
+}
+
+function revokeToken(list: AccessToken[], id: string): MockTokenResponse {
+  const token = list.find((t) => t.id === id);
+  if (!token) return notFound('Access token not found.');
+  token.revokedAt ??= new Date().toISOString();
+  persist();
+  return ok(withStatus(token));
 }
 
 /** Handles `/applications/{slug}/access-tokens[/{id}/revoke]`; `null` for any other path. */
@@ -144,55 +195,14 @@ export function handleAccessTokenRequest(
   path: string,
   body: any
 ): MockTokenResponse | null {
-  const match = /^\/applications\/([^/]+)\/access-tokens(?:\/([^/]+)\/(revoke))?$/.exec(path);
-  if (!match) return null;
-  let app: string;
-  let id: string | undefined;
-  try {
-    app = decodeURIComponent(match[1]);
-    id = match[2] === undefined ? undefined : decodeURIComponent(match[2]);
-  } catch {
-    return null;
-  }
-  const envs = ctx.environmentsOf(app);
+  const route = parseRoute(path);
+  if (!route) return null;
+  const envs = ctx.environmentsOf(route.app);
   if (!envs) return notFound('Application not found.');
-  const list = tokens[app] ?? [];
+  const list = tokens[route.app] ?? [];
 
-  if (!id && method === 'GET') return ok(list.map(withStatus));
-
-  if (!id && method === 'POST') {
-    const errors = validate(body, envs.map((e) => e.slug));
-    if (Object.keys(errors).length) return invalid(errors);
-    const name = body.name.trim();
-    if (list.some((t) => t.name === name))
-      return { status: 409, data: { title: 'Conflict', status: 409, detail: 'An access token with this name already exists.' } };
-    const secret = randomString(40);
-    const token: AccessToken = {
-      id: crypto.randomUUID(),
-      name,
-      prefix: secret.slice(0, 8),
-      environments: body.environments
-        ? [...new Set<string>(body.environments.map((e: string) => e.toLowerCase()))].sort()
-        : null,
-      scopes: KNOWN_SCOPES.filter((s) => body.scopes.includes(s)),
-      expiresAt: body.expiresAt ?? null,
-      lastUsedAt: null,
-      revokedAt: null,
-      createdAt: new Date().toISOString(),
-      status: 'active',
-    };
-    tokens[app] = [token, ...list];
-    persist();
-    return ok({ token, plainToken: TOKEN_PREFIX + secret }, 201);
-  }
-
-  if (id && method === 'POST') {
-    const token = list.find((t) => t.id === id);
-    if (!token) return notFound('Access token not found.');
-    token.revokedAt ??= new Date().toISOString();
-    persist();
-    return ok(withStatus(token));
-  }
-
+  if (route.id !== undefined) return method === 'POST' ? revokeToken(list, route.id) : null;
+  if (method === 'GET') return ok(list.map(withStatus));
+  if (method === 'POST') return createToken(route.app, list, envs.map((e) => e.slug), body);
   return null;
 }
