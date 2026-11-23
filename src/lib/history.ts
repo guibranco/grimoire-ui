@@ -40,6 +40,15 @@ export function canRollBackTo(revision: ConfigurationRevision, newest: Configura
 
 export type DiffLine = { kind: 'same' | 'added' | 'removed'; text: string };
 
+/** `lcs[i][j]`: the length of the longest common subsequence of `a[i..]` and `b[j..]`. */
+function lcsTable(a: string[], b: string[]): number[][] {
+  const lcs: number[][] = Array.from({ length: a.length + 1 }, () => new Array<number>(b.length + 1).fill(0));
+  for (let i = a.length - 1; i >= 0; i--)
+    for (let j = b.length - 1; j >= 0; j--)
+      lcs[i][j] = a[i] === b[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+  return lcs;
+}
+
 /**
  * Line diff (longest common subsequence) between two values. Values are small configuration
  * entries, so the quadratic table is fine; very long inputs fall back to remove-all/add-all.
@@ -50,11 +59,7 @@ export function lineDiff(before: string | null, after: string | null, maxCells =
   if (a.length * b.length > maxCells) {
     return [...a.map((text) => ({ kind: 'removed' as const, text })), ...b.map((text) => ({ kind: 'added' as const, text }))];
   }
-  const lcs: number[][] = Array.from({ length: a.length + 1 }, () => new Array<number>(b.length + 1).fill(0));
-  for (let i = a.length - 1; i >= 0; i--)
-    for (let j = b.length - 1; j >= 0; j--)
-      lcs[i][j] = a[i] === b[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
-
+  const lcs = lcsTable(a, b);
   const out: DiffLine[] = [];
   let i = 0;
   let j = 0;

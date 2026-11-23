@@ -79,7 +79,7 @@ describe('Dashboard home', () => {
       .find((a) => a.getAttribute('href') === '/apps/production-gateway/staging');
     expect(chip).toBeDefined();
     expect(chip!.querySelector('[data-health="recent"]')).not.toBeNull();
-    expect(within(list).getAllByText(/need attention/).length).toBe(2);
+    expect(within(list).getAllByText(/need attention/)).toHaveLength(2);
   });
 
   it('filters, sorts and switches layout, persisting the layout', async () => {

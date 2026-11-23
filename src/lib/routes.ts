@@ -48,8 +48,10 @@ export const appPath = (
 };
 
 /** `/apps/:appSlug/:from/compare[?to=...]` — the environment comparison tab. */
-export const comparePath = (appSlug: string, from: string, to?: string | null) =>
-  `/apps/${seg(appSlug)}/${seg(from)}/compare${to ? `?${new URLSearchParams({ to }).toString()}` : ''}`;
+export const comparePath = (appSlug: string, from: string, to?: string | null) => {
+  const query = to ? '?' + new URLSearchParams({ to }).toString() : '';
+  return `/apps/${seg(appSlug)}/${seg(from)}/compare${query}`;
+};
 
 export type FlagView = 'targeting' | 'history';
 

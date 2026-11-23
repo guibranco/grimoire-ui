@@ -39,4 +39,4 @@ export function routeGet(
 }
 
 /** A 404 rejection, as axios raises it. */
-export const notFound = () => Promise.reject({ response: { status: 404 } });
+export const notFound = () => Promise.reject(Object.assign(new Error('Not Found'), { response: { status: 404 } }));

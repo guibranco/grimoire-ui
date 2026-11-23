@@ -31,7 +31,7 @@ import { isRotationIntervalInput, rotationIntervalValue, ROTATION_INTERVAL_MESSA
 import { apiErrorMessage } from '@/lib/errors';
 
 const schema = z.object({
-  name: z.string().min(1, 'Name is required').regex(/^[a-zA-Z0-9_\-]+$/, 'Only alphanumeric, underscores, and hyphens allowed'),
+  name: z.string().min(1, 'Name is required').regex(/^[a-zA-Z0-9_-]+$/, 'Only alphanumeric, underscores, and hyphens allowed'),
   description: z.string().min(1, 'Description is required'),
   /** Rotate at least every N days (guibranco/grimoire-api#78); empty means no schedule. */
   rotationIntervalDays: z
@@ -217,6 +217,11 @@ export const AddSecretModal: React.FC<AddSecretModalProps> = ({
 
   const formValues = watch('values');
 
+  let title = 'Define New Secret';
+  if (isGlobal) title = 'Define Global Secret';
+  else if (initialName) title = 'Override Global Secret';
+  const submitLabel = isGlobal ? 'Create Global Secret' : 'Create Secret';
+
   return (
     <Dialog open={open} onOpenChange={(val) => !loading && onOpenChange(val)}>
       <DialogContent className="sm:max-w-4xl bg-card border-2 border-border p-0 gap-0 shadow-2xl flex flex-col max-h-[90vh]">
@@ -229,7 +234,7 @@ export const AddSecretModal: React.FC<AddSecretModalProps> = ({
                 </div>
                 <div>
                   <DialogTitle className="text-xl font-bold tracking-tight uppercase">
-                    {isGlobal ? 'Define Global Secret' : initialName ? 'Override Global Secret' : 'Define New Secret'}
+                    {title}
                   </DialogTitle>
                   <DialogDescription className="text-muted-foreground">
                     {isGlobal
@@ -384,7 +389,7 @@ export const AddSecretModal: React.FC<AddSecretModalProps> = ({
                 disabled={loading}
                 className={`${isGlobal ? 'bg-global text-black hover:bg-global/90' : 'bg-foreground text-background hover:bg-foreground/90'} uppercase font-bold tracking-widest text-[10px] h-9 min-w-[140px]`}
               >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : (isGlobal ? 'Create Global Secret' : 'Create Secret')}
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : submitLabel}
               </Button>
           </DialogFooter>
         </form>

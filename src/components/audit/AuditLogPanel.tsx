@@ -110,6 +110,26 @@ export const AuditLogPanel: React.FC<AuditLogPanelProps> = ({ application, class
   const lastPage = Math.max(1, Math.ceil(total / pageSize));
   const filtered = hasActiveFilters(filters, application ? ['application'] : []);
 
+
+  let content: React.ReactNode;
+  if (isNotFound(query.error)) {
+    content = (
+      <output className="block p-6 text-sm text-zinc-500 border border-border">
+        This Grimoire API doesn't have an audit log yet. Update it to a version with guibranco/grimoire-api#76.
+      </output>
+    );
+  } else if (query.isError && !data) {
+    content = (
+      <p role="alert" className="p-6 text-sm text-red-400 border border-border">
+        Couldn't load the audit log.{' '}
+        <button type="button" className="underline" onClick={() => void query.refetch()}>
+          Retry
+        </button>
+      </p>
+    );
+  } else {
+    content = <AuditTable events={data?.items} loading={query.isLoading} showApplication={!application} />;
+  }
   return (
     <section className={cn('flex flex-col gap-3', className)} aria-label="Audit log">
       <form
@@ -121,7 +141,7 @@ export const AuditLogPanel: React.FC<AuditLogPanelProps> = ({ application, class
       >
         {!application && (
           <label className={labelClass}>
-            Application
+            <span>Application</span>
             <select
               className={fieldClass}
               value={filters.application}
@@ -137,7 +157,7 @@ export const AuditLogPanel: React.FC<AuditLogPanelProps> = ({ application, class
           </label>
         )}
         <label className={labelClass}>
-          Action
+          <span>Action</span>
           <select className={fieldClass} value={filters.action} onChange={(e) => update({ action: e.target.value })}>
             <option value="">All</option>
             {AUDIT_ACTION_GROUPS.map((group) => (
@@ -153,7 +173,7 @@ export const AuditLogPanel: React.FC<AuditLogPanelProps> = ({ application, class
           </select>
         </label>
         <label className={labelClass}>
-          Outcome
+          <span>Outcome</span>
           <select className={fieldClass} value={filters.outcome} onChange={(e) => update({ outcome: e.target.value })}>
             <option value="">All</option>
             {AUDIT_OUTCOMES.map((o) => (
@@ -164,7 +184,7 @@ export const AuditLogPanel: React.FC<AuditLogPanelProps> = ({ application, class
           </select>
         </label>
         <label className={labelClass}>
-          Actor
+          <span>Actor</span>
           <input
             className={fieldClass}
             placeholder="admin, app:slug…"
@@ -173,7 +193,7 @@ export const AuditLogPanel: React.FC<AuditLogPanelProps> = ({ application, class
           />
         </label>
         <label className={labelClass}>
-          Environment
+          <span>Environment</span>
           <input
             className={fieldClass}
             placeholder="production"
@@ -182,7 +202,7 @@ export const AuditLogPanel: React.FC<AuditLogPanelProps> = ({ application, class
           />
         </label>
         <label className={labelClass}>
-          Secret / key
+          <span>Secret / key</span>
           <input
             className={cn(fieldClass, 'font-mono')}
             placeholder="DB_PASSWORD"
@@ -191,11 +211,11 @@ export const AuditLogPanel: React.FC<AuditLogPanelProps> = ({ application, class
           />
         </label>
         <label className={labelClass}>
-          From
+          <span>From</span>
           <input type="date" className={fieldClass} value={filters.from} max={filters.to || undefined} onChange={(e) => update({ from: e.target.value })} />
         </label>
         <label className={labelClass}>
-          To
+          <span>To</span>
           <input type="date" className={fieldClass} value={filters.to} min={filters.from || undefined} onChange={(e) => update({ to: e.target.value })} />
         </label>
         <div className="col-span-2 md:col-span-4 xl:col-span-8 flex flex-wrap items-center gap-3 pt-1">
@@ -206,7 +226,7 @@ export const AuditLogPanel: React.FC<AuditLogPanelProps> = ({ application, class
               onChange={(e) => update({ includeReads: e.target.checked })}
               className="accent-amber-500"
             />
-            Include consumer reads
+            <span>Include consumer reads</span>
           </label>
           {filtered && (
             <button
@@ -232,20 +252,7 @@ export const AuditLogPanel: React.FC<AuditLogPanelProps> = ({ application, class
         </div>
       </form>
 
-      {isNotFound(query.error) ? (
-        <p role="status" className="p-6 text-sm text-zinc-500 border border-border">
-          This Grimoire API doesn't have an audit log yet. Update it to a version with guibranco/grimoire-api#76.
-        </p>
-      ) : query.isError && !data ? (
-        <p role="alert" className="p-6 text-sm text-red-400 border border-border">
-          Couldn't load the audit log.{' '}
-          <button type="button" className="underline" onClick={() => void query.refetch()}>
-            Retry
-          </button>
-        </p>
-      ) : (
-        <AuditTable events={data?.items} loading={query.isLoading} showApplication={!application} />
-      )}
+      {content}
 
       {total > 0 && (
         <nav aria-label="Audit log pages" className="flex items-center justify-between text-[11px] text-zinc-500 font-mono">
@@ -278,6 +285,17 @@ export const AuditLogPanel: React.FC<AuditLogPanelProps> = ({ application, class
         </nav>
       )}
     </section>
+  );
+};
+
+/** The event's secret or key, linked to it when it still exists in the UI. */
+const AuditTarget: React.FC<{ target: string | null | undefined; link: string | null | undefined }> = ({ target, link }) => {
+  if (!target) return <span className="text-zinc-600">—</span>;
+  if (!link) return <span className="text-zinc-300">{target}</span>;
+  return (
+    <Link to={link} className="text-zinc-200 hover:text-grimoire">
+      {target}
+    </Link>
   );
 };
 
@@ -344,17 +362,7 @@ const AuditTable: React.FC<{ events: AuditEvent[] | undefined; loading: boolean;
                 )}
                 <td className="px-3 py-2 font-mono text-zinc-400">{e.environment?.split(',').join(', ') || '—'}</td>
                 <td className="px-3 py-2 font-mono break-all">
-                  {e.target ? (
-                    link ? (
-                      <Link to={link} className="text-zinc-200 hover:text-grimoire">
-                        {e.target}
-                      </Link>
-                    ) : (
-                      <span className="text-zinc-300">{e.target}</span>
-                    )
-                  ) : (
-                    <span className="text-zinc-600">—</span>
-                  )}
+                  <AuditTarget target={e.target} link={link} />
                 </td>
                 <td className="px-3 py-2 whitespace-nowrap">
                   <span
