@@ -15,10 +15,11 @@ import {
   ScrollText,
   Search,
   Settings,
+  BarChart3,
   TimerReset,
 } from 'lucide-react';
 import { api } from '@/lib/api';
-import { appPath, auditPath, dashboardPath, globalCreatePath, globalPath, rotationPath } from '@/lib/routes';
+import { appPath, auditPath, dashboardPath, globalCreatePath, globalPath, reportsPath, rotationPath } from '@/lib/routes';
 import {
   highlightSegments,
   isPaletteShortcut,
@@ -179,6 +180,13 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onOpenChan
         label: 'Go to Rotation',
         icon: <TimerReset className="w-3.5 h-3.5 text-zinc-400" aria-hidden="true" />,
         run: () => go(rotationPath()),
+      },
+      {
+        id: 'cmd-reports',
+        group: 'Commands',
+        label: 'Go to Reports',
+        icon: <BarChart3 className="w-3.5 h-3.5 text-zinc-400" aria-hidden="true" />,
+        run: () => go(reportsPath()),
       },
       {
         id: 'cmd-new-app',
