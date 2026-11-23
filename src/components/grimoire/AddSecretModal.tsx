@@ -28,6 +28,7 @@ import {
 import toast from 'react-hot-toast';
 import { SecretModalScope } from './EditSecretValueModal';
 import { isRotationIntervalInput, rotationIntervalValue, ROTATION_INTERVAL_MESSAGE } from '@/lib/rotation';
+import { apiErrorMessage } from '@/lib/errors';
 
 const schema = z.object({
   name: z.string().min(1, 'Name is required').regex(/^[a-zA-Z0-9_\-]+$/, 'Only alphanumeric, underscores, and hyphens allowed'),
@@ -204,7 +205,7 @@ export const AddSecretModal: React.FC<AddSecretModalProps> = ({
       onOpenChange(false);
       toast.success(isGlobal ? 'Global secret created' : 'Secret and values created');
     } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Failed to create secret');
+      toast.error(apiErrorMessage(err, 'Failed to create secret'));
     } finally {
       setLoading(false);
     }

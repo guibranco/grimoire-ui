@@ -62,7 +62,7 @@ describe('Rotation page', () => {
     renderAt('/rotation');
     await table();
     fireEvent.click(screen.getByRole('button', { name: /send reminders now/i }));
-    expect(await screen.findByRole('status')).toHaveTextContent(/no webhook is configured/i);
+    expect((await screen.findByRole('status')).textContent).toMatch(/no webhook is configured/i);
   });
 
   it('shows the widget on the dashboard and links to the page', async () => {

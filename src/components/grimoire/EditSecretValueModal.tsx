@@ -26,8 +26,9 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { MAX_GRACE_DAYS } from '@/lib/secretVersions';
+import { apiErrorMessage } from '@/lib/errors';
 
-const graceDaysValue = (raw: unknown): number | null => {
+const graceDaysValue = (raw: string | number | null | undefined): number | null => {
   if (raw === null || raw === undefined || String(raw).trim() === '') return null;
   const n = Number(raw);
   return Number.isInteger(n) && n >= 0 && n <= MAX_GRACE_DAYS ? n : null;
@@ -117,7 +118,7 @@ export const EditSecretValueModal: React.FC<EditSecretValueModalProps> = ({
       onOpenChange(false);
       toast.success('Secret value updated');
     } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Failed to update value');
+      toast.error(apiErrorMessage(err, 'Failed to update value'));
     } finally {
       setLoading(false);
     }

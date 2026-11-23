@@ -160,7 +160,7 @@ const ATTENTION_LABELS: Record<string, string> = {
 };
 
 export const attentionLabel = (kind: string) =>
-  ATTENTION_LABELS[kind] ?? kind.replace(/-/g, ' ').replace(/^./, (c) => c.toUpperCase());
+  ATTENTION_LABELS[kind] ?? kind.replaceAll('-', ' ').replace(/^./, (c) => c.toUpperCase());
 
 /** Short detail line, e.g. "expires in 3 days" or "last seen 9 days ago". */
 export function attentionDetail(item: AttentionItem): string | null {
@@ -197,10 +197,19 @@ export function attentionLink(item: AttentionItem): string {
   return appPath(item.application, realEnv(item.environment), tab, tab ? item.target : null);
 }
 
+/** Entries tab for an audit target type: `secret*` → secrets, `config*` → config. */
+export function entryTabFor(
+  targetType: string,
+  matches: (type: string, prefix: string) => boolean = (type, prefix) => type === prefix
+): EntryTab | null {
+  if (matches(targetType, 'secret')) return 'secrets';
+  if (matches(targetType, 'config')) return 'config';
+  return null;
+}
+
 /** Deep link for an audit event, as specific as its fields allow. */
 export function activityLink(event: ActivityEvent): string | null {
-  const type = (event.targetType ?? '').toLowerCase();
-  const tab: EntryTab | null = type.startsWith('secret') ? 'secrets' : type.startsWith('config') ? 'config' : null;
+  const tab = entryTabFor((event.targetType ?? '').toLowerCase(), (type, prefix) => type.startsWith(prefix));
   const key = tab ? event.target ?? null : null;
   if (event.application) return appPath(event.application, realEnv(event.environment), tab, key);
   if (tab) return globalPath(tab, key);
@@ -228,11 +237,10 @@ export function sortAndFilterApps<T extends DashboardApplication & { description
     if (tb === null) return -1;
     return tb - ta;
   };
-  const compare =
-    sort === 'lastChanged'
-      ? byDateDesc((a) => a.lastChangedAt)
-      : sort === 'lastFetched'
-        ? byDateDesc((a) => a.lastSeenAt)
-        : byName;
-  return filtered.sort(compare);
+  const comparers: Record<DashboardAppsSort, (a: T, b: T) => number> = {
+    lastChanged: byDateDesc((a) => a.lastChangedAt),
+    lastFetched: byDateDesc((a) => a.lastSeenAt),
+    name: byName,
+  };
+  return filtered.sort(comparers[sort] ?? byName);
 }

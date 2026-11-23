@@ -140,10 +140,3 @@ export const importEntry = (raw: unknown): { value: string; valueType: ConfigVal
   return { value: text, valueType: /[\r\n]/.test(text) ? 'multiline' : 'string' };
 };
 
-/** First validation message from an API error response, or the fallback. */
-export const saveErrorMessage = (err: unknown, fallback: string): string => {
-  const data = (err as { response?: { data?: { errors?: Record<string, string[]>; detail?: string } } })
-    ?.response?.data;
-  const first = data?.errors ? Object.values(data.errors).flat()[0] : undefined;
-  return first || data?.detail || fallback;
-};

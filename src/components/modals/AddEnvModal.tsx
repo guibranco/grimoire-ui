@@ -17,6 +17,7 @@ import { api } from '@/lib/api';
 import { useQueryClient } from '@tanstack/react-query';
 import { Loader2, Globe } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { apiErrorMessage } from '@/lib/errors';
 
 const schema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -50,7 +51,7 @@ export const AddEnvModal: React.FC<AddEnvModalProps> = ({ appSlug, open, onOpenC
       onOpenChange(false);
       toast.success('Environment added');
     } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Failed to add environment');
+      toast.error(apiErrorMessage(err, 'Failed to add environment'));
     } finally {
       setLoading(false);
     }

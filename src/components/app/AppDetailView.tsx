@@ -17,6 +17,7 @@ import { AddEnvModal } from '@/components/modals/AddEnvModal';
 import { EditAppModal } from '@/components/modals/EditAppModal';
 import { APIKeyRevealModal } from '@/components/modals/APIKeyRevealModal';
 import toast from 'react-hot-toast';
+import { apiErrorMessage } from '@/lib/errors';
 
 const isNotFound = (err: unknown) =>
   (err as { response?: { status?: number } } | null)?.response?.status === 404;
@@ -162,7 +163,7 @@ const AppDetail: React.FC<{ appSlug: string }> = ({ appSlug }) => {
       setRevealKey(rotatedKey);
       toast.success('API Key Rotated');
     } catch (err) {
-      toast.error('Failed to rotate API key');
+      toast.error(apiErrorMessage(err, 'Failed to rotate API key'));
     }
   };
 
@@ -175,7 +176,7 @@ const AppDetail: React.FC<{ appSlug: string }> = ({ appSlug }) => {
       navigate(dashboardPath(), { replace: true });
       queryClient.removeQueries({ queryKey: ['application', app.slug] });
     } catch (err) {
-      toast.error('Failed to delete application');
+      toast.error(apiErrorMessage(err, 'Failed to delete application'));
     }
   };
 

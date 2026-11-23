@@ -27,6 +27,7 @@ import { ConfirmationModal } from '@/components/shared/ConfirmationModal';
 import { MAX_GRACE_DAYS, openEndedOlderVersions, STATUS_LABELS, withStatus } from '@/lib/secretVersions';
 import { cn } from '@/lib/utils';
 import { SecretModalScope } from './EditSecretValueModal';
+import { apiErrorMessage } from '@/lib/errors';
 
 interface SecretVersionsModalProps {
   appSlug?: string;
@@ -66,6 +67,7 @@ export const SecretVersionsModal: React.FC<SecretVersionsModalProps> = ({
   const resolvedScope: SecretModalScope = scope ?? { appSlug: appSlug || '' };
   const isGlobal = resolvedScope === 'global';
   const targetAppSlug = isGlobal ? '' : resolvedScope.appSlug;
+  const envSuffix = envSlug === '*' ? '' : ` in ${envSlug}`;
   const queryClient = useQueryClient();
   const [busyVersion, setBusyVersion] = useState<number | null>(null);
   const [editing, setEditing] = useState<{ version: number; notBefore: string; expiresAt: string } | null>(null);
@@ -115,9 +117,9 @@ export const SecretVersionsModal: React.FC<SecretVersionsModalProps> = ({
       if (statusCode(err) === 409 && !force) {
         setPendingForce({ version, body });
       } else if (statusCode(err) === 400) {
-        toast.error('Expiry must be after the start date');
+        toast.error(apiErrorMessage(err, 'Expiry must be after the start date'));
       } else {
-        toast.error('Failed to update version');
+        toast.error(apiErrorMessage(err, 'Failed to update version'));
       }
     } finally {
       setBusyVersion(null);
@@ -128,11 +130,11 @@ export const SecretVersionsModal: React.FC<SecretVersionsModalProps> = ({
     const expiresAt = new Date(Date.now() + graceDays * 24 * 60 * 60 * 1000).toISOString();
     setBusyVersion(-1);
     try {
-      for (const v of openOlder) await patch(v.version, { expiresAt });
+      await Promise.all(openOlder.map((v) => patch(v.version, { expiresAt })));
       toast.success(`Older versions expire in ${graceDays} day${graceDays === 1 ? '' : 's'}`);
       refresh();
-    } catch {
-      toast.error('Failed to expire older versions');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to expire older versions'));
     } finally {
       setBusyVersion(null);
     }
@@ -187,7 +189,7 @@ export const SecretVersionsModal: React.FC<SecretVersionsModalProps> = ({
               </p>
               <div className="flex items-center gap-2 shrink-0">
                 <label className="flex items-center gap-1 text-[10px] uppercase tracking-widest text-zinc-500">
-                  Expire in
+                  Expire in{' '}
                   <input
                     type="number"
                     min={0}
@@ -196,7 +198,7 @@ export const SecretVersionsModal: React.FC<SecretVersionsModalProps> = ({
                     onChange={(e) => setGraceDays(Math.max(0, Math.min(MAX_GRACE_DAYS, Number(e.target.value) || 0)))}
                     className="w-14 h-7 bg-zinc-950 border border-border px-1 text-xs text-zinc-200"
                     aria-label="Days until older versions expire"
-                  />
+                  />{' '}
                   days
                 </label>
                 <Button
@@ -212,16 +214,18 @@ export const SecretVersionsModal: React.FC<SecretVersionsModalProps> = ({
             </div>
           )}
 
-          {isLoading ? (
+          {isLoading && (
             <div className="py-10 flex flex-col items-center justify-center gap-3 text-muted-foreground">
               <Loader2 className={`w-6 h-6 animate-spin ${accent}`} />
               <span className="text-[10px] font-mono uppercase tracking-widest">Loading Versions...</span>
             </div>
-          ) : versions.length === 0 ? (
+          )}
+          {!isLoading && versions.length === 0 && (
             <div className="py-10 text-center text-xs font-mono text-muted-foreground uppercase tracking-widest">
               No version history found for this environment.
             </div>
-          ) : (
+          )}
+          {!isLoading && versions.length > 0 && (
             <div className="border border-border overflow-x-auto">
               <Table>
                 <TableHeader className="bg-muted/30">
@@ -390,7 +394,7 @@ export const SecretVersionsModal: React.FC<SecretVersionsModalProps> = ({
         open={!!pendingForce}
         onOpenChange={(o) => !o && setPendingForce(null)}
         title="Leave no valid version?"
-        description={`This change would leave ${secretName} with no valid version${envSlug === '*' ? '' : ` in ${envSlug}`}, so consumers reading it will get "not found" until a new value is added. Apply it anyway?`}
+        description={`This change would leave ${secretName} with no valid version${envSuffix}, so consumers reading it will get "not found" until a new value is added. Apply it anyway?`}
         confirmText="Apply anyway"
         onConfirm={async () => {
           if (!pendingForce) return;

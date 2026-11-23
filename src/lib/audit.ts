@@ -150,11 +150,12 @@ export const hasActiveFilters = (filters: AuditFilters, ignore: (keyof AuditFilt
     .filter((k) => k !== 'page' && !ignore.includes(k))
     .some((k) => filters[k] !== EMPTY_AUDIT_FILTERS[k]);
 
+const AUDIT_TARGET_TABS: Record<string, EntryTab> = { secret: 'secrets', configuration: 'config' };
+
 /** Where an audit event's entry lives, if it still can be opened. */
 export function auditEventLink(event: AuditEvent): string | null {
   if (event.outcome !== 'success' && event.action.endsWith('.delete')) return null;
-  const type = (event.targetType ?? '').toLowerCase();
-  const tab: EntryTab | null = type === 'secret' ? 'secrets' : type === 'configuration' ? 'config' : null;
+  const tab = AUDIT_TARGET_TABS[(event.targetType ?? '').toLowerCase()] ?? null;
   const env = event.environment && !event.environment.includes(',') && event.environment !== '*' ? event.environment : null;
   const key = tab && !event.action.endsWith('.delete') ? event.target : null;
   if (event.application) {

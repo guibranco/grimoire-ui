@@ -5,7 +5,6 @@ import {
   importEntry,
   parseArrayItems,
   previewValue,
-  saveErrorMessage,
   toEditorValue,
   toSubmitValue,
   validateConfigValue,
@@ -66,11 +65,5 @@ describe('configValue', () => {
     expect(importEntry([1, 2])).toEqual({ value: '[1,2]', valueType: 'json' });
     expect(importEntry('a\nb')).toEqual({ value: 'a\nb', valueType: 'multiline' });
     expect(importEntry(3)).toEqual({ value: '3', valueType: 'string' });
-  });
-
-  it('extracts the first validation message from an API error', () => {
-    const err = { response: { data: { errors: { Value: ['The value is not valid JSON'] } } } };
-    expect(saveErrorMessage(err, 'fallback')).toBe('The value is not valid JSON');
-    expect(saveErrorMessage(new Error('x'), 'fallback')).toBe('fallback');
   });
 });

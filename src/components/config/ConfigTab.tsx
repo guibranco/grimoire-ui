@@ -40,9 +40,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ConfirmationModal } from '@/components/shared/ConfirmationModal';
 import { ConfigValueCell, ConfigValueField, useConfigValue } from '@/components/shared/ConfigValueEditor';
-import { exportValue, importEntry, saveErrorMessage, valueTypeOf } from '@/lib/configValue';
+import { exportValue, importEntry, valueTypeOf } from '@/lib/configValue';
 import { cn } from '@/lib/utils';
 import toast from 'react-hot-toast';
+import { apiErrorMessage } from '@/lib/errors';
 
 interface ConfigTabProps {
   appSlug: string;
@@ -145,8 +146,8 @@ export const ConfigTab: React.FC<ConfigTabProps> = ({
       await queryClient.invalidateQueries({ queryKey: ['effective-configurations', appSlug] });
       await queryClient.invalidateQueries({ queryKey: ['effective-secrets', appSlug] });
       toast.success('Global inheritance enabled');
-    } catch {
-      toast.error('Failed to enable global inheritance');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to enable global inheritance'));
     } finally {
       setEnablingInheritance(false);
     }
@@ -193,8 +194,8 @@ export const ConfigTab: React.FC<ConfigTabProps> = ({
         await queryClient.invalidateQueries({ queryKey: ['effective-configurations', appSlug] });
         await queryClient.invalidateQueries({ queryKey: ['configurations', appSlug] });
         toast.success(`Imported ${promises.length} configurations`);
-      } catch {
-        toast.error('Failed to import JSON. Ensure it is a flat key-value object.');
+      } catch (err) {
+        toast.error(apiErrorMessage(err, 'Failed to import JSON. Ensure it is a flat key-value object.'));
       }
     };
     reader.readAsText(file);
@@ -212,8 +213,8 @@ export const ConfigTab: React.FC<ConfigTabProps> = ({
       await queryClient.invalidateQueries({ queryKey: ['effective-configurations', appSlug] });
       await queryClient.invalidateQueries({ queryKey: ['configurations', appSlug] });
       toast.success(wasOverride ? 'Global value is active again' : 'Configuration deleted');
-    } catch {
-      toast.error('Failed to delete configuration');
+    } catch (err) {
+      toast.error(apiErrorMessage(err, 'Failed to delete configuration'));
     }
   };
 
@@ -231,7 +232,7 @@ export const ConfigTab: React.FC<ConfigTabProps> = ({
       }
       toast.success(`Environment "${deletingEnv.name}" deleted`);
     } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Failed to delete environment');
+      toast.error(apiErrorMessage(err, 'Failed to delete environment'));
     }
   };
 
@@ -636,7 +637,7 @@ const ConfigRow: React.FC<ConfigRowProps> = ({
       toast.success(initialData ? 'Configuration updated' : 'Configuration added');
       onSave();
     } catch (err) {
-      toast.error(saveErrorMessage(err, 'Failed to save configuration'));
+      toast.error(apiErrorMessage(err, 'Failed to save configuration'));
     } finally {
       setLoading(false);
     }
