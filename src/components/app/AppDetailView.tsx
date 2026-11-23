@@ -22,6 +22,7 @@ import toast from 'react-hot-toast';
 import { apiErrorMessage } from '@/lib/errors';
 import { appScope } from '@/lib/flags';
 import { AccessTokensTab } from '@/components/tokens/AccessTokensTab';
+import { ImportWizard } from '@/components/import/ImportWizard';
 
 const isNotFound = (err: unknown) =>
   (err as { response?: { status?: number } } | null)?.response?.status === 404;
@@ -52,6 +53,7 @@ const AppDetail: React.FC<{ appSlug: string }> = ({ appSlug }) => {
   const [isAddEnvOpen, setIsAddEnvOpen] = useState(false);
   const [isRotateKeyOpen, setIsRotateKeyOpen] = useState(false);
   const [isDeleteAppOpen, setIsDeleteAppOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [revealKey, setRevealKey] = useState<string | null>(null);
 
   const { data: app, isLoading, error } = useQuery({
@@ -190,6 +192,7 @@ const AppDetail: React.FC<{ appSlug: string }> = ({ appSlug }) => {
         app={app} 
         onEditApp={() => setIsEditAppOpen(true)}
         onAddEnv={() => setIsAddEnvOpen(true)}
+        onImport={safeEnvs.length > 0 ? () => setIsImportOpen(true) : undefined}
         onRotateKey={() => setIsRotateKeyOpen(true)}
         onDeleteApp={() => setIsDeleteAppOpen(true)}
       />
@@ -308,6 +311,14 @@ const AppDetail: React.FC<{ appSlug: string }> = ({ appSlug }) => {
         onConfirm={handleDeleteApp}
         confirmText="Delete Application"
         variant="destructive"
+      />
+
+      <ImportWizard
+        scope={{ appSlug: app.slug }}
+        environments={safeEnvs.map((e) => ({ slug: e.slug, label: e.name || e.slug }))}
+        defaultEnvironment={activeEnvSlug}
+        open={isImportOpen}
+        onOpenChange={setIsImportOpen}
       />
 
       <APIKeyRevealModal 
