@@ -298,6 +298,82 @@ export const GrimoireTab: React.FC<GrimoireTabProps> = ({ appSlug, highlightedNa
   };
 
 
+  /** A secret row's actions: override or open the global, or the row's menu. */
+  const renderSecretActions = (secret: EffectiveSecret, isGlobal: boolean, isExpanded: boolean) =>
+    isGlobal ? (
+      <div className="flex justify-end items-center gap-2">
+        {/* Each action stops its click so it doesn't also toggle the row. */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setOverrideTarget({
+              name: secret.name,
+              description: secret.description || '',
+            });
+            setIsAddSecretOpen(true);
+          }}
+          className="px-2 py-0.5 border border-grimoire/30 text-[10px] font-bold uppercase tracking-widest text-grimoire hover:bg-grimoire/10 transition-colors inline-flex items-center gap-1"
+        >
+          <ArrowUpRight className="w-3 h-3" />
+          Override
+        </button>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            navigate(globalPath('secrets', secret.name));
+          }}
+          className="px-2 py-0.5 border border-global/30 text-[10px] font-bold uppercase tracking-widest text-global hover:bg-global/10 transition-colors inline-flex items-center gap-1"
+        >
+          <ExternalLink className="w-3 h-3" />
+          View in Global
+        </button>
+      </div>
+    ) : (
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          onClick={(e) => e.stopPropagation()}
+          className="h-8 w-8 inline-flex items-center justify-center text-zinc-600 hover:text-zinc-300 transition-colors"
+        >
+          <MoreVertical className="w-4 h-4" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="bg-[#0A0A0B] border-border p-0">
+          <DropdownMenuItem
+            className="text-[10px] uppercase font-bold tracking-widest p-2 hover:bg-zinc-900 cursor-pointer"
+            onClick={(e) => {
+              // Menu content is portalled, but React still bubbles the click
+              // to the row's onClick, which would toggle it straight back.
+              e.stopPropagation();
+              setExpandedSecret(
+                isExpanded ? null : { name: secret.name, source: secret.source }
+              );
+            }}
+          >
+            {isExpanded ? 'Collapse' : 'Show Details'}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="text-[10px] uppercase font-bold tracking-widest p-2 hover:bg-zinc-900 cursor-pointer"
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditingSecret(secret.name);
+            }}
+          >
+            Edit Details
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="text-destructive text-[10px] uppercase font-bold tracking-widest p-2 hover:bg-destructive/10 cursor-pointer"
+            onClick={(e) => {
+              e.stopPropagation();
+              setDeletingSecret(secret);
+            }}
+          >
+            Delete Secret
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+
   /** The expanded panel under a secret's row: its metadata and per-environment values. */
   const renderSecretDetails = (
     secret: EffectiveSecret,
@@ -576,79 +652,7 @@ export const GrimoireTab: React.FC<GrimoireTabProps> = ({ appSlug, highlightedNa
                           </div>
                         </TableCell>
                         <TableCell className="text-right px-6">
-                          {isGlobal ? (
-                            <div className="flex justify-end items-center gap-2">
-                              {/* Each action stops its click so it doesn't also toggle the row. */}
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setOverrideTarget({
-                                    name: secret.name,
-                                    description: secret.description || '',
-                                  });
-                                  setIsAddSecretOpen(true);
-                                }}
-                                className="px-2 py-0.5 border border-grimoire/30 text-[10px] font-bold uppercase tracking-widest text-grimoire hover:bg-grimoire/10 transition-colors inline-flex items-center gap-1"
-                              >
-                                <ArrowUpRight className="w-3 h-3" />
-                                Override
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  navigate(globalPath('secrets', secret.name));
-                                }}
-                                className="px-2 py-0.5 border border-global/30 text-[10px] font-bold uppercase tracking-widest text-global hover:bg-global/10 transition-colors inline-flex items-center gap-1"
-                              >
-                                <ExternalLink className="w-3 h-3" />
-                                View in Global
-                              </button>
-                            </div>
-                          ) : (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger
-                                onClick={(e) => e.stopPropagation()}
-                                className="h-8 w-8 inline-flex items-center justify-center text-zinc-600 hover:text-zinc-300 transition-colors"
-                              >
-                                <MoreVertical className="w-4 h-4" />
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="bg-[#0A0A0B] border-border p-0">
-                                <DropdownMenuItem
-                                  className="text-[10px] uppercase font-bold tracking-widest p-2 hover:bg-zinc-900 cursor-pointer"
-                                  onClick={(e) => {
-                                    // Menu content is portalled, but React still bubbles the click
-                                    // to the row's onClick, which would toggle it straight back.
-                                    e.stopPropagation();
-                                    setExpandedSecret(
-                                      isExpanded ? null : { name: secret.name, source: secret.source }
-                                    );
-                                  }}
-                                >
-                                  {isExpanded ? 'Collapse' : 'Show Details'}
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  className="text-[10px] uppercase font-bold tracking-widest p-2 hover:bg-zinc-900 cursor-pointer"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setEditingSecret(secret.name);
-                                  }}
-                                >
-                                  Edit Details
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  className="text-destructive text-[10px] uppercase font-bold tracking-widest p-2 hover:bg-destructive/10 cursor-pointer"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setDeletingSecret(secret);
-                                  }}
-                                >
-                                  Delete Secret
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          )}
+                          {renderSecretActions(secret, isGlobal, isExpanded)}
                         </TableCell>
                       </TableRow>
                       {isExpanded && renderSecretDetails(secret, isGlobal, resolvedMetadata)}

@@ -23,12 +23,13 @@ export function resolveApiBaseUrl(stored: string | null | undefined): string | n
   if ((parsed.protocol !== 'http:' && parsed.protocol !== 'https:') || parsed.username || parsed.password) {
     return null;
   }
-  return `${parsed.origin}${parsed.pathname.replace(/\/+$/, '')}`;
+  let pathname = parsed.pathname;
+  while (pathname.endsWith('/')) pathname = pathname.slice(0, -1);
+  return `${parsed.origin}${pathname}`;
 }
 
-export const api = axios.create({
-  baseURL: resolveApiBaseUrl(localStorage.getItem('grimoire_api_url')) ?? DEFAULT_API_URL,
-});
+/** The base URL is set per request by the interceptor below, from the instance URL in storage. */
+export const api = axios.create();
 
 const isTestMode =
   (typeof process !== 'undefined' && process.env.NODE_ENV === 'test') ||
