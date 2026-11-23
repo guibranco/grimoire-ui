@@ -102,7 +102,9 @@ const textType = (value: string): ConfigValueType => (value.includes('\n') ? 'mu
 export function parseEnv(content: string): ImportedValue[] {
   const lines = content.replace(/\r\n?/g, '\n').split('\n');
   const values: ImportedValue[] = [];
-  for (let i = 0; i < lines.length; i++) {
+  let next = 0;
+  while (next < lines.length) {
+    const i = next++;
     const line = lines[i].trim();
     if (!line || line.startsWith('#')) continue;
     const m = /^(?:export\s+)?([A-Za-z_][\w.:-]*)\s*=(.*)$/.exec(line);
@@ -110,7 +112,9 @@ export function parseEnv(content: string): ImportedValue[] {
     const raw = m[2].trimStart();
     let value: string;
     if (raw.startsWith('"')) {
-      [value, i] = readDoubleQuoted(lines, i, raw.slice(1));
+      let endLine: number;
+      [value, endLine] = readDoubleQuoted(lines, i, raw.slice(1));
+      next = endLine + 1;
     } else if (raw.startsWith("'")) {
       const end = raw.indexOf("'", 1);
       if (end < 0) throw new ImportParseError(`Line ${i + 1}: unterminated single quote.`);
@@ -153,7 +157,7 @@ function jsonValue(key: string, v: unknown): ImportedValue {
   if (v === null) return { key, value: '', type: 'string' };
   if (Array.isArray(v) && v.every(isScalar)) return { key, value: JSON.stringify(v.map(String)), type: 'array' };
   if (typeof v === 'object') return { key, value: JSON.stringify(v), type: 'json' };
-  return { key, value: String(v), type: 'string' };
+  return { key, value: String(v as string | number | boolean | bigint), type: 'string' };
 }
 
 /** A JSON object; with `flatten` (appsettings), nested objects become `Section:Key`. */
@@ -185,6 +189,23 @@ export interface ImportSnapshot {
   secrets: Map<string, boolean>;
 }
 
+function compare(same: boolean, overwrite: boolean): ImportAction {
+  if (same) return 'unchanged';
+  return overwrite ? 'update' : 'skip';
+}
+
+function actionFor(v: ImportedValue, kind: ImportKind, snapshot: ImportSnapshot, overwrite: boolean): ImportAction {
+  if (kind === 'secret') {
+    if (snapshot.configuration.has(v.key)) return 'conflict';
+    if (!snapshot.secrets.get(v.key)) return 'create';
+    return overwrite ? 'update' : 'skip';
+  }
+  if (snapshot.secrets.has(v.key)) return 'conflict';
+  const existing = snapshot.configuration.get(v.key);
+  if (!existing) return 'create';
+  return compare(existing.value === v.value && existing.type === v.type, overwrite);
+}
+
 /** The demo's plan. Secret values aren't kept by the demo, so a secret with a value counts as different. */
 export function planImport(
   values: ImportedValue[],
@@ -195,19 +216,7 @@ export function planImport(
   return [...last.values()].map((v) => {
     const kind: ImportKind =
       options.kinds[v.key] ?? (options.secretKeys.some((g) => globMatch(v.key, g)) ? 'secret' : 'configuration');
-    let action: ImportAction;
-    if (options.exclude.includes(v.key)) action = 'excluded';
-    else if (kind === 'secret') {
-      if (snapshot.configuration.has(v.key)) action = 'conflict';
-      else if (!snapshot.secrets.get(v.key)) action = 'create';
-      else action = options.overwrite ? 'update' : 'skip';
-    } else if (snapshot.secrets.has(v.key)) action = 'conflict';
-    else {
-      const existing = snapshot.configuration.get(v.key);
-      if (!existing) action = 'create';
-      else if (existing.value === v.value && existing.type === v.type) action = 'unchanged';
-      else action = options.overwrite ? 'update' : 'skip';
-    }
+    const action = options.exclude.includes(v.key) ? 'excluded' : actionFor(v, kind, snapshot, options.overwrite);
     return {
       key: v.key,
       kind,
