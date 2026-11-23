@@ -76,8 +76,7 @@ const TargetingSection: React.FC<{ appSlug: string; flag: FeatureFlag; env: Envi
         attributes={attributes}
       />
       {dirty && (
-        <div
-          role="region"
+        <section
           aria-label="Unsaved changes"
           className="sticky bottom-0 flex items-center justify-between gap-3 border border-flags/40 bg-[#0A0A0B]/95 backdrop-blur px-3 py-2"
         >
@@ -106,7 +105,7 @@ const TargetingSection: React.FC<{ appSlug: string; flag: FeatureFlag; env: Envi
               Review &amp; save
             </button>
           </span>
-        </div>
+        </section>
       )}
       <ReviewChangesDialog
         open={reviewing}

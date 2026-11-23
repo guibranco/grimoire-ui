@@ -46,7 +46,7 @@ const ServeEditor: React.FC<{
             onChange={() => onChange({ ...serve, mode: 'variant' })}
             aria-label={`${label}: serve a variant`}
           />
-          variant
+          <span>variant</span>
         </label>
         <select
           aria-label={`${label} variant`}
@@ -72,7 +72,7 @@ const ServeEditor: React.FC<{
             }
             aria-label={`${label}: percentage rollout`}
           />
-          percentage rollout
+          <span>percentage rollout</span>
         </label>
       </div>
       <FieldError errors={errors} path={`${path}.variant`} />
@@ -112,7 +112,7 @@ const ServeEditor: React.FC<{
           ))}
           <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
             <label className="inline-flex items-center gap-1.5 text-zinc-500">
-              bucket by
+              <span>bucket by</span>
               <input
                 aria-label={`${label} bucket by`}
                 list={attributesListId}
@@ -317,7 +317,7 @@ export const TargetingEditor: React.FC<{
           <span className={cn('text-xs font-bold', draft.enabled ? 'text-flags' : 'text-zinc-500')}>{draft.enabled ? 'ON' : 'OFF'}</span>
         </label>
         <label className="inline-flex items-center gap-2 text-xs text-zinc-400">
-          When off serve
+          <span>When off serve</span>
           <select
             aria-label="Off variant"
             value={draft.offVariant}

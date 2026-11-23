@@ -49,13 +49,16 @@ export const isSemVerOperator = (op: string) => op === 'semVerGte' || op === 'se
 /** Suggested context attributes; previously used ones are added by `attributeSuggestions`. */
 export const COMMON_ATTRIBUTES = ['userId', 'email', 'tenant', 'country', 'appVersion'] as const;
 
+/** Attributes a state's conditions and rollouts use. */
+function usedAttributes(env: FlagEnvironmentState): string[] {
+  const conditions = env.rules.flatMap((r) => r.conditions.map((c) => c.attribute));
+  const bucketBy = [env.fallthrough, ...env.rules.map((r) => r.serve)].flatMap((sv) => (sv?.bucketBy ? [sv.bucketBy] : []));
+  return [...conditions, ...bucketBy];
+}
+
 export function attributeSuggestions(flags: FeatureFlag[]): string[] {
   const seen = new Set<string>(COMMON_ATTRIBUTES);
-  for (const f of flags)
-    for (const env of f.environments) {
-      for (const rule of env.rules) for (const c of rule.conditions) seen.add(c.attribute);
-      for (const sv of [env.fallthrough, ...env.rules.map((r) => r.serve)]) if (sv?.bucketBy) seen.add(sv.bucketBy);
-    }
+  for (const attribute of flags.flatMap((f) => f.environments.flatMap(usedAttributes))) seen.add(attribute);
   return [...seen];
 }
 
@@ -105,6 +108,8 @@ export function flagTypeLabel(flag: Pick<FeatureFlag, 'type' | 'variants'>): str
 // ---- create / edit form ----
 
 export interface VariantDraft {
+  /** Stable React key; not sent. */
+  id: string;
   key: string;
   /** JSON text. */
   value: string;
@@ -119,9 +124,12 @@ export interface FlagFormDraft {
   tags: string[];
 }
 
+let variantIds = 0;
+export const newVariantId = () => `v${++variantIds}`;
+
 export const BOOLEAN_VARIANTS: VariantDraft[] = [
-  { key: 'on', value: 'true' },
-  { key: 'off', value: 'false' },
+  { id: 'on', key: 'on', value: 'true' },
+  { id: 'off', key: 'off', value: 'false' },
 ];
 
 export const emptyFlagForm = (): FlagFormDraft => ({
@@ -129,8 +137,8 @@ export const emptyFlagForm = (): FlagFormDraft => ({
   description: '',
   type: 'boolean',
   variants: [
-    { key: 'control', value: 'false' },
-    { key: 'treatment', value: 'true' },
+    { id: newVariantId(), key: 'control', value: 'false' },
+    { id: newVariantId(), key: 'treatment', value: 'true' },
   ],
   defaultVariant: 'off',
   tags: [],
@@ -140,7 +148,7 @@ export const flagFormFrom = (flag: FeatureFlag): FlagFormDraft => ({
   key: flag.key,
   description: flag.description ?? '',
   type: flag.type,
-  variants: flag.variants.map((v) => ({ key: v.key, value: JSON.stringify(v.value) })),
+  variants: flag.variants.map((v) => ({ id: newVariantId(), key: v.key, value: JSON.stringify(v.value) })),
   defaultVariant: flag.defaultVariant,
   tags: [...flag.tags],
 });

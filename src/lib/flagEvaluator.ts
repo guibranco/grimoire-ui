@@ -83,20 +83,44 @@ export function pickVariant(rollout: RolloutSlice[], bucket: number): string {
 
 // ---- SemVer 2.0.0 ----
 
-const SEMVER =
-  /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*)?$/;
-
 export interface SemVer {
   core: [number, number, number];
   pre: string[];
 }
 
+const NUMERIC_ID = /^(?:0|[1-9]\d*)$/;
+const ALPHANUMERIC_ID = /^\d*[A-Za-z-][0-9A-Za-z-]*$/;
+const BUILD_ID = /^[0-9A-Za-z-]+$/;
+const MAX_CORE = 2147483647;
+
+const isPreReleaseId = (id: string) => NUMERIC_ID.test(id) || ALPHANUMERIC_ID.test(id);
+
+/** `[v]MAJOR.MINOR.PATCH[-pre.release][+build]`, per SemVer 2.0.0; `null` when it isn't one. */
 export function parseSemVer(text: string | null | undefined): SemVer | null {
-  const m = text ? SEMVER.exec(text.trim()) : null;
-  if (!m) return null;
-  const core = [Number(m[1]), Number(m[2]), Number(m[3])] as [number, number, number];
-  if (core.some((n) => !Number.isSafeInteger(n) || n > 2147483647)) return null;
-  return { core, pre: m[4] ? m[4].split('.') : [] };
+  if (!text) return null;
+  let rest = text.trim();
+  if (rest.startsWith('v')) rest = rest.slice(1);
+
+  const plus = rest.indexOf('+');
+  if (plus >= 0) {
+    const build = rest.slice(plus + 1).split('.');
+    if (!build.every((id) => BUILD_ID.test(id))) return null;
+    rest = rest.slice(0, plus);
+  }
+
+  let pre: string[] = [];
+  const dash = rest.indexOf('-');
+  if (dash >= 0) {
+    pre = rest.slice(dash + 1).split('.');
+    if (!pre.every(isPreReleaseId)) return null;
+    rest = rest.slice(0, dash);
+  }
+
+  const parts = rest.split('.');
+  if (parts.length !== 3 || !parts.every((p) => NUMERIC_ID.test(p))) return null;
+  const core = parts.map(Number) as [number, number, number];
+  if (core.some((n) => n > MAX_CORE)) return null;
+  return { core, pre };
 }
 
 const sign = (n: number) => Math.sign(n);

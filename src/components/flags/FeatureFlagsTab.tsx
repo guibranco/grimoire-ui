@@ -4,7 +4,6 @@ import { AlertOctagon, Flag, Loader2, Plus, Search } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { ConfirmationModal } from '@/components/shared/ConfirmationModal';
 import { RelativeTime } from '@/components/dashboard/parts';
-import { cn } from '@/lib/utils';
 import { flagsPath } from '@/lib/routes';
 import { flagTypeLabel, isProductionEnvironment, stateFor, targetingSummary } from '@/lib/flags';
 import type { Environment, FeatureFlag } from '@/types/api';
@@ -167,7 +166,7 @@ const FlagList: React.FC<{ appSlug: string; envs: Environment[]; envSlug: string
             />
           </div>
           <label className="inline-flex items-center gap-1.5 text-[11px] text-zinc-500">
-            Tag
+            <span>Tag</span>
             <select aria-label="Tag" value={tag} onChange={(e) => setTag(e.target.value)} className={selectClass}>
               <option value="">all</option>
               {tags.map((t) => (
@@ -178,7 +177,7 @@ const FlagList: React.FC<{ appSlug: string; envs: Environment[]; envSlug: string
             </select>
           </label>
           <label className="inline-flex items-center gap-1.5 text-[11px] text-zinc-500">
-            Targeting in
+            <span>Targeting in</span>
             <select aria-label="Targeting environment" value={targetingEnv} onChange={(e) => setTargetingEnv(e.target.value)} className={selectClass}>
               {envs.map((e) => (
                 <option key={e.slug} value={e.slug}>

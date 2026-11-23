@@ -128,10 +128,10 @@ describe('flag form', () => {
 
     const multi = { ...emptyFlagForm(), key: 'k', type: 'multivariate' as const, defaultVariant: 'control' };
     expect(validateFlagForm(multi, 'create')).toEqual({});
-    expect(validateFlagForm({ ...multi, variants: [{ key: 'a', value: '1' }], defaultVariant: 'a' }, 'create').variants).toBeDefined();
-    const dup = validateFlagForm({ ...multi, variants: [{ key: 'a', value: '1' }, { key: 'a', value: '2' }], defaultVariant: 'a' }, 'create');
+    expect(validateFlagForm({ ...multi, variants: [{ id: 'a-1', key: 'a', value: '1' }], defaultVariant: 'a' }, 'create').variants).toBeDefined();
+    const dup = validateFlagForm({ ...multi, variants: [{ id: 'a-1', key: 'a', value: '1' }, { id: 'a-2', key: 'a', value: '2' }], defaultVariant: 'a' }, 'create');
     expect(dup['variants.1.key']).toMatch(/unique/);
-    const bad = validateFlagForm({ ...multi, variants: [{ key: 'a b', value: '1' }, { key: 'c', value: 'not json' }], defaultVariant: 'c' }, 'create');
+    const bad = validateFlagForm({ ...multi, variants: [{ id: 'a b-1', key: 'a b', value: '1' }, { id: 'c-not json', key: 'c', value: 'not json' }], defaultVariant: 'c' }, 'create');
     expect(bad['variants.0.key']).toBeDefined();
     expect(bad['variants.1.value']).toMatch(/JSON/);
     expect(validateFlagForm({ ...multi, defaultVariant: 'zzz' }, 'create').defaultVariant).toBeDefined();
@@ -152,7 +152,7 @@ describe('flag form', () => {
       ],
     });
     expect(flagFormBody(flagFormFrom(BOOL), 'edit')).toEqual({ description: 'x', defaultVariant: 'off', tags: ['q4'] });
-    expect(flagFormFrom(FLAG).variants[0]).toEqual({ key: 'control', value: '{"a":1}' });
+    expect(flagFormFrom(FLAG).variants[0]).toMatchObject({ key: 'control', value: '{"a":1}' });
   });
 });
 
