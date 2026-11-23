@@ -27,10 +27,17 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { SecretModalScope } from './EditSecretValueModal';
+import { isRotationIntervalInput, rotationIntervalValue, ROTATION_INTERVAL_MESSAGE } from '@/lib/rotation';
 
 const schema = z.object({
   name: z.string().min(1, 'Name is required').regex(/^[a-zA-Z0-9_\-]+$/, 'Only alphanumeric, underscores, and hyphens allowed'),
   description: z.string().min(1, 'Description is required'),
+  /** Rotate at least every N days (guibranco/grimoire-api#78); empty means no schedule. */
+  rotationIntervalDays: z
+    .string()
+    .nullable()
+    .default(null)
+    .refine((v) => isRotationIntervalInput(v), { message: ROTATION_INTERVAL_MESSAGE }),
   values: z.array(z.object({
     environmentSlug: z.string(),
     value: z.string().optional(),
@@ -39,6 +46,9 @@ const schema = z.object({
     notBefore: z.string().nullable().default(null),
   })).default([]),
 });
+
+/** Stable default: a fresh `[]` per render would re-run the reset effect below on every render. */
+const NO_CUSTOM_SLUGS: string[] = [];
 
 interface AddSecretModalProps {
   appSlug?: string;
@@ -55,7 +65,7 @@ export const AddSecretModal: React.FC<AddSecretModalProps> = ({
   scope,
   initialName,
   initialDescription,
-  customSlugs = [],
+  customSlugs = NO_CUSTOM_SLUGS,
   open,
   onOpenChange,
 }) => {
@@ -120,6 +130,7 @@ export const AddSecretModal: React.FC<AddSecretModalProps> = ({
     defaultValues: {
       name: initialName || '',
       description: initialDescription || '',
+      rotationIntervalDays: null,
       values: [],
     }
   });
@@ -134,6 +145,7 @@ export const AddSecretModal: React.FC<AddSecretModalProps> = ({
     reset({
       name: initialName || '',
       description: initialDescription || '',
+      rotationIntervalDays: null,
       values: envs.map((env) => ({
         environmentSlug: env.slug,
         value: '',
@@ -151,9 +163,11 @@ export const AddSecretModal: React.FC<AddSecretModalProps> = ({
         ? '/global/secrets'
         : `/applications/${targetAppSlug}/secrets`;
 
+      const rotationIntervalDays = rotationIntervalValue(data.rotationIntervalDays);
       const createRes = await api.post(createEndpoint, {
         name: data.name,
-        description: data.description
+        description: data.description,
+        ...(rotationIntervalDays !== null ? { rotationIntervalDays } : {}),
       });
 
       const createdName = createRes.data?.name || data.name;
@@ -205,7 +219,7 @@ export const AddSecretModal: React.FC<AddSecretModalProps> = ({
   return (
     <Dialog open={open} onOpenChange={(val) => !loading && onOpenChange(val)}>
       <DialogContent className="sm:max-w-4xl bg-card border-2 border-border p-0 gap-0 shadow-2xl flex flex-col max-h-[90vh]">
-        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col h-full overflow-hidden">
+        <form noValidate onSubmit={handleSubmit(onSubmit)} className="flex flex-col h-full overflow-hidden">
           <div className="p-6 border-b border-border">
             <DialogHeader className="mb-4">
               <div className="flex items-center gap-4 mb-2">
@@ -245,6 +259,24 @@ export const AddSecretModal: React.FC<AddSecretModalProps> = ({
                   {...register('description')}
                 />
                 {errors.description && <p className="text-[10px] text-destructive font-bold uppercase tracking-widest">{(errors.description.message as string)}</p>}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="s-rotation" className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground">Rotate every (days)</Label>
+                <Input
+                  id="s-rotation"
+                  type="number"
+                  min={1}
+                  max={3650}
+                  inputMode="numeric"
+                  placeholder="Optional, e.g. 90"
+                  aria-describedby="s-rotation-help"
+                  className="font-mono border-border focus-visible:ring-grimoire"
+                  {...register('rotationIntervalDays')}
+                />
+                <p id="s-rotation-help" className="text-[10px] text-zinc-500">
+                  Listed under Rotation once a value is this old. Leave empty for no schedule.
+                </p>
+                {errors.rotationIntervalDays && <p className="text-[10px] text-destructive font-bold uppercase tracking-widest">{(errors.rotationIntervalDays.message as string)}</p>}
               </div>
             </div>
           </div>

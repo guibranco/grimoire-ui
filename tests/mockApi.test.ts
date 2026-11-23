@@ -401,6 +401,68 @@ describe('Grimoire Mock API Integration Tests', () => {
       expect(delRes.status).toBe(204);
     });
   });
+  describe('Rotation API (guibranco/grimoire-api#78)', () => {
+    it('lists expiring, rotation-due and expired secrets, soonest first', async () => {
+      const res = await api.get('/secrets/expiring', { params: { withinDays: 30 } });
+      expect(res.status).toBe(200);
+      expect(res.data.withinDays).toBe(30);
+      const items = res.data.items as any[];
+      const find = (secret: string, env: string) => items.find((i) => i.secret === secret && i.environment === env);
+      expect(find('DATABASE_PASSWORDS', 'development')).toMatchObject({ reason: 'expired', application: 'production-gateway', isGlobal: false });
+      expect(find('JWT_SIGNING_SECRET', 'staging')).toMatchObject({ reason: 'expiry', daysRemaining: 5, rotationIntervalDays: 90 });
+      expect(find('JWT_SIGNING_SECRET', 'production')).toMatchObject({ reason: 'rotation', version: 3 });
+      expect(items.every((i) => !('value' in i))).toBe(true);
+      const times = items.map((i) => new Date(i.dueAt).getTime());
+      expect(times).toEqual([...times].sort((a, b) => a - b));
+    });
+
+    it('applies the window but always keeps overdue secrets', async () => {
+      const items = (await api.get('/secrets/expiring', { params: { withinDays: 0 } })).data.items as any[];
+      expect(items.some((i) => i.secret === 'JWT_SIGNING_SECRET' && i.environment === 'staging')).toBe(false);
+      expect(items.some((i) => i.reason === 'expired')).toBe(true);
+    });
+
+    it('rejects an out-of-range window', async () => {
+      expect((await api.get('/secrets/expiring', { params: { withinDays: 4000 } })).status).toBe(400);
+    });
+
+    it('stores the rotation interval on create and edits it with PATCH', async () => {
+      await api.post('/applications/production-gateway/secrets', { name: 'NEW_KEY', description: 'x', rotationIntervalDays: 10 });
+      await api.post('/applications/production-gateway/secrets/NEW_KEY/values', [{ environmentSlug: 'production', value: 'v' }]);
+      let items = (await api.get('/secrets/expiring')).data.items as any[];
+      expect(items.find((i) => i.secret === 'NEW_KEY')).toMatchObject({ reason: 'rotation', daysRemaining: 10 });
+
+      const patched = await api.patch('/applications/production-gateway/secrets/NEW_KEY', { rotationIntervalDays: 365 });
+      expect(patched.status).toBe(200);
+      expect(patched.data.rotationIntervalDays).toBe(365);
+      items = (await api.get('/secrets/expiring')).data.items as any[];
+      expect(items.find((i) => i.secret === 'NEW_KEY')).toBeUndefined();
+
+      const cleared = await api.patch('/applications/production-gateway/secrets/NEW_KEY', { clearRotationInterval: true, description: 'y' });
+      expect(cleared.data).toMatchObject({ rotationIntervalDays: null, description: 'y' });
+    });
+
+    it('validates PATCH bodies and unknown secrets', async () => {
+      const url = '/applications/production-gateway/secrets/DATABASE_PASSWORDS';
+      expect((await api.patch(url, { rotationIntervalDays: 0 })).status).toBe(400);
+      expect((await api.patch(url, { rotationIntervalDays: 5, clearRotationInterval: true })).status).toBe(400);
+      expect((await api.patch('/applications/production-gateway/secrets/NOPE', { rotationIntervalDays: 5 })).status).toBe(404);
+    });
+
+    it('edits global secrets and reports them per environment slug', async () => {
+      const res = await api.patch('/global/secrets/Sentry--Dsn', { rotationIntervalDays: 30 });
+      expect(res.data.rotationIntervalDays).toBe(30);
+      const items = (await api.get('/secrets/expiring', { params: { withinDays: 3650 } })).data.items as any[];
+      expect(items.find((i) => i.secret === 'Sentry--Dsn')).toMatchObject({ isGlobal: true, application: null, environment: '*', reason: 'rotation' });
+    });
+
+    it('runs reminders without a webhook, like an API without RotationReminders:WebhookUrl', async () => {
+      const res = await api.post('/secrets/expiring/notify');
+      expect(res.data).toMatchObject({ webhookConfigured: false, sent: 0, delivered: true });
+      expect(res.data.due).toBeGreaterThan(0);
+    });
+  });
+
   describe('Dashboard API', () => {
     it('returns totals, per-application and per-environment counts', async () => {
       const res = await api.get('/dashboard');
@@ -427,7 +489,7 @@ describe('Grimoire Mock API Integration Tests', () => {
       expect(byKind.get('secret-expired')).toMatchObject({ severity: 'error', application: 'production-gateway', environment: 'development', target: 'DATABASE_PASSWORDS' });
       expect(byKind.get('secret-no-valid-version')).toMatchObject({ severity: 'error', environment: 'production', target: 'REDIS_CACHE_TOKEN' });
       expect(byKind.get('secret-expiring')).toMatchObject({ severity: 'warning', application: 'auth-provider-security', environment: 'staging', target: 'JWT_SIGNING_SECRET' });
-      expect(byKind.get('rotation-due')).toMatchObject({ severity: 'warning', environment: 'production', target: 'JWT_SIGNING_SECRET' });
+      expect(byKind.get('secret-rotation-due')).toMatchObject({ severity: 'warning', environment: 'production', target: 'JWT_SIGNING_SECRET' });
       expect(byKind.get('consumer-stale')).toMatchObject({ severity: 'warning', application: 'auth-provider-security', environment: 'production' });
       expect(byKind.get('consumer-never-seen')).toMatchObject({ severity: 'info', application: 'production-gateway', environment: 'development' });
       expect(byKind.get('config-empty-value')).toMatchObject({ severity: 'info', environment: 'staging', target: 'OAUTH_CALLBACK_URL' });

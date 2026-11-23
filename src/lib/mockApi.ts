@@ -1,7 +1,8 @@
 import { AxiosResponse, AxiosRequestConfig } from 'axios';
 import { parseArrayItems } from './configValue';
 import { AUDIT_ACTION_LABELS } from './audit';
-import { versionsToExpire, withStatus, wouldLeaveNoValidVersion } from './secretVersions';
+import { isValidVersion, versionsToExpire, withStatus, wouldLeaveNoValidVersion } from './secretVersions';
+import { daysRemaining, secretDue, MAX_ROTATION_INTERVAL_DAYS } from './rotation';
 
 // Mock Database Initial State
 const DEFAULT_APPLICATIONS = [
@@ -55,7 +56,7 @@ const DEFAULT_SECRETS: Record<string, any[]> = {
       id: "33333333-3333-4333-8333-333333333333",
       name: "JWT_SIGNING_SECRET",
       description: "Symmetric key for JWT validation and encryption tokens.",
-      // Dashboard demo: drives `rotation-due` (rotation policies: guibranco/grimoire-api#78).
+      // Demo: drives `secret-rotation-due` and the rotation page (guibranco/grimoire-api#78).
       rotationIntervalDays: 90,
       createdAt: "2026-06-21T12:45:00.000Z",
       updatedAt: "2026-06-21T12:45:00.000Z"
@@ -415,8 +416,11 @@ function describeMutation(method: string, path: string, body: any): Omit<SeedAct
   if (method === 'PATCH') {
     if ((m = path.match(/^\/applications\/([^/]+)\/secrets\/([^/]+)\/versions\/([^/]+)\/\d+$/))) return { action: 'Updated secret version', application: d(m[1]), environment: d(m[3]), target: d(m[2]), targetType: 'secret' };
     if ((m = path.match(/^\/global\/secrets\/([^/]+)\/versions\/([^/]+)\/\d+$/))) return { action: 'Updated global secret version', application: null, environment: d(m[2]), target: d(m[1]), targetType: 'secret' };
+    if ((m = path.match(/^\/applications\/([^/]+)\/secrets\/([^/]+)$/))) return { action: 'Updated secret', application: d(m[1]), environment: null, target: d(m[2]), targetType: 'secret' };
+    if ((m = path.match(/^\/global\/secrets\/([^/]+)$/))) return { action: 'Updated global secret', application: null, environment: null, target: d(m[1]), targetType: 'secret' };
     return null;
   }
+  if (method === 'POST' && path === '/secrets/expiring/notify') return { action: 'Sent rotation reminders', application: null, environment: null, target: null, targetType: null };
   const verb = method === 'POST' ? 'Created' : method === 'PUT' ? 'Updated' : method === 'DELETE' ? 'Deleted' : null;
   if (!verb) return null;
   if (path === '/applications') return { action: 'Created application', application: body?.slug ?? null, environment: null, target: null, targetType: null };
@@ -452,38 +456,12 @@ const maxIso = (...values: (string | null | undefined)[]): string | null => {
   return best === null ? null : new Date(best).toISOString();
 };
 
-type SecretState =
-  | { kind: 'secret-expired'; dueAt: string | null }
-  | { kind: 'secret-no-valid-version' }
-  | { kind: 'secret-expiring'; dueAt: string }
-  | { kind: 'ok'; current: any };
-
-/** Mirrors the API rules for a secret's versions in one environment. */
-function evaluateVersions(versions: any[], now: number, expiringWithinDays: number): SecretState {
-  const t = (v: string | null | undefined) => (v ? new Date(v).getTime() : null);
-  const valid = versions
-    .filter((v) => v.isEnabled && (t(v.notBefore) ?? -Infinity) <= now && (t(v.expiresAt) ?? Infinity) > now)
-    .sort((a, b) => b.version - a.version);
-  if (valid.length === 0) {
-    const expired = versions.filter((v) => v.isEnabled && (t(v.expiresAt) ?? Infinity) <= now);
-    return expired.length > 0
-      ? { kind: 'secret-expired', dueAt: maxIso(...expired.map((v) => v.expiresAt)) }
-      : { kind: 'secret-no-valid-version' };
-  }
-  const current = valid[0];
-  const exp = t(current.expiresAt);
-  if (exp !== null && exp - now <= expiringWithinDays * DAY) {
-    return { kind: 'secret-expiring', dueAt: current.expiresAt };
-  }
-  return { kind: 'ok', current };
-}
-
 const SEVERITY: Record<string, 'error' | 'warning' | 'info'> = {
   'secret-expired': 'error',
   'secret-no-valid-version': 'error',
   'secret-expiring': 'warning',
   'consumer-stale': 'warning',
-  'rotation-due': 'warning',
+  'secret-rotation-due': 'warning',
   'consumer-never-seen': 'info',
   'config-empty-value': 'info',
 };
@@ -494,19 +472,18 @@ function buildDashboard(expiringWithinDays: number, staleAfterDays: number) {
   const add = (kind: string, fields: Record<string, unknown>) =>
     attention.push({ kind, severity: SEVERITY[kind], application: null, environment: null, target: null, dueAt: null, lastSeenAt: null, ...fields });
 
+  /** Mirrors the API dashboard rules, with expiry and rotation from `secretDue`. */
   const evaluateSecret = (application: string | null, environment: string | null, secret: any, versions: any[]) => {
-    const state = evaluateVersions(versions, now, expiringWithinDays);
     const base = { application, environment, target: secret.name };
-    if (state.kind === 'ok') {
-      const interval = Number(secret.rotationIntervalDays);
-      if (interval > 0 && state.current.createdAt) {
-        const due = new Date(state.current.createdAt).getTime() + interval * DAY;
-        if (due <= now) add('rotation-due', { ...base, dueAt: new Date(due).toISOString() });
+    const due = secretDue(versions, secret.rotationIntervalDays, now);
+    if (versions.some((v) => isValidVersion(v, now))) {
+      if (due && new Date(due.dueAt).getTime() <= now + expiringWithinDays * DAY) {
+        add(due.reason === 'rotation' ? 'secret-rotation-due' : 'secret-expiring', { ...base, dueAt: due.dueAt });
       }
-    } else if (state.kind === 'secret-no-valid-version') {
-      add(state.kind, base);
+    } else if (due?.reason === 'expired') {
+      add('secret-expired', { ...base, dueAt: due.dueAt });
     } else {
-      add(state.kind, { ...base, dueAt: state.dueAt });
+      add('secret-no-valid-version', base);
     }
   };
 
@@ -825,6 +802,87 @@ function updateMockVersion(
   return makeResponse(200, withStatus(versions).find((v) => v.version === version), config);
 }
 
+/** PATCH a secret's description / rotation interval, validated like the API. */
+function updateMockSecret(secret: any, body: any, config: AxiosRequestConfig, save: () => void) {
+  if (!secret) return makeResponse(404, { title: 'Not Found', status: 404, detail: 'Secret not found.' }, config);
+  const errors: Record<string, string[]> = {};
+  const interval = body?.rotationIntervalDays;
+  if (interval !== undefined && interval !== null && (!Number.isInteger(interval) || interval < 1 || interval > MAX_ROTATION_INTERVAL_DAYS)) {
+    errors.rotationIntervalDays = [`Must be between 1 and ${MAX_ROTATION_INTERVAL_DAYS}.`];
+  }
+  if (body?.clearRotationInterval && interval !== undefined && interval !== null) {
+    errors.rotationIntervalDays = ["Use either 'rotationIntervalDays' or 'clearRotationInterval', not both."];
+  }
+  if (body?.clearDescription && body?.description !== undefined && body?.description !== null) {
+    errors.description = ["Use either 'description' or 'clearDescription', not both."];
+  }
+  if (Object.keys(errors).length > 0) {
+    return makeResponse(400, { title: 'One or more validation errors occurred.', status: 400, errors }, config);
+  }
+  if (body?.clearDescription) secret.description = null;
+  else if (typeof body?.description === 'string') secret.description = body.description;
+  if (body?.clearRotationInterval) secret.rotationIntervalDays = null;
+  else if (interval !== undefined && interval !== null) secret.rotationIntervalDays = interval;
+  secret.updatedAt = new Date().toISOString();
+  save();
+  return makeResponse(200, sanitizeSecretMetadata(secret), config);
+}
+
+/** Mirrors `GET /management/secrets/expiring`: due within `withinDays`, overdue and expired always. */
+function buildExpiring(withinDays: number) {
+  const now = Date.now();
+  const before = now + withinDays * DAY;
+  const items: any[] = [];
+  const push = (secret: any, application: any | null, environment: string, versions: any[]) => {
+    const due = secretDue(versions, secret.rotationIntervalDays, now);
+    if (!due || new Date(due.dueAt).getTime() > before) return;
+    items.push({
+      application: application?.slug ?? null,
+      applicationName: application?.name ?? null,
+      secret: secret.name,
+      environment,
+      isGlobal: !application,
+      version: due.version,
+      reason: due.reason,
+      dueAt: due.dueAt,
+      daysRemaining: daysRemaining(due.dueAt, now),
+      rotationIntervalDays: secret.rotationIntervalDays ?? null,
+    });
+  };
+
+  applications.forEach((app: any) => {
+    (secrets[app.slug] || []).forEach((secret: any) => {
+      (environments[app.slug] || []).forEach((env: any) => {
+        const versions = secretVersions[`${app.slug}:${secret.name}:${env.slug}`] || [];
+        if (versions.length > 0) push(secret, app, env.slug, versions);
+      });
+    });
+  });
+
+  globalSecrets.forEach((secret: any) => {
+    const keys = Object.keys(globalSecretVersions).filter((k) => k.startsWith(`${secret.name}:`));
+    const wildcard = globalSecretVersions[`${secret.name}:*`] || [];
+    const wildcardCovers = wildcard.some((v: any) => isValidVersion(v, now));
+    keys.forEach((k) => {
+      const slug = k.slice(secret.name.length + 1);
+      const versions = globalSecretVersions[k] || [];
+      if (versions.length === 0) return;
+      // A specific slug with nothing valid falls back to "*", like consumers.
+      if (slug !== '*' && wildcardCovers && !versions.some((v: any) => isValidVersion(v, now))) return;
+      push(secret, null, slug, versions);
+    });
+  });
+
+  return items.sort(
+    (a, b) =>
+      new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime() ||
+      Number(a.isGlobal) - Number(b.isGlobal) ||
+      String(a.application).localeCompare(String(b.application)) ||
+      a.secret.localeCompare(b.secret) ||
+      a.environment.localeCompare(b.environment)
+  );
+}
+
 const parseDays = (raw: unknown, fallback: number, min: number) => {
   const n = Number(raw);
   return raw === undefined || raw === null || raw === '' || !Number.isInteger(n) ? fallback : Math.max(min, Math.min(3650, n));
@@ -894,6 +952,22 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
     const expiring = parseDays(searchParams.get('expiringWithinDays') ?? config.params?.expiringWithinDays, 14, 0);
     const stale = parseDays(searchParams.get('staleAfterDays') ?? config.params?.staleAfterDays, 7, 1);
     return makeResponse(200, buildDashboard(expiring, stale), config);
+  }
+
+  // GET /secrets/expiring?withinDays=30 (guibranco/grimoire-api#78)
+  if (cleanPath === '/secrets/expiring' && method === 'GET') {
+    const raw = searchParams.get('withinDays') ?? config.params?.withinDays;
+    const withinDays = raw === undefined || raw === null || raw === '' ? 30 : Number(raw);
+    if (!Number.isInteger(withinDays) || withinDays < 0 || withinDays > 3650) {
+      return makeResponse(400, { title: 'One or more validation errors occurred.', status: 400, errors: { withinDays: ['Must be between 0 and 3650.'] } }, config);
+    }
+    return makeResponse(200, { generatedAt: new Date().toISOString(), withinDays, items: buildExpiring(withinDays) }, config);
+  }
+
+  // POST /secrets/expiring/notify — the demo has no webhook, like an API without RotationReminders:WebhookUrl.
+  if (cleanPath === '/secrets/expiring/notify' && method === 'POST') {
+    const due = buildExpiring(30).length;
+    return makeResponse(200, { due, sent: 0, alreadySent: 0, webhookConfigured: false, delivered: true }, config);
   }
 
   // GET /audit?application=&action=&actor=&environment=&target=&outcome=&from=&to=&includeReads=&page=&pageSize=
@@ -1065,6 +1139,7 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
       id: existingIndex !== -1 ? secrets[slug][existingIndex].id : `sec-${Date.now()}`,
       name: newSecretName,
       description: body.description || '',
+      rotationIntervalDays: body.rotationIntervalDays ?? null,
       createdAt: existingIndex !== -1 ? secrets[slug][existingIndex].createdAt : nowIso,
       updatedAt: nowIso
     };
@@ -1293,6 +1368,12 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
     return makeResponse(200, sanitizeSecretMetadata(secret), config);
   }
 
+  // 11a'. PATCH /applications/:appSlug/secrets/:secretName — description and rotation interval
+  if (match && method === 'PATCH') {
+    const secret = (secrets[match[1]] || []).find((s: any) => s.name === decodeURIComponent(match![2]));
+    return updateMockSecret(secret, body, config, () => saveStored('secrets', secrets));
+  }
+
   // 11b. DELETE /applications/:appSlug/secrets/:secretName
   if (match && method === 'DELETE') {
     const appSlug = match[1];
@@ -1513,6 +1594,7 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
       id: existingIndex !== -1 ? globalSecrets[existingIndex].id : `gsec-${Date.now()}`,
       name,
       description: body.description || '',
+      rotationIntervalDays: body.rotationIntervalDays ?? null,
       createdAt: existingIndex !== -1 ? globalSecrets[existingIndex].createdAt : nowIso,
       updatedAt: nowIso,
     };
@@ -1584,6 +1666,11 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
       return makeResponse(404, { message: `Global secret ${secretName} not found` }, config);
     }
     return makeResponse(200, sanitizeSecretMetadata(secret), config);
+  }
+
+  if (match && method === 'PATCH') {
+    const secret = globalSecrets.find((s: any) => s.name === decodeURIComponent(match![1]));
+    return updateMockSecret(secret, body, config, () => saveStored('global_secrets', globalSecrets));
   }
 
   if (match && method === 'DELETE') {

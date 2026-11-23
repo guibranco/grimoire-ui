@@ -33,6 +33,7 @@ import {
 import { AddSecretModal } from '@/components/grimoire/AddSecretModal';
 import { EditSecretValueModal } from '@/components/grimoire/EditSecretValueModal';
 import { SecretVersionsModal } from '@/components/grimoire/SecretVersionsModal';
+import { EditSecretModal } from '@/components/grimoire/EditSecretModal';
 import { ConfirmationModal } from '@/components/shared/ConfirmationModal';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -67,6 +68,7 @@ export const GlobalSecretsTab: React.FC<GlobalSecretsTabProps> = ({
   const [editingValue, setEditingValue] = useState<{ secretName: string; envSlug: string } | null>(null);
   const [viewingVersions, setViewingVersions] = useState<{ secretName: string; envSlug: string } | null>(null);
   const [deletingSecret, setDeletingSecret] = useState<string | null>(null);
+  const [editingSecret, setEditingSecret] = useState<string | null>(null);
   const [localCustomSlugs, setLocalCustomSlugs] = useState<string[]>([]);
   const [customSlugInput, setCustomSlugInput] = useState('');
   const [showCustomSlugInput, setShowCustomSlugInput] = useState(false);
@@ -450,6 +452,15 @@ export const GlobalSecretsTab: React.FC<GlobalSecretsTabProps> = ({
                               {isExpanded ? 'Collapse' : 'Show Details'}
                             </DropdownMenuItem>
                             <DropdownMenuItem
+                              className="text-[10px] uppercase font-bold tracking-widest p-2 hover:bg-zinc-900 cursor-pointer"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingSecret(secret.name);
+                              }}
+                            >
+                              Edit Details
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
                               className="text-destructive text-[10px] uppercase font-bold tracking-widest p-2 hover:bg-destructive/10 cursor-pointer"
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -489,6 +500,12 @@ export const GlobalSecretsTab: React.FC<GlobalSecretsTabProps> = ({
                                   <div className="col-span-2">
                                     <p className="text-[11px] font-bold text-zinc-700 uppercase mb-1">Description</p>
                                     <p className="text-sm text-zinc-400 leading-relaxed">{resolvedSecret.description || '—'}</p>
+                                  </div>
+                                  <div className="col-span-2">
+                                    <p className="text-[11px] font-bold text-zinc-700 uppercase mb-1">Rotation</p>
+                                    <p className="font-mono text-xs text-zinc-400">
+                                      {resolvedSecret.rotationIntervalDays ? `Every ${resolvedSecret.rotationIntervalDays} days` : 'No schedule'}
+                                    </p>
                                   </div>
                                 </div>
                               </div>
@@ -617,6 +634,14 @@ export const GlobalSecretsTab: React.FC<GlobalSecretsTabProps> = ({
         />
       )}
 
+      {editingSecret && (
+        <EditSecretModal
+          scope="global"
+          secretName={editingSecret}
+          open={!!editingSecret}
+          onOpenChange={(open) => !open && setEditingSecret(null)}
+        />
+      )}
       <ConfirmationModal
         open={!!deletingSecret}
         onOpenChange={(open) => !open && setDeletingSecret(null)}

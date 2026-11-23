@@ -65,6 +65,13 @@ export const auditPath = (filters?: Record<string, string | number | boolean | n
   return qs ? `/audit?${qs}` : '/audit';
 };
 
+/** Default look-ahead of the rotation page, in days. */
+export const DEFAULT_ROTATION_WINDOW = 30;
+
+/** `/rotation[?within=N]` — secrets due for rotation (guibranco/grimoire-api#78); the default window is omitted. */
+export const rotationPath = (within?: number | null) =>
+  within && within !== DEFAULT_ROTATION_WINDOW ? `/rotation?within=${within}` : '/rotation';
+
 /** `/global[/:tab]?new=1` — opens Global with the create form for that tab. */
 export const globalCreatePath = (tab: GlobalTab) => {
   const base = globalPath(tab);

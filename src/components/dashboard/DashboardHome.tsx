@@ -22,6 +22,7 @@ import { ApplicationsSection, ApplicationsSkeleton, type AppAttention, type Dash
 import { AttentionPanel, AttentionSkeleton } from './AttentionPanel';
 import { FeatureFlagsCard, GlobalCard, TotalsSkeleton, TotalsStrip } from './SummaryCards';
 import { ActivityFeed, ActivitySkeleton } from './ActivityFeed';
+import { RotationCard } from './RotationCard';
 
 export const useDashboard = () =>
   useQuery({
@@ -260,7 +261,8 @@ export const DashboardHome: React.FC = () => {
         <TotalsStrip className={ORDER.totals} totals={data.totals} featureFlags={data.featureFlags} />
         <ApplicationsSection className={ORDER.apps} apps={apps} attentionByApp={attentionByApp} />
         <AttentionPanel className={ORDER.attention} items={data.attention} appNames={appNames} />
-        <div className={cn('grid gap-3 md:grid-cols-2', ORDER.cards)}>
+        <div className={cn('grid gap-3 md:grid-cols-2 xl:grid-cols-3', ORDER.cards)}>
+          <RotationCard />
           <GlobalCard global={data.global} />
           <FeatureFlagsCard featureFlags={data.featureFlags} />
         </div>

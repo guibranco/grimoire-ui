@@ -50,8 +50,55 @@ export interface Secret {
   id?: string;
   name: string;
   description?: string | null;
+  /** Rotate at least this often (guibranco/grimoire-api#78); `null` for no schedule. */
+  rotationIntervalDays?: number | null;
   createdAt?: string;
   updatedAt?: string;
+}
+
+/** Body of `PATCH …/secrets/{name}` (application or Global). Omitted fields keep their value. */
+export interface UpdateSecretRequest {
+  description?: string;
+  rotationIntervalDays?: number;
+  clearDescription?: boolean;
+  clearRotationInterval?: boolean;
+}
+
+// ── Rotation (GET /management/secrets/expiring, guibranco/grimoire-api#78) ────
+
+/** `expiry`: the current version's expiresAt; `rotation`: its rotation interval; `expired`: nothing valid left. */
+export type SecretDueReason = 'expiry' | 'rotation' | 'expired';
+
+/** A secret, in one environment, due for rotation. Never carries a value. */
+export interface ExpiringSecret {
+  /** Application slug; `null` for global secrets. */
+  application: string | null;
+  applicationName: string | null;
+  secret: string;
+  /** Environment slug (`*` for a global value targeting every environment). */
+  environment: string;
+  isGlobal: boolean;
+  version: number;
+  reason: SecretDueReason | (string & {});
+  dueAt: string;
+  /** Whole UTC calendar days until `dueAt`; negative when overdue. */
+  daysRemaining: number;
+  rotationIntervalDays: number | null;
+}
+
+export interface ExpiringSecretsResponse {
+  generatedAt: string;
+  withinDays: number;
+  items: ExpiringSecret[];
+}
+
+/** Result of `POST /management/secrets/expiring/notify`. */
+export interface RotationReminderRun {
+  due: number;
+  sent: number;
+  alreadySent: number;
+  webhookConfigured: boolean;
+  delivered: boolean;
 }
 
 /** How a configuration value is shaped. Array and JSON values are JSON text in `value`. */
@@ -169,7 +216,7 @@ export type AttentionKind =
   | 'consumer-stale'
   | 'consumer-never-seen'
   | 'config-empty-value'
-  | 'rotation-due';
+  | 'secret-rotation-due';
 
 export interface AttentionItem {
   kind: AttentionKind | (string & {});

@@ -26,6 +26,7 @@ export const AUDIT_ACTION_GROUPS: { label: string; prefix: string; actions: { co
     prefix: 'secret.*',
     actions: [
       { code: 'secret.create', label: 'Created secret' },
+      { code: 'secret.update', label: 'Updated secret' },
       { code: 'secret.write', label: 'Added secret version' },
       { code: 'secret.delete', label: 'Deleted secret' },
       { code: 'secret.version-update', label: 'Updated secret version' },
@@ -47,6 +48,7 @@ export const AUDIT_ACTION_GROUPS: { label: string; prefix: string; actions: { co
     prefix: 'global-*',
     actions: [
       { code: 'global-secret.create', label: 'Created global secret' },
+      { code: 'global-secret.update', label: 'Updated global secret' },
       { code: 'global-secret.write', label: 'Added global secret version' },
       { code: 'global-secret.delete', label: 'Deleted global secret' },
       { code: 'global-secret.version-update', label: 'Updated global secret version' },
@@ -60,6 +62,7 @@ export const AUDIT_ACTION_GROUPS: { label: string; prefix: string; actions: { co
     prefix: '',
     actions: [
       { code: 'backup.create', label: 'Created backup' },
+      { code: 'rotation.remind', label: 'Sent rotation reminders' },
       { code: 'auth.failed', label: 'Rejected unauthenticated request' },
     ],
   },
