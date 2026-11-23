@@ -1,3 +1,4 @@
+import { forgetMockFlags, handleFlagRequest, resetMockFlags } from './mockFlags';
 import { AxiosResponse, AxiosRequestConfig } from 'axios';
 import { parseArrayItems } from './configValue';
 import { AUDIT_ACTION_LABELS } from './audit';
@@ -345,6 +346,7 @@ export function resetMockDatabase() {
   globalSecrets = structuredClone(DEFAULT_GLOBAL_SECRETS);
   globalSecretVersions = structuredClone(DEFAULT_GLOBAL_SECRET_VERSIONS);
   configRevisions = {};
+  resetMockFlags();
   activityLog = seedActivity();
   if (isBrowser) {
     localStorage.removeItem('grm_mock_applications');
@@ -458,6 +460,9 @@ const MUTATION_RULES: MutationRule[] = [
   { methods: ['POST'], pattern: /^\/global\/configurations\/([^/]+)\/([^/]+)\/rollback\/\d+$/, describe: (m) => entry('Rolled back global configuration', null, decode(m[1]), decode(m[2]), 'configuration') },
   { methods: ['POST'], pattern: /^\/applications\/([^/]+)\/secrets\/([^/]+)\/versions\/([^/]+)\/\d+\/rollback$/, describe: (m) => entry('Rolled back secret', decode(m[1]), decode(m[3]), decode(m[2]), 'secret') },
   { methods: ['POST'], pattern: /^\/global\/secrets\/([^/]+)\/versions\/([^/]+)\/\d+\/rollback$/, describe: (m) => entry('Rolled back global secret', null, decode(m[2]), decode(m[1]), 'secret') },
+  { methods: ['POST'], pattern: /^\/applications\/([^/]+)\/feature-flags\/([^/]+)\/environments\/([^/]+)\/toggle$/, describe: (m) => entry('Toggled feature flag', decode(m[1]), decode(m[3]), decode(m[2]), 'feature-flag') },
+  { methods: ['PUT'], pattern: /^\/applications\/([^/]+)\/feature-flags\/([^/]+)\/environments\/([^/]+)$/, describe: (m) => entry('Updated feature flag targeting', decode(m[1]), decode(m[3]), decode(m[2]), 'feature-flag') },
+  { methods: WRITE, pattern: /^\/applications\/([^/]+)\/feature-flags(?:\/([^/]+))?$/, describe: (m, verb, body) => entry(`${verb} feature flag`, decode(m[1]), null, segOr(m[2], body?.key), 'feature-flag') },
   { methods: ['POST'], pattern: /^\/applications$/, describe: (_m, _v, body) => entry('Created application', body?.slug ?? null, null, null, null) },
   { methods: WRITE, pattern: /^\/applications\/([^/]+)$/, describe: (m, verb) => entry(`${verb} application`, decode(m[1]), null, null, null) },
   { methods: WRITE, pattern: /^\/applications\/([^/]+)\/rotate-key$/, describe: (m) => entry('Rotated API key', decode(m[1]), null, null, null) },
@@ -1242,6 +1247,15 @@ const parseDays = (raw: unknown, fallback: number, min: number) => {
   return raw === undefined || raw === null || raw === '' || !Number.isInteger(n) ? fallback : Math.max(min, Math.min(3650, n));
 };
 
+/** Query string merged with axios `params` (which the URL doesn't carry). */
+function withParams(query: URLSearchParams, params: unknown): URLSearchParams {
+  const merged = new URLSearchParams(query);
+  if (params && typeof params === 'object') {
+    for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== null && !merged.has(k)) merged.set(k, String(v));
+  }
+  return merged;
+}
+
 // Custom Axios Adapter
 export async function mockApiAdapter(config: AxiosRequestConfig): Promise<AxiosResponse> {
   const response = await handleMockRequest(config);
@@ -1295,6 +1309,16 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
   }
 
   // --- Router for patterns ---
+
+  // Feature flags (guibranco/grimoire-api#90) live in their own module.
+  const flagResponse = handleFlagRequest(
+    { environmentsOf: (slug) => (applications.some((a: any) => a.slug === slug) ? environments[slug] || [] : null) },
+    method,
+    cleanPath,
+    body,
+    withParams(searchParams, config.params)
+  );
+  if (flagResponse) return makeResponse(flagResponse.status, flagResponse.data, config);
 
   // 0. GET /version or /health
   if ((cleanPath === '/version' || cleanPath === '/health') && method === 'GET') {
@@ -1433,6 +1457,7 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
     delete environments[slug];
     delete secrets[slug];
     delete configurations[slug];
+    forgetMockFlags(slug);
     
     saveStored('environments', environments);
     saveStored('secrets', secrets);

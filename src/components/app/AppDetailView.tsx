@@ -10,6 +10,7 @@ import { GrimoireTab } from '@/components/grimoire/GrimoireTab';
 import { ConfigTab } from '@/components/config/ConfigTab';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Flag, GitCompare, History, Lock, Settings, Loader2 } from 'lucide-react';
+import { FeatureFlagsTab } from '@/components/flags/FeatureFlagsTab';
 import { CompareTab } from '@/components/compare/CompareTab';
 import { AuditLogPanel } from '@/components/audit/AuditLogPanel';
 import { ConfirmationModal } from '@/components/shared/ConfirmationModal';
@@ -206,15 +207,11 @@ const AppDetail: React.FC<{ appSlug: string }> = ({ appSlug }) => {
               ⚙️ Configuration
             </TabsTrigger>
             <TabsTrigger
-              value="feature-flags"
-              disabled
-              aria-disabled="true"
-              title="Feature flags are coming soon"
-              className="px-4 md:px-6 shrink-0 h-full bg-transparent border-r border-border rounded-none font-bold uppercase tracking-tight text-[11px] gap-2 shadow-none cursor-not-allowed opacity-50"
+              value="flags"
+              className="px-4 md:px-6 shrink-0 h-full bg-transparent border-r border-border data-[state=active]:bg-flags/5 data-[state=active]:border-b-2 data-[state=active]:border-b-flags data-[state=active]:text-flags rounded-none font-bold uppercase tracking-tight text-[11px] gap-2 transition-all shadow-none"
             >
               <Flag className="w-3.5 h-3.5" />
               🚩 Feature Flags
-              <span className="ml-1 px-1.5 py-0.5 border border-border text-[9px] font-mono tracking-widest text-zinc-500">SOON</span>
             </TabsTrigger>
             <TabsTrigger 
               value="secrets" 
@@ -249,6 +246,9 @@ const AppDetail: React.FC<{ appSlug: string }> = ({ appSlug }) => {
               onAddEnv={() => setIsAddEnvOpen(true)}
               highlightedKey={activeTab === 'config' ? highlightedKey : null}
             />
+          </TabsContent>
+          <TabsContent value="flags" className="m-0 min-h-full">
+            {activeTab === 'flags' && <FeatureFlagsTab appSlug={app.slug} envs={safeEnvs} envSlug={activeEnvSlug} />}
           </TabsContent>
           <TabsContent value="secrets" className="m-0 min-h-full">
             <GrimoireTab
