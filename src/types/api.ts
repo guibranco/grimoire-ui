@@ -506,3 +506,35 @@ export interface FlagHistoryEntry {
   before: unknown;
   after: unknown;
 }
+
+/** What an access token may read (guibranco/grimoire-api#75). */
+export type AccessTokenScope = 'secrets' | 'configurations' | 'feature-flags';
+export type AccessTokenStatus = 'active' | 'expired' | 'revoked';
+
+/** A Consumer API access token's metadata; the token itself is only returned on creation. */
+export interface AccessToken {
+  id: string;
+  name: string;
+  /** The 8 characters after `grm_tok_`. */
+  prefix: string;
+  /** Environment slugs it may read; `null` for all. */
+  environments: string[] | null;
+  scopes: AccessTokenScope[];
+  expiresAt: string | null;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+  status: AccessTokenStatus;
+}
+
+export interface CreateAccessTokenRequest {
+  name: string;
+  environments: string[] | null;
+  scopes: AccessTokenScope[];
+  expiresAt: string | null;
+}
+
+export interface CreateAccessTokenResponse {
+  token: AccessToken;
+  plainToken: string;
+}

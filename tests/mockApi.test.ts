@@ -702,6 +702,57 @@ describe('Grimoire Mock API Integration Tests', () => {
     });
   });
 
+  describe('Access tokens API (guibranco/grimoire-api#75)', () => {
+    const tbase = '/applications/production-gateway/access-tokens';
+
+    it('lists the seeded tokens with their status', async () => {
+      const res = await api.get(tbase);
+      expect(res.status).toBe(200);
+      expect(res.data.map((t: any) => [t.name, t.status])).toEqual([
+        ['github-actions', 'active'],
+        ['edge-runtime', 'active'],
+        ['old-deploy-script', 'revoked'],
+      ]);
+      expect(JSON.stringify(res.data)).not.toMatch(/grm_tok_|hash/i);
+      expect((await api.get('/applications/missing/access-tokens')).status).toBe(404);
+    });
+
+    it('creates a token, returns it once, and revokes it', async () => {
+      const created = await api.post(tbase, { name: 'ci', environments: ['Staging'], scopes: ['secrets'], expiresAt: null });
+      expect(created.status).toBe(201);
+      expect(created.data.plainToken).toMatch(/^grm_tok_[0-9A-Za-z]{40}$/);
+      expect(created.data.token).toMatchObject({ name: 'ci', environments: ['staging'], scopes: ['secrets'], status: 'active' });
+      expect(created.data.plainToken.slice(8, 16)).toBe(created.data.token.prefix);
+
+      const listed = (await api.get(tbase)).data.find((t: any) => t.name === 'ci');
+      expect(listed).not.toHaveProperty('plainToken');
+
+      const revoked = await api.post(`${tbase}/${created.data.token.id}/revoke`);
+      expect(revoked.data.status).toBe('revoked');
+      const again = await api.post(`${tbase}/${created.data.token.id}/revoke`);
+      expect(again.data.revokedAt).toBe(revoked.data.revokedAt);
+      expect((await api.post(`${tbase}/nope/revoke`)).status).toBe(404);
+    });
+
+    it('rejects what the API rejects', async () => {
+      const post = (body: any) => api.post(tbase, body);
+      expect((await post({ name: '', scopes: ['secrets'] })).status).toBe(400);
+      expect((await post({ name: 'x', scopes: [] })).status).toBe(400);
+      expect((await post({ name: 'x', scopes: ['write'] })).status).toBe(400);
+      expect((await post({ name: 'x', scopes: ['secrets'], environments: [] })).status).toBe(400);
+      expect((await post({ name: 'x', scopes: ['secrets'], environments: ['nope'] })).status).toBe(400);
+      expect((await post({ name: 'x', scopes: ['secrets'], expiresAt: '2000-01-01T00:00:00Z' })).status).toBe(400);
+      expect((await post({ name: 'github-actions', scopes: ['secrets'] })).status).toBe(409);
+    });
+
+    it('shows expired tokens as expired', async () => {
+      const created = await api.post(tbase, { name: 'soon', scopes: ['secrets'], expiresAt: new Date(Date.now() + 50).toISOString() });
+      await new Promise((r) => setTimeout(r, 80));
+      const listed = (await api.get(tbase)).data.find((t: any) => t.id === created.data.token.id);
+      expect(listed.status).toBe('expired');
+    });
+  });
+
   describe('Global feature flags API (guibranco/grimoire-api#90)', () => {
     const gbase = '/global/feature-flags';
     const stateOf = (flag: any, env: string) => flag.environments.find((e: any) => e.environment === env);

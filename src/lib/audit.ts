@@ -14,6 +14,15 @@ export const AUDIT_ACTION_GROUPS: { label: string; prefix: string; actions: { co
     ],
   },
   {
+    label: 'Access tokens',
+    prefix: 'access-token.*',
+    actions: [
+      { code: 'access-token.create', label: 'Created access token' },
+      { code: 'access-token.revoke', label: 'Revoked access token' },
+      { code: 'access-token.denied', label: 'Denied access token request' },
+    ],
+  },
+  {
     label: 'Environments',
     prefix: 'environment.*',
     actions: [

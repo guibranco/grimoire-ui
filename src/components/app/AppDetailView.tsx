@@ -9,7 +9,7 @@ import { ApplicationHeader } from '@/components/layout/ApplicationHeader';
 import { GrimoireTab } from '@/components/grimoire/GrimoireTab';
 import { ConfigTab } from '@/components/config/ConfigTab';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Flag, GitCompare, History, Lock, Settings, Loader2 } from 'lucide-react';
+import { Flag, GitCompare, History, KeyRound, Lock, Settings, Loader2 } from 'lucide-react';
 import { FeatureFlagsTab } from '@/components/flags/FeatureFlagsTab';
 import { CompareTab } from '@/components/compare/CompareTab';
 import { AuditLogPanel } from '@/components/audit/AuditLogPanel';
@@ -21,6 +21,7 @@ import { APIKeyRevealModal } from '@/components/modals/APIKeyRevealModal';
 import toast from 'react-hot-toast';
 import { apiErrorMessage } from '@/lib/errors';
 import { appScope } from '@/lib/flags';
+import { AccessTokensTab } from '@/components/tokens/AccessTokensTab';
 
 const isNotFound = (err: unknown) =>
   (err as { response?: { status?: number } } | null)?.response?.status === 404;
@@ -222,6 +223,13 @@ const AppDetail: React.FC<{ appSlug: string }> = ({ appSlug }) => {
               Secrets
             </TabsTrigger>
             <TabsTrigger
+              value="tokens"
+              className="px-4 md:px-6 shrink-0 h-full bg-transparent border-r border-border data-[state=active]:bg-grimoire/5 data-[state=active]:border-b-2 data-[state=active]:border-b-grimoire data-[state=active]:text-grimoire rounded-none font-bold uppercase tracking-tight text-[11px] gap-2 transition-all shadow-none"
+            >
+              <KeyRound className="w-3.5 h-3.5" />
+              Access Tokens
+            </TabsTrigger>
+            <TabsTrigger
               value="activity"
               className="px-4 md:px-6 shrink-0 h-full bg-transparent border-r border-border data-[state=active]:bg-zinc-800/40 data-[state=active]:border-b-2 data-[state=active]:border-b-zinc-300 data-[state=active]:text-zinc-100 rounded-none font-bold uppercase tracking-tight text-[11px] gap-2 transition-all shadow-none"
             >
@@ -256,6 +264,11 @@ const AppDetail: React.FC<{ appSlug: string }> = ({ appSlug }) => {
               appSlug={app.slug}
               highlightedName={activeTab === 'secrets' ? highlightedKey : null}
             />
+          </TabsContent>
+          <TabsContent value="tokens" className="m-0 min-h-full">
+            {activeTab === 'tokens' && (
+              <AccessTokensTab appSlug={app.slug} envs={safeEnvs} onRotateKey={() => setIsRotateKeyOpen(true)} />
+            )}
           </TabsContent>
           <TabsContent value="activity" className="m-0 min-h-full p-4 md:p-6">
             {activeTab === 'activity' && <AuditLogPanel application={app.slug} />}
