@@ -1,4 +1,5 @@
 import { forgetMockFlags, handleFlagRequest, resetMockFlags } from './mockFlags';
+import { forgetMockAccessTokens, handleAccessTokenRequest, resetMockAccessTokens } from './mockAccessTokens';
 import { AxiosResponse, AxiosRequestConfig } from 'axios';
 import { parseArrayItems } from './configValue';
 import { AUDIT_ACTION_LABELS } from './audit';
@@ -347,6 +348,7 @@ export function resetMockDatabase() {
   globalSecretVersions = structuredClone(DEFAULT_GLOBAL_SECRET_VERSIONS);
   configRevisions = {};
   resetMockFlags();
+  resetMockAccessTokens();
   activityLog = seedActivity();
   if (isBrowser) {
     localStorage.removeItem('grm_mock_applications');
@@ -466,6 +468,8 @@ const MUTATION_RULES: MutationRule[] = [
   { methods: ['POST'], pattern: /^\/applications$/, describe: (_m, _v, body) => entry('Created application', body?.slug ?? null, null, null, null) },
   { methods: WRITE, pattern: /^\/applications\/([^/]+)$/, describe: (m, verb) => entry(`${verb} application`, decode(m[1]), null, null, null) },
   { methods: WRITE, pattern: /^\/applications\/([^/]+)\/rotate-key$/, describe: (m) => entry('Rotated API key', decode(m[1]), null, null, null) },
+  { methods: ['POST'], pattern: /^\/applications\/([^/]+)\/access-tokens\/[^/]+\/revoke$/, describe: (m) => entry('Revoked access token', decode(m[1]), null, null, 'access-token') },
+  { methods: ['POST'], pattern: /^\/applications\/([^/]+)\/access-tokens$/, describe: (m, _v, body) => entry('Created access token', decode(m[1]), null, body?.name ?? null, 'access-token') },
   { methods: WRITE, pattern: /^\/applications\/([^/]+)\/environments(?:\/([^/]+))?$/, describe: (m, _v, body) => entry(`${m[2] ? 'Deleted' : 'Created'} environment`, decode(m[1]), segOr(m[2], body?.slug), null, null) },
   { methods: WRITE, pattern: /^\/applications\/([^/]+)\/secrets\/([^/]+)\/values$/, describe: (m, _v, body) => entry('Added secret version', decode(m[1]), body?.environmentSlug ?? null, decode(m[2]), 'secret') },
   { methods: WRITE, pattern: /^\/applications\/([^/]+)\/secrets(?:\/([^/]+))?$/, describe: (m, verb, body) => entry(`${verb} secret`, decode(m[1]), null, segOr(m[2], body?.name), 'secret') },
@@ -1324,6 +1328,15 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
   );
   if (flagResponse) return makeResponse(flagResponse.status, flagResponse.data, config);
 
+  // Access tokens (guibranco/grimoire-api#75).
+  const tokenResponse = handleAccessTokenRequest(
+    { environmentsOf: (slug) => (applications.some((a: any) => a.slug === slug) ? environments[slug] || [] : null) },
+    method,
+    cleanPath,
+    body
+  );
+  if (tokenResponse) return makeResponse(tokenResponse.status, tokenResponse.data, config);
+
   // 0. GET /version or /health
   if ((cleanPath === '/version' || cleanPath === '/health') && method === 'GET') {
     return makeResponse(200, { status: 'Healthy', version: '1.2.0-mock' }, config);
@@ -1462,6 +1475,7 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
     delete secrets[slug];
     delete configurations[slug];
     forgetMockFlags(slug);
+    forgetMockAccessTokens(slug);
     
     saveStored('environments', environments);
     saveStored('secrets', secrets);

@@ -6,12 +6,12 @@
  * so encoding and defaults stay consistent.
  */
 
-export type AppTab = 'config' | 'flags' | 'secrets' | 'activity' | 'compare';
+export type AppTab = 'config' | 'flags' | 'secrets' | 'tokens' | 'activity' | 'compare';
 /** Tabs that list entries (and can highlight one with `?key=`). */
 export type EntryTab = 'config' | 'secrets';
 export type GlobalTab = 'config' | 'flags' | 'secrets';
 
-export const APP_TABS: readonly AppTab[] = ['config', 'flags', 'secrets', 'activity', 'compare'];
+export const APP_TABS: readonly AppTab[] = ['config', 'flags', 'secrets', 'tokens', 'activity', 'compare'];
 export const GLOBAL_TABS: readonly GlobalTab[] = ['config', 'flags', 'secrets'];
 
 export const DEFAULT_APP_TAB: AppTab = 'config';

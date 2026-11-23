@@ -18,12 +18,18 @@ interface APIKeyRevealModalProps {
   apiKey: string | null;
   onClose: () => void;
   title?: string;
+  /** What the value is used for, shown above the warning. */
+  description?: string;
+  /** How the value is named in labels and messages ("API key", "access token"). */
+  secretLabel?: string;
 }
 
 export const APIKeyRevealModal: React.FC<APIKeyRevealModalProps> = ({
   apiKey,
   onClose,
   title = 'Application API Key Created',
+  description = 'This key is used by your application to fetch secrets and configurations.',
+  secretLabel = 'API key',
 }) => {
   const [hasCopied, setHasCopied] = useState(false);
   const [copiedToClipboard, setCopiedToClipboard] = useState(false);
@@ -39,10 +45,10 @@ export const APIKeyRevealModal: React.FC<APIKeyRevealModalProps> = ({
       await navigator.clipboard.writeText(apiKey);
       setCopiedToClipboard(true);
       setTimeout(() => setCopiedToClipboard(false), 2000);
-      toast.success('API Key copied to clipboard');
+      toast.success(`${secretLabel.charAt(0).toUpperCase()}${secretLabel.slice(1)} copied to clipboard`);
     } catch {
       // Clipboard access can be denied (insecure context, permissions): say so instead of claiming success.
-      toast.error('Could not copy to the clipboard — select the key and copy it manually');
+      toast.error(`Could not copy to the clipboard — select the ${secretLabel} and copy it manually`);
     }
   };
 
@@ -58,7 +64,7 @@ export const APIKeyRevealModal: React.FC<APIKeyRevealModalProps> = ({
             </div>
             <DialogTitle className="text-xl font-bold tracking-tight">{title}</DialogTitle>
             <DialogDescription className="text-muted-foreground mr-2">
-              This key is used by your application to fetch secrets and configurations.
+              {description}
               <span className="text-destructive font-bold block mt-2">
                 This will not be shown again. Copy it now and store it securely.
               </span>
@@ -76,7 +82,7 @@ export const APIKeyRevealModal: React.FC<APIKeyRevealModalProps> = ({
                 size="icon"
                 variant="ghost"
                 className="absolute right-1 top-1 h-8 w-8 hover:bg-muted"
-                aria-label="Copy API key"
+                aria-label={`Copy ${secretLabel}`}
                 onClick={() => void copyToClipboard()}
               >
                 {copiedToClipboard ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
@@ -95,7 +101,7 @@ export const APIKeyRevealModal: React.FC<APIKeyRevealModalProps> = ({
                   htmlFor="copied-check"
                   className="text-[12px] font-bold uppercase tracking-tight cursor-pointer"
                 >
-                  I have copied the API Key
+                  I have copied the {secretLabel}
                 </label>
                 <p className="text-[10px] text-muted-foreground uppercase tracking-widest">
                   You must confirm before closing this window.
