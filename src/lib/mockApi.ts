@@ -1,5 +1,5 @@
 import { forgetMockFlags, handleFlagRequest, resetMockFlags } from './mockFlags';
-import { forgetMockAccessTokens, handleAccessTokenRequest, resetMockAccessTokens } from './mockAccessTokens';
+import { forgetMockAccessTokens, handleAccessTokenRequest, handleTrustPolicyRequest, resetMockAccessTokens } from './mockAccessTokens';
 import { AxiosResponse, AxiosRequestConfig } from 'axios';
 import { parseArrayItems } from './configValue';
 import { AUDIT_ACTION_LABELS } from './audit';
@@ -470,6 +470,9 @@ const MUTATION_RULES: MutationRule[] = [
   { methods: WRITE, pattern: /^\/applications\/([^/]+)\/rotate-key$/, describe: (m) => entry('Rotated API key', decode(m[1]), null, null, null) },
   { methods: ['POST'], pattern: /^\/applications\/([^/]+)\/access-tokens\/[^/]+\/revoke$/, describe: (m) => entry('Revoked access token', decode(m[1]), null, null, 'access-token') },
   { methods: ['POST'], pattern: /^\/applications\/([^/]+)\/access-tokens$/, describe: (m, _v, body) => entry('Created access token', decode(m[1]), null, body?.name ?? null, 'access-token') },
+  { methods: ['POST'], pattern: /^\/applications\/([^/]+)\/trust-policies$/, describe: (m, _v, body) => entry('Created trust policy', decode(m[1]), null, body?.name ?? null, 'trust-policy') },
+  { methods: ['PUT'], pattern: /^\/applications\/([^/]+)\/trust-policies\/[^/]+$/, describe: (m, _v, body) => entry('Updated trust policy', decode(m[1]), null, body?.name ?? null, 'trust-policy') },
+  { methods: ['DELETE'], pattern: /^\/applications\/([^/]+)\/trust-policies\/[^/]+$/, describe: (m) => entry('Deleted trust policy', decode(m[1]), null, null, 'trust-policy') },
   { methods: WRITE, pattern: /^\/applications\/([^/]+)\/environments(?:\/([^/]+))?$/, describe: (m, _v, body) => entry(`${m[2] ? 'Deleted' : 'Created'} environment`, decode(m[1]), segOr(m[2], body?.slug), null, null) },
   { methods: WRITE, pattern: /^\/applications\/([^/]+)\/secrets\/([^/]+)\/values$/, describe: (m, _v, body) => entry('Added secret version', decode(m[1]), body?.environmentSlug ?? null, decode(m[2]), 'secret') },
   { methods: WRITE, pattern: /^\/applications\/([^/]+)\/secrets(?:\/([^/]+))?$/, describe: (m, verb, body) => entry(`${verb} secret`, decode(m[1]), null, segOr(m[2], body?.name), 'secret') },
@@ -1336,6 +1339,13 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
     body
   );
   if (tokenResponse) return makeResponse(tokenResponse.status, tokenResponse.data, config);
+  const policyResponse = handleTrustPolicyRequest(
+    { environmentsOf: (slug) => (applications.some((a: any) => a.slug === slug) ? environments[slug] || [] : null) },
+    method,
+    cleanPath,
+    body
+  );
+  if (policyResponse) return makeResponse(policyResponse.status, policyResponse.data, config);
 
   // 0. GET /version or /health
   if ((cleanPath === '/version' || cleanPath === '/health') && method === 'GET') {
