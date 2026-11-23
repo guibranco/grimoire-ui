@@ -2203,71 +2203,56 @@ const ROUTES: MockRoute[] = [
   },
 ];
 
-function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
-  // Parse clean path
+/** The request's path below `/management`, without host or query string, plus its query. */
+function requestPath(config: AxiosRequestConfig) {
   let path = config.url || '';
-  if (config.baseURL && path.startsWith(config.baseURL)) {
-    path = path.substring(config.baseURL.length);
-  }
-  
-  // Normalize leading slash and remove domain or /management prefix if any
+  if (config.baseURL && path.startsWith(config.baseURL)) path = path.substring(config.baseURL.length);
   path = path.replace(/^(https?:\/\/[^/]+)?\/?/, '/');
-  if (path.startsWith('/management/')) {
-    path = path.substring('/management'.length);
-  }
+  if (path.startsWith('/management/')) path = path.substring('/management'.length);
+  const url = new URL(path, 'http://localhost');
+  return { path, cleanPath: url.pathname, searchParams: url.searchParams };
+}
 
+/** The request body: parsed JSON when it is a JSON string, the data as sent otherwise. */
+function requestBody(data: unknown): any {
+  if (!data) return {};
+  if (typeof data !== 'string') return data;
+  try {
+    return JSON.parse(data);
+  } catch {
+    return data;
+  }
+}
+
+const environmentsOf = (slug: string) =>
+  applications.some((a: any) => a.slug === slug) ? environments[slug] || [] : null;
+
+/** Feature flags (guibranco/grimoire-api#90), access tokens and trust policies (#75) live in their own modules. */
+function handleModuleRequest(method: string, cleanPath: string, body: any, params: URLSearchParams) {
+  return (
+    handleFlagRequest(
+      {
+        environmentsOf,
+        globalEnvironmentSlugs: () =>
+          Object.values(environments).flatMap((list: any) => (list || []).map((e: any) => e?.slug).filter(Boolean)),
+      },
+      method,
+      cleanPath,
+      body,
+      params
+    ) ??
+    handleAccessTokenRequest({ environmentsOf }, method, cleanPath, body) ??
+    handleTrustPolicyRequest({ environmentsOf }, method, cleanPath, body)
+  );
+}
+
+function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
+  const { path, cleanPath, searchParams } = requestPath(config);
   const method = (config.method || 'GET').toUpperCase();
-  
-  // Extract query parameters
-  const urlObj = new URL(path, 'http://localhost');
-  const cleanPath = urlObj.pathname;
-  const searchParams = urlObj.searchParams;
+  const body = requestBody(config.data);
 
-  // Safe parse request payloads (JSON strings or objects)
-  let body: any = {};
-  if (config.data) {
-    if (typeof config.data === 'string') {
-      try {
-        body = JSON.parse(config.data);
-      } catch (e) {
-        body = config.data;
-      }
-    } else {
-      body = config.data;
-    }
-  }
-
-  // --- Router for patterns ---
-
-  // Feature flags (guibranco/grimoire-api#90) live in their own module.
-  const flagResponse = handleFlagRequest(
-    {
-      environmentsOf: (slug) => (applications.some((a: any) => a.slug === slug) ? environments[slug] || [] : null),
-      globalEnvironmentSlugs: () =>
-        Object.values(environments).flatMap((list: any) => (list || []).map((e: any) => e?.slug).filter(Boolean)),
-    },
-    method,
-    cleanPath,
-    body,
-    withParams(searchParams, config.params)
-  );
-  if (flagResponse) return makeResponse(flagResponse.status, flagResponse.data, config);
-
-  // Access tokens (guibranco/grimoire-api#75).
-  const tokenResponse = handleAccessTokenRequest(
-    { environmentsOf: (slug) => (applications.some((a: any) => a.slug === slug) ? environments[slug] || [] : null) },
-    method,
-    cleanPath,
-    body
-  );
-  if (tokenResponse) return makeResponse(tokenResponse.status, tokenResponse.data, config);
-  const policyResponse = handleTrustPolicyRequest(
-    { environmentsOf: (slug) => (applications.some((a: any) => a.slug === slug) ? environments[slug] || [] : null) },
-    method,
-    cleanPath,
-    body
-  );
-  if (policyResponse) return makeResponse(policyResponse.status, policyResponse.data, config);
+  const moduleResponse = handleModuleRequest(method, cleanPath, body, withParams(searchParams, config.params));
+  if (moduleResponse) return makeResponse(moduleResponse.status, moduleResponse.data, config);
 
   for (const route of ROUTES) {
     if (route.method !== method) continue;
@@ -2277,6 +2262,5 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
     if (response) return response;
   }
 
-  // Fallback for default request
   return makeResponse(404, { message: `Mock route not found: ${method} ${path}` }, config);
 }
