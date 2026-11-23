@@ -38,8 +38,10 @@ const chip = 'h-[26px] px-2.5 border text-[10px] font-bold uppercase tracking-wi
 const chipClass = (active: boolean) =>
   cn(chip, active ? 'border-grimoire bg-grimoire/15 text-grimoire' : 'border-zinc-800 bg-zinc-900 text-zinc-500 hover:text-zinc-200');
 
-const nodeTitle = (n: DependencyNode) =>
-  `${NODE_TYPE_LABELS[n.type]}: ${n.label}${n.application ? ` (${n.application})` : ''}`;
+const nodeTitle = (n: DependencyNode) => {
+  const owner = n.application ? ` (${n.application})` : '';
+  return `${NODE_TYPE_LABELS[n.type]}: ${n.label}${owner}`;
+};
 
 const edgeDetail = (e: DependencyEdge) => {
   if (e.kind !== 'reads') return null;

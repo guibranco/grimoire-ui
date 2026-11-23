@@ -1139,7 +1139,7 @@ function buildUnusedSecrets(days: number) {
   const since = Date.now() - days * DAY;
   const reads = liveSecretReads();
   const items: any[] = [];
-  const push = (application: any | null, secret: any) => {
+  const push = (application: any, secret: any) => {
     const own = reads
       .filter((r) => r.secret === secret.name && (application ? !r.isGlobal && r.application === application.slug : r.isGlobal))
       .sort((a, b) => b.lastReadAt.localeCompare(a.lastReadAt))
@@ -1169,12 +1169,18 @@ function buildUnusedSecrets(days: number) {
   );
 }
 
+/** Ordinal (code unit) order, like the API's `StringComparer.Ordinal`. */
+function compareOrdinal(a: string, b: string): number {
+  if (a === b) return 0;
+  return a < b ? -1 : 1;
+}
+
 /** Mirrors `GET /management/reports/dependencies`. */
 function buildDependencies() {
   const nodes = new Map<string, any>();
   const edges: any[] = [];
   const node = (id: string, type: string, label: string, application: string | null, envs: string[] = []) =>
-    nodes.set(id, { id, type, label, application, environments: [...new Set(envs)].sort() });
+    nodes.set(id, { id, type, label, application, environments: [...new Set(envs)].sort(compareOrdinal) });
   const edge = (source: string, target: string, kind: string, extra: Partial<Record<string, any>> = {}) =>
     edges.push({ source, target, kind, environments: [], lastReadAt: null, readCount: null, ...extra });
 
@@ -1218,18 +1224,17 @@ function buildDependencies() {
   grouped.forEach((rs, k) => {
     const [source, target] = k.split('|');
     edge(source, target, 'reads', {
-      environments: [...new Set(rs.map((r) => r.environment))].sort(),
-      lastReadAt: rs.map((r) => r.lastReadAt).sort().at(-1),
+      environments: [...new Set(rs.map((r) => r.environment))].sort(compareOrdinal),
+      lastReadAt: rs.map((r) => r.lastReadAt).sort(compareOrdinal).at(-1),
       readCount: rs.reduce((sum, r) => sum + r.readCount, 0),
     });
   });
 
-  const byId = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
-  return {
-    generatedAt: new Date().toISOString(),
-    nodes: [...nodes.values()].sort((a, b) => byId(a.id, b.id)),
-    edges: edges.sort((a, b) => byId(a.source, b.source) || byId(a.target, b.target) || byId(a.kind, b.kind)),
-  };
+  const sortedNodes = [...nodes.values()].sort((a, b) => compareOrdinal(a.id, b.id));
+  edges.sort(
+    (a, b) => compareOrdinal(a.source, b.source) || compareOrdinal(a.target, b.target) || compareOrdinal(a.kind, b.kind)
+  );
+  return { generatedAt: new Date().toISOString(), nodes: sortedNodes, edges };
 }
 
 const parseDays = (raw: unknown, fallback: number, min: number) => {

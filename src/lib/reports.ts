@@ -58,8 +58,8 @@ export function parseUnused(data: unknown): UnusedSecretsResponse {
   };
 }
 
-const NODE_TYPES: readonly DependencyNodeType[] = ['application', 'secret', 'global-secret', 'config-key', 'global-config-key'];
-const EDGE_KINDS: readonly DependencyEdgeKind[] = ['owns', 'reads', 'overrides', 'inherits'];
+const NODE_TYPES: ReadonlySet<string> = new Set<DependencyNodeType>(['application', 'secret', 'global-secret', 'config-key', 'global-config-key']);
+const EDGE_KINDS: ReadonlySet<string> = new Set<DependencyEdgeKind>(['owns', 'reads', 'overrides', 'inherits']);
 
 /** Validates a dependency graph payload, dropping unknown node types and dangling edges. */
 export function parseGraph(data: unknown): DependencyGraph {
@@ -68,7 +68,7 @@ export function parseGraph(data: unknown): DependencyGraph {
   }
   const nodes = data.nodes
     .filter(isRecord)
-    .filter((n) => typeof n.id === 'string' && NODE_TYPES.includes(n.type as DependencyNodeType))
+    .filter((n) => typeof n.id === 'string' && NODE_TYPES.has(n.type as string))
     .map(
       (n): DependencyNode => ({
         id: n.id as string,
@@ -83,7 +83,7 @@ export function parseGraph(data: unknown): DependencyGraph {
     .filter(isRecord)
     .filter(
       (e) =>
-        ids.has(e.source as string) && ids.has(e.target as string) && EDGE_KINDS.includes(e.kind as DependencyEdgeKind)
+        ids.has(e.source as string) && ids.has(e.target as string) && EDGE_KINDS.has(e.kind as string)
     )
     .map(
       (e): DependencyEdge => ({
@@ -174,7 +174,7 @@ export interface GraphFilter {
 
 export const DEFAULT_GRAPH_FILTER: GraphFilter = {
   showConfig: false,
-  kinds: new Set<DependencyEdgeKind>(EDGE_KINDS),
+  kinds: new Set(EDGE_KINDS as ReadonlySet<DependencyEdgeKind>),
 };
 
 const isConfig = (type: DependencyNodeType) => type === 'config-key' || type === 'global-config-key';
@@ -184,22 +184,28 @@ const isConfig = (type: DependencyNodeType) => type === 'config-key' || type ===
  * `overrides` edges, so focusing an application shows the globals its entries override and
  * focusing a global shows the applications whose entries override it.
  */
+const isStructural = (kind: DependencyEdgeKind) => kind === 'owns' || kind === 'overrides';
+
 export function neighbourhood(graph: Pick<DependencyGraph, 'edges'>, focus: string): Set<string> {
   const result = new Set<string>([focus]);
   const structural = new Set<string>();
   for (const e of graph.edges) {
-    if (e.source === focus || e.target === focus) {
-      const other = e.source === focus ? e.target : e.source;
-      result.add(other);
-      if (e.kind === 'owns' || e.kind === 'overrides') structural.add(other);
-    }
+    const other = otherEnd(e, focus);
+    if (other === null) continue;
+    result.add(other);
+    if (isStructural(e.kind)) structural.add(other);
   }
-  for (const e of graph.edges) {
-    if (e.kind !== 'owns' && e.kind !== 'overrides') continue;
+  for (const e of graph.edges.filter((edge) => isStructural(edge.kind))) {
     if (structural.has(e.source)) result.add(e.target);
     if (structural.has(e.target)) result.add(e.source);
   }
   return result;
+}
+
+/** The edge's other end when it touches `id`, else `null`. */
+function otherEnd(edge: Pick<DependencyEdge, 'source' | 'target'>, id: string): string | null {
+  if (edge.source === id) return edge.target;
+  return edge.target === id ? edge.source : null;
 }
 
 /** Nodes and edges to draw for a filter and optional focus. */
@@ -213,15 +219,18 @@ export function visibleGraph(graph: DependencyGraph, filter: GraphFilter, focus?
   return { nodes, edges };
 }
 
+/** 0 applications, 1 secrets, 2 configuration keys. */
+export type GraphColumn = 0 | 1 | 2;
+
 export interface PositionedNode extends DependencyNode {
   x: number;
   y: number;
-  column: 0 | 1 | 2;
+  column: GraphColumn;
 }
 
 export const GRAPH_LAYOUT = { nodeWidth: 220, nodeHeight: 30, rowGap: 10, columnGap: 120, padding: 16 } as const;
 
-const columnOf = (type: DependencyNodeType): 0 | 1 | 2 => {
+const columnOf = (type: DependencyNodeType): GraphColumn => {
   if (type === 'application') return 0;
   return type === 'secret' || type === 'global-secret' ? 1 : 2;
 };
@@ -237,16 +246,15 @@ export function layoutGraph(nodes: DependencyNode[]) {
   const sortKey = (n: DependencyNode) => `${n.application === null && n.type !== 'application' ? '￿' : n.application ?? ''}\u0000${n.label}`;
   const positioned: PositionedNode[] = [];
   columns.forEach((column, c) => {
-    column
-      .sort((a, b) => sortKey(a).localeCompare(sortKey(b)))
-      .forEach((n, row) =>
-        positioned.push({
-          ...n,
-          column: c as 0 | 1 | 2,
-          x: padding + c * (nodeWidth + columnGap),
-          y: padding + row * (nodeHeight + rowGap),
-        })
-      );
+    column.sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+    column.forEach((n, row) =>
+      positioned.push({
+        ...n,
+        column: c as GraphColumn,
+        x: padding + c * (nodeWidth + columnGap),
+        y: padding + row * (nodeHeight + rowGap),
+      })
+    );
   });
   const rows = Math.max(1, ...columns.map((c) => c.length));
   return {
