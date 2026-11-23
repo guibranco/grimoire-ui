@@ -3,8 +3,31 @@ import { mockApiAdapter } from './mockApi';
 
 export const UI_VERSION = (typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2.4.0').replace(/^v/i, '');
 
+const DEFAULT_API_URL = 'http://localhost:5000';
+
+/**
+ * The configured instance URL as an absolute http(s) origin and path, without a trailing slash.
+ * Anything else stored in `grimoire_api_url` (another scheme, credentials, junk) is rejected, so
+ * requests only ever go to an http(s) Grimoire instance. A URL without a scheme gets `https://`.
+ */
+export function resolveApiBaseUrl(stored: string | null | undefined): string | null {
+  const raw = stored?.trim();
+  if (!raw || raw === 'mock://') return null;
+  const withScheme = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(raw) ? raw : `https://${raw}`;
+  let parsed: URL;
+  try {
+    parsed = new URL(withScheme);
+  } catch {
+    return null;
+  }
+  if ((parsed.protocol !== 'http:' && parsed.protocol !== 'https:') || parsed.username || parsed.password) {
+    return null;
+  }
+  return `${parsed.origin}${parsed.pathname.replace(/\/+$/, '')}`;
+}
+
 export const api = axios.create({
-  baseURL: localStorage.getItem('grimoire_api_url') || 'http://localhost:5000',
+  baseURL: resolveApiBaseUrl(localStorage.getItem('grimoire_api_url')) ?? DEFAULT_API_URL,
 });
 
 const isTestMode =
@@ -189,11 +212,9 @@ api.interceptors.request.use((config) => {
 
   if (url === 'mock://' || isTestMode) {
     config.adapter = mockApiAdapter;
-  } else if (url) {
-    const sanitized = url.endsWith('/') ? url.slice(0, -1) : url;
-    config.baseURL = sanitized.endsWith('/management') ? sanitized : `${sanitized}/management`;
   } else {
-    config.baseURL = 'http://localhost:5000/management';
+    const base = resolveApiBaseUrl(url) ?? DEFAULT_API_URL;
+    config.baseURL = base.endsWith('/management') ? base : `${base}/management`;
   }
 
   if (token) {

@@ -10,9 +10,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
-  pages: write
-  id-token: write
+  contents: read
 
 jobs:
   build:
@@ -43,7 +41,7 @@ jobs:
           cache: "npm"
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Build
         run: npm run build
@@ -73,6 +71,9 @@ jobs:
     name: Deploy GH Pages
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
 
     steps:
       - name: Download artifact
@@ -96,6 +97,8 @@ jobs:
     name: Create release
     needs: [build, deploy]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     env:
       fullSemVer: ${{ needs.build.outputs.fullSemVer }}
 

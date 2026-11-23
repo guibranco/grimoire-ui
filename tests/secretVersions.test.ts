@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   currentVersion,
   openEndedOlderVersions,
+  secretStatusOf,
   versionsToExpire,
   versionStatus,
   withStatus,
@@ -9,7 +10,7 @@ import {
 } from '../src/lib/secretVersions';
 import { api } from '../src/lib/api';
 import { resetMockDatabase } from '../src/lib/mockApi';
-import type { SecretVersion } from '../src/types/api';
+import { SecretStatus, type SecretVersion } from '../src/types/api';
 
 const NOW = Date.parse('2026-11-22T12:00:00Z');
 const day = 24 * 60 * 60 * 1000;
@@ -104,5 +105,32 @@ describe('mock secret version lifecycle', () => {
     await api.patch(`${versionsUrl}/1`, { isEnabled: false });
     const page = (await api.get('/audit', { params: { action: 'secret.version-update' } })).data;
     expect(page.items[0]).toMatchObject({ description: 'Updated secret version', target: 'ROTATE_ME', environment: 'staging' });
+  });
+});
+
+describe('secretStatusOf', () => {
+  const now = Date.parse('2026-11-23T12:00:00Z');
+  const v = (over: Partial<{ isEnabled: boolean; notBefore: string | null; expiresAt: string | null }> = {}) => ({
+    isEnabled: true,
+    notBefore: null,
+    expiresAt: null,
+    ...over,
+  });
+
+  it('is missing without a version and disabled when the version is', () => {
+    expect(secretStatusOf(undefined, now)).toBe(SecretStatus.MISSING);
+    expect(secretStatusOf(v({ isEnabled: false }), now)).toBe(SecretStatus.DISABLED);
+  });
+
+  it('is expired past expiresAt and pending before notBefore', () => {
+    expect(secretStatusOf(v({ expiresAt: '2026-11-22T00:00:00Z' }), now)).toBe(SecretStatus.EXPIRED);
+    expect(secretStatusOf(v({ notBefore: '2026-11-24T00:00:00Z' }), now)).toBe(SecretStatus.PENDING);
+  });
+
+  it('is enabled inside its window, ignoring unparseable dates', () => {
+    expect(secretStatusOf(v({ notBefore: '2026-11-01T00:00:00Z', expiresAt: '2026-12-01T00:00:00Z' }), now)).toBe(
+      SecretStatus.ENABLED
+    );
+    expect(secretStatusOf(v({ expiresAt: 'not a date' }), now)).toBe(SecretStatus.ENABLED);
   });
 });

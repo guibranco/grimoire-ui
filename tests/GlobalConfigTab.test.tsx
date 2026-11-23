@@ -1,39 +1,14 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { GlobalConfigTab } from '../src/components/global/GlobalConfigTab';
 import { api } from '../src/lib/api';
+import { useTestQueryClient } from './apiMock';
 
-vi.mock('../src/lib/api', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../src/lib/api')>();
-  return {
-    ...actual,
-    api: {
-      get: vi.fn(),
-      post: vi.fn(),
-      put: vi.fn(),
-      delete: vi.fn(),
-    },
-  };
-});
+vi.mock('../src/lib/api', async (orig) => (await import('./apiMock')).mockApiModule(orig));
 
 describe('GlobalConfigTab', () => {
-  let queryClient: QueryClient;
-
-  beforeEach(() => {
-    queryClient = new QueryClient({
-      defaultOptions: {
-        queries: {
-          retry: false,
-        },
-      },
-    });
-    vi.clearAllMocks();
-  });
-
-  afterEach(() => {
-    cleanup();
-  });
+  const client = useTestQueryClient();
 
   const setupDefaultMocks = () => {
     const mockGet = api.get as ReturnType<typeof vi.fn>;
@@ -74,7 +49,7 @@ describe('GlobalConfigTab', () => {
     setupDefaultMocks();
 
     render(
-      <QueryClientProvider client={queryClient}>
+      <QueryClientProvider client={client.current}>
         <GlobalConfigTab />
       </QueryClientProvider>
     );
@@ -101,7 +76,7 @@ describe('GlobalConfigTab', () => {
     mockDelete.mockResolvedValue({ status: 204, data: {} });
 
     render(
-      <QueryClientProvider client={queryClient}>
+      <QueryClientProvider client={client.current}>
         <GlobalConfigTab />
       </QueryClientProvider>
     );

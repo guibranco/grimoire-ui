@@ -12,8 +12,6 @@ import {
   ChevronUp,
   Loader2,
   History,
-  Plus,
-  X,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -37,6 +35,10 @@ import { EditSecretModal } from '@/components/grimoire/EditSecretModal';
 import { ConfirmationModal } from '@/components/shared/ConfirmationModal';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { secretStatusOf } from '@/lib/secretVersions';
+import { fetchSecretVersions, globalSecretVersionsUrl } from '@/lib/secretVersionsApi';
+import { SecretStatusIndicator } from '@/components/shared/SecretStatusIndicator';
+import { GlobalEnvFilter, useCustomSlugs } from '@/components/global/GlobalEnvFilter';
 import toast from 'react-hot-toast';
 import { apiErrorMessage } from '@/lib/errors';
 
@@ -70,25 +72,10 @@ export const GlobalSecretsTab: React.FC<GlobalSecretsTabProps> = ({
   const [viewingVersions, setViewingVersions] = useState<{ secretName: string; envSlug: string } | null>(null);
   const [deletingSecret, setDeletingSecret] = useState<string | null>(null);
   const [editingSecret, setEditingSecret] = useState<string | null>(null);
-  const [localCustomSlugs, setLocalCustomSlugs] = useState<string[]>([]);
-  const [customSlugInput, setCustomSlugInput] = useState('');
-  const [showCustomSlugInput, setShowCustomSlugInput] = useState(false);
 
   const queryClient = useQueryClient();
 
-  const customSlugs = externalCustomSlugs ?? localCustomSlugs;
-  const addCustomSlug = (slug: string) => {
-    const clean = slug.trim().toLowerCase().replace(/[^a-z0-9-_]+/g, '-').replace(/(^-|-$)/g, '');
-    if (!clean) return;
-    if (onAddCustomSlug) {
-      onAddCustomSlug(clean);
-    } else if (!localCustomSlugs.includes(clean)) {
-      setLocalCustomSlugs((prev) => [...prev, clean]);
-    }
-    setCustomSlugInput('');
-    setShowCustomSlugInput(false);
-    setSelectedEnvFilter(clean);
-  };
+  const { customSlugs, addCustomSlug } = useCustomSlugs(externalCustomSlugs, onAddCustomSlug);
 
   const { data: secrets, isLoading: secretsLoading } = useQuery({
     queryKey: ['global-secrets'],
@@ -154,19 +141,7 @@ export const GlobalSecretsTab: React.FC<GlobalSecretsTabProps> = ({
   const versionQueries = useQueries({
     queries: versionPairs.map(({ secretName, envSlug }) => ({
       queryKey: ['global-secret-versions', secretName, envSlug],
-      queryFn: async () => {
-        try {
-          const res = await api.get<SecretVersion[]>(
-            `/global/secrets/${encodeURIComponent(secretName)}/versions/${encodeURIComponent(envSlug)}`
-          );
-          return Array.isArray(res.data) ? res.data : [];
-        } catch (err: any) {
-          if (err?.response?.status === 404) {
-            return [] as SecretVersion[];
-          }
-          throw err;
-        }
-      },
+      queryFn: () => fetchSecretVersions(globalSecretVersionsUrl(secretName, envSlug)),
       enabled: !!secretName && !!envSlug,
       retry: false,
     })),
@@ -198,23 +173,8 @@ export const GlobalSecretsTab: React.FC<GlobalSecretsTabProps> = ({
     latestVersionByPair.get(`${secretName}:::${envSlug}`)
   );
 
-  const getSecretStatus = (secretName: string, envSlug: string): SecretStatus => {
-    const versionInfo = resolveSecretVersion(secretName, envSlug);
-    if (!versionInfo) return SecretStatus.MISSING;
-    if (!versionInfo.isEnabled) return SecretStatus.DISABLED;
-
-    const now = new Date();
-    if (versionInfo.expiresAt) {
-      const expires = new Date(versionInfo.expiresAt);
-      if (!Number.isNaN(expires.getTime()) && expires < now) return SecretStatus.EXPIRED;
-    }
-    if (versionInfo.notBefore) {
-      const notBefore = new Date(versionInfo.notBefore);
-      if (!Number.isNaN(notBefore.getTime()) && notBefore > now) return SecretStatus.PENDING;
-    }
-
-    return SecretStatus.ENABLED;
-  };
+  const getSecretStatus = (secretName: string, envSlug: string): SecretStatus =>
+    secretStatusOf(resolveSecretVersion(secretName, envSlug));
 
   const searchLower = search.toLowerCase();
   const filteredSecrets = safeSecrets.filter((s) => {
@@ -253,86 +213,12 @@ export const GlobalSecretsTab: React.FC<GlobalSecretsTabProps> = ({
   return (
     <div className="flex flex-col h-full">
       <div className="border-b border-border bg-[#121214] px-4 md:px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 shrink-0">
-        <div className="flex flex-wrap items-center gap-2 flex-1">
-          <button
-            type="button"
-            onClick={() => setSelectedEnvFilter(null)}
-            className={cn(
-              "h-[26px] px-2.5 border text-[10px] font-bold uppercase tracking-widest transition-colors",
-              selectedEnvFilter === null
-                ? "border-global bg-global/15 text-global"
-                : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-zinc-200"
-            )}
-          >
-            All
-          </button>
-
-          {envList.map((env) => {
-            const isWildcard = env.slug === '*';
-            const isSelected = selectedEnvFilter === env.slug;
-            return (
-              <button
-                key={env.slug}
-                type="button"
-                onClick={() => setSelectedEnvFilter(isSelected ? null : env.slug)}
-                className={cn(
-                  "h-[26px] px-2.5 border text-[10px] font-bold tracking-tight transition-colors inline-flex items-center gap-1.5",
-                  isSelected
-                    ? "border-global bg-global/15 text-global"
-                    : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-zinc-200"
-                )}
-              >
-                {isWildcard && <Globe className="w-3 h-3 text-global" />}
-                <span>{isWildcard ? 'All environments' : env.slug}</span>
-                {typeof env.applicationCount === 'number' && !isWildcard && (
-                  <span className="text-[9px] font-mono text-zinc-500">({env.applicationCount})</span>
-                )}
-              </button>
-            );
-          })}
-
-          {showCustomSlugInput ? (
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                addCustomSlug(customSlugInput);
-              }}
-              className="inline-flex items-center gap-1"
-            >
-              <input
-                value={customSlugInput}
-                onChange={(e) => setCustomSlugInput(e.target.value)}
-                placeholder="env-slug"
-                className="h-[26px] w-28 px-2 bg-zinc-900 border border-global/50 text-[11px] font-mono text-foreground"
-                autoFocus
-              />
-              <button
-                type="submit"
-                className="h-[26px] px-2 bg-global text-black text-[10px] font-bold uppercase"
-              >
-                Add
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowCustomSlugInput(false);
-                  setCustomSlugInput('');
-                }}
-                className="h-[26px] px-1.5 border border-zinc-800 text-zinc-500 hover:text-zinc-300 text-[10px]"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </form>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setShowCustomSlugInput(true)}
-              className="h-[26px] px-2.5 border border-dashed border-zinc-700 text-zinc-500 hover:border-global hover:text-global text-[10px] font-bold uppercase tracking-widest inline-flex items-center gap-1 transition-colors"
-            >
-              <Plus className="w-3 h-3" /> custom slug
-            </button>
-          )}
-        </div>
+        <GlobalEnvFilter
+          envs={envList}
+          selected={selectedEnvFilter}
+          onSelect={setSelectedEnvFilter}
+          onAddCustomSlug={addCustomSlug}
+        />
 
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative w-52">
@@ -547,22 +433,7 @@ export const GlobalSecretsTab: React.FC<GlobalSecretsTabProps> = ({
                                               )}
                                             </td>
                                             <td className="px-4">
-                                              <div className="flex items-center gap-2">
-                                                <div className={cn(
-                                                  "w-1.5 h-1.5 rounded-full",
-                                                  status === SecretStatus.ENABLED ? "bg-green-500 shadow-[0_0_4px_rgba(34,197,94,0.4)]" :
-                                                  status === SecretStatus.DISABLED ? "bg-zinc-700" :
-                                                  status === SecretStatus.EXPIRED ? "bg-red-500" :
-                                                  status === SecretStatus.MISSING ? "bg-zinc-800" : "bg-amber-500"
-                                                )} />
-                                                <span className={cn(
-                                                  "text-[10px] font-bold uppercase tracking-widest",
-                                                  status === SecretStatus.ENABLED ? "text-green-500" :
-                                                  status === SecretStatus.MISSING ? "text-zinc-600" : "text-zinc-400"
-                                                )}>
-                                                  {status}
-                                                </span>
-                                              </div>
+                                              <SecretStatusIndicator status={status} />
                                             </td>
                                             <td className="px-4 font-mono text-[10px] text-zinc-600">
                                               {latestVersion ? (

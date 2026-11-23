@@ -234,6 +234,10 @@ const MOCK_SECRET_READS: { application: string; environment: string; secret: str
 // Storage Helpers
 const isBrowser = typeof window !== 'undefined';
 
+/** Ten random base-36 characters for a demo API key, from a cryptographic source. */
+const randomKeySuffix = () =>
+  Array.from(crypto.getRandomValues(new Uint8Array(10)), (b) => (b % 36).toString(36)).join('');
+
 function getStored<T>(key: string, defaultValue: T): T {
   if (isBrowser) {
     const item = localStorage.getItem('grm_mock_' + key);
@@ -1442,7 +1446,7 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
     ];
     saveStored('environments', environments);
 
-    const plainApiKey = `grm_sec_key_${Math.random().toString(36).substring(2, 12)}`;
+    const plainApiKey = `grm_sec_key_${randomKeySuffix()}`;
     return makeResponse(201, { ...newApp, plainApiKey }, config);
   }
 
@@ -1497,7 +1501,7 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
   // 5. POST /applications/:appSlug/rotate-key
   match = /^\/applications\/([^/]+)\/rotate-key$/.exec(cleanPath);
   if (match && method === 'POST') {
-    const newKey = `grm_sec_key_${Math.random().toString(36).substring(2, 12)}`;
+    const newKey = `grm_sec_key_${randomKeySuffix()}`;
     return makeResponse(200, { plainApiKey: newKey }, config);
   }
 

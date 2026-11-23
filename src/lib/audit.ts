@@ -1,107 +1,75 @@
 import type { AuditEvent, AuditOutcome } from '@/types/api';
 import { appPath, flagsPath, globalPath, type EntryTab } from '@/lib/routes';
 
-/** Action codes recorded by the API (guibranco/grimoire-api#76), grouped for the filter. */
-export const AUDIT_ACTION_GROUPS: { label: string; prefix: string; actions: { code: string; label: string }[] }[] = [
-  {
-    label: 'Applications',
-    prefix: 'application.*',
-    actions: [
-      { code: 'application.create', label: 'Created application' },
-      { code: 'application.update', label: 'Updated application' },
-      { code: 'application.delete', label: 'Deleted application' },
-      { code: 'application.rotate-key', label: 'Rotated API key' },
-    ],
-  },
-  {
-    label: 'Access tokens',
-    prefix: 'access-token.*',
-    actions: [
-      { code: 'access-token.create', label: 'Created access token' },
-      { code: 'access-token.revoke', label: 'Revoked access token' },
-      { code: 'access-token.denied', label: 'Denied access token request' },
-      { code: 'access-token.oidc-exchange', label: 'Exchanged GitHub OIDC token' },
-    ],
-  },
-  {
-    label: 'Trust policies',
-    prefix: 'trust-policy.*',
-    actions: [
-      { code: 'trust-policy.create', label: 'Created trust policy' },
-      { code: 'trust-policy.update', label: 'Updated trust policy' },
-      { code: 'trust-policy.delete', label: 'Deleted trust policy' },
-    ],
-  },
-  {
-    label: 'Environments',
-    prefix: 'environment.*',
-    actions: [
-      { code: 'environment.create', label: 'Created environment' },
-      { code: 'environment.delete', label: 'Deleted environment' },
-    ],
-  },
-  {
-    label: 'Secrets',
-    prefix: 'secret.*',
-    actions: [
-      { code: 'secret.create', label: 'Created secret' },
-      { code: 'secret.update', label: 'Updated secret' },
-      { code: 'secret.write', label: 'Added secret version' },
-      { code: 'secret.delete', label: 'Deleted secret' },
-      { code: 'secret.version-update', label: 'Updated secret version' },
-      { code: 'secret.rollback', label: 'Rolled back secret' },
-      { code: 'secret.read', label: 'Read secret' },
-    ],
-  },
-  {
-    label: 'Configuration',
-    prefix: 'configuration.*',
-    actions: [
-      { code: 'configuration.create', label: 'Created configuration' },
-      { code: 'configuration.update', label: 'Updated configuration' },
-      { code: 'configuration.delete', label: 'Deleted configuration' },
-      { code: 'configuration.rollback', label: 'Rolled back configuration' },
-      { code: 'configuration.read', label: 'Read configuration' },
-    ],
-  },
-  {
-    label: 'Feature flags',
-    prefix: 'feature-flag.*',
-    actions: [
-      { code: 'feature-flag.create', label: 'Created feature flag' },
-      { code: 'feature-flag.update', label: 'Updated feature flag' },
-      { code: 'feature-flag.delete', label: 'Deleted feature flag' },
-      { code: 'feature-flag.environment-update', label: 'Updated feature flag targeting' },
-      { code: 'feature-flag.toggle', label: 'Toggled feature flag' },
-      { code: 'feature-flag.read', label: 'Read feature flags' },
-    ],
-  },
-  {
-    label: 'Global',
-    prefix: 'global-*',
-    actions: [
-      { code: 'global-secret.create', label: 'Created global secret' },
-      { code: 'global-secret.update', label: 'Updated global secret' },
-      { code: 'global-secret.write', label: 'Added global secret version' },
-      { code: 'global-secret.delete', label: 'Deleted global secret' },
-      { code: 'global-secret.version-update', label: 'Updated global secret version' },
-      { code: 'global-secret.rollback', label: 'Rolled back global secret' },
-      { code: 'global-configuration.create', label: 'Created global configuration' },
-      { code: 'global-configuration.update', label: 'Updated global configuration' },
-      { code: 'global-configuration.delete', label: 'Deleted global configuration' },
-      { code: 'global-configuration.rollback', label: 'Rolled back global configuration' },
-    ],
-  },
-  {
-    label: 'Other',
-    prefix: '',
-    actions: [
-      { code: 'backup.create', label: 'Created backup' },
-      { code: 'rotation.remind', label: 'Sent rotation reminders' },
-      { code: 'auth.failed', label: 'Rejected unauthenticated request' },
-    ],
-  },
-];
+/**
+ * Action codes recorded by the API (guibranco/grimoire-api#76), grouped for the filter. One per
+ * line as `code | label`; a `# Group | prefix` line starts a group.
+ */
+const AUDIT_ACTION_TABLE = `
+# Applications | application.*
+application.create | Created application
+application.update | Updated application
+application.delete | Deleted application
+application.rotate-key | Rotated API key
+# Access tokens | access-token.*
+access-token.create | Created access token
+access-token.revoke | Revoked access token
+access-token.denied | Denied access token request
+access-token.oidc-exchange | Exchanged GitHub OIDC token
+# Trust policies | trust-policy.*
+trust-policy.create | Created trust policy
+trust-policy.update | Updated trust policy
+trust-policy.delete | Deleted trust policy
+# Environments | environment.*
+environment.create | Created environment
+environment.delete | Deleted environment
+# Secrets | secret.*
+secret.create | Created secret
+secret.update | Updated secret
+secret.write | Added secret version
+secret.delete | Deleted secret
+secret.version-update | Updated secret version
+secret.rollback | Rolled back secret
+secret.read | Read secret
+# Configuration | configuration.*
+configuration.create | Created configuration
+configuration.update | Updated configuration
+configuration.delete | Deleted configuration
+configuration.rollback | Rolled back configuration
+configuration.read | Read configuration
+# Feature flags | feature-flag.*
+feature-flag.create | Created feature flag
+feature-flag.update | Updated feature flag
+feature-flag.delete | Deleted feature flag
+feature-flag.environment-update | Updated feature flag targeting
+feature-flag.toggle | Toggled feature flag
+feature-flag.read | Read feature flags
+# Global | global-*
+global-secret.create | Created global secret
+global-secret.update | Updated global secret
+global-secret.write | Added global secret version
+global-secret.delete | Deleted global secret
+global-secret.version-update | Updated global secret version
+global-secret.rollback | Rolled back global secret
+global-configuration.create | Created global configuration
+global-configuration.update | Updated global configuration
+global-configuration.delete | Deleted global configuration
+global-configuration.rollback | Rolled back global configuration
+# Other | 
+backup.create | Created backup
+rotation.remind | Sent rotation reminders
+auth.failed | Rejected unauthenticated request
+`;
+
+export const AUDIT_ACTION_GROUPS: { label: string; prefix: string; actions: { code: string; label: string }[] }[] =
+  AUDIT_ACTION_TABLE.trim()
+    .split('\n')
+    .reduce<{ label: string; prefix: string; actions: { code: string; label: string }[] }[]>((groups, line) => {
+      const [left, right] = line.split(' | ');
+      if (left.startsWith('# ')) groups.push({ label: left.slice(2), prefix: right, actions: [] });
+      else groups.at(-1)!.actions.push({ code: left, label: right });
+      return groups;
+    }, []);
 
 export const AUDIT_ACTION_LABELS: Record<string, string> = Object.fromEntries(
   AUDIT_ACTION_GROUPS.flatMap((g) => g.actions.map((a) => [a.code, a.label]))

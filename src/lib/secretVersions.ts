@@ -1,4 +1,4 @@
-import type { SecretVersion, SecretVersionStatus } from '@/types/api';
+import { SecretStatus, type SecretVersion, type SecretVersionStatus } from '@/types/api';
 
 /**
  * Mirrors the API's resolution rule (guibranco/grimoire-api#96): the highest version that is
@@ -70,3 +70,17 @@ export const STATUS_LABELS: Record<SecretVersionStatus, string> = {
   expired: 'Expired',
   disabled: 'Disabled',
 };
+
+/** A secret's status in one environment, from the version that environment serves. */
+export function secretStatusOf(
+  v: Pick<SecretVersion, 'isEnabled' | 'notBefore' | 'expiresAt'> | undefined,
+  now = Date.now()
+): SecretStatus {
+  if (!v) return SecretStatus.MISSING;
+  if (!v.isEnabled) return SecretStatus.DISABLED;
+  const expires = time(v.expiresAt);
+  if (expires !== null && !Number.isNaN(expires) && expires < now) return SecretStatus.EXPIRED;
+  const notBefore = time(v.notBefore);
+  if (notBefore !== null && !Number.isNaN(notBefore) && notBefore > now) return SecretStatus.PENDING;
+  return SecretStatus.ENABLED;
+}
