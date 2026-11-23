@@ -1,6 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import {
+  ALL_ENVIRONMENTS,
+  GLOBAL_SCOPE,
+  appScope,
   attributeSuggestions,
+  effectiveStateFor,
+  flagEnvironmentUrl,
+  flagPagePath,
+  flagQueryKey,
+  flagsQueryKey,
+  flagUrl,
+  flagsUrl,
+  followsAllEnvironments,
   emptyFlagForm,
   evenRollout,
   flagFormBody,
@@ -19,7 +30,7 @@ import {
   validateFlagForm,
   validateTargeting,
 } from '../src/lib/flags';
-import { flagsPath } from '../src/lib/routes';
+import { flagsPath, globalFlagsPath } from '../src/lib/routes';
 import type { FeatureFlag, FlagEnvironmentState } from '../src/types/api';
 
 const env = (over: Partial<FlagEnvironmentState> = {}): FlagEnvironmentState => ({
@@ -65,6 +76,48 @@ describe('flagsPath', () => {
     expect(flagsPath('app', 'prod', 'a:b')).toBe('/apps/app/prod/flags?flag=a%3Ab');
     expect(flagsPath('app', 'prod', 'k', 'history')).toBe('/apps/app/prod/flags?flag=k&view=history');
     expect(flagsPath('app', 'prod', null, 'history')).toBe('/apps/app/prod/flags');
+  });
+});
+
+describe('flag scopes', () => {
+  it('builds API URLs and query keys per scope', () => {
+    expect(flagsUrl(appScope('my app'))).toBe('/applications/my%20app/feature-flags');
+    expect(flagsUrl(GLOBAL_SCOPE)).toBe('/global/feature-flags');
+    expect(flagUrl(GLOBAL_SCOPE, 'a/b')).toBe('/global/feature-flags/a%2Fb');
+    expect(flagEnvironmentUrl(GLOBAL_SCOPE, 'k', ALL_ENVIRONMENTS)).toBe('/global/feature-flags/k/environments/*');
+    expect(flagsQueryKey(GLOBAL_SCOPE)).not.toEqual(flagsQueryKey(appScope('global')));
+    expect(flagQueryKey(appScope('app'), 'k')).toEqual(['feature-flags', 'app', 'k']);
+  });
+
+  it('builds UI paths per scope', () => {
+    expect(globalFlagsPath()).toBe('/global/flags');
+    expect(globalFlagsPath('*', 'k')).toBe('/global/flags?flag=k');
+    expect(globalFlagsPath('staging', 'k', 'history')).toBe('/global/flags?env=staging&flag=k&view=history');
+    expect(globalFlagsPath('staging', null, 'history')).toBe('/global/flags?env=staging');
+    expect(flagPagePath(GLOBAL_SCOPE, 'staging')).toBe('/global/flags?env=staging');
+    expect(flagPagePath(appScope('app'), 'prod', 'k')).toBe('/apps/app/prod/flags?flag=k');
+  });
+
+  it('makes global environments without state follow *', () => {
+    const global: FeatureFlag = {
+      ...BOOL,
+      environments: [
+        env({ environment: '*', enabled: true, offVariant: 'off' }),
+        env({ environment: 'staging', enabled: false, version: 2 }),
+        env({ environment: 'production', enabled: false, version: 0 }),
+      ],
+    };
+    expect(followsAllEnvironments(GLOBAL_SCOPE, global, 'production')).toBe(true);
+    expect(followsAllEnvironments(GLOBAL_SCOPE, global, 'staging')).toBe(false);
+    expect(followsAllEnvironments(GLOBAL_SCOPE, global, '*')).toBe(false);
+    expect(followsAllEnvironments(appScope('app'), global, 'production')).toBe(false);
+    expect(effectiveStateFor(GLOBAL_SCOPE, global, 'production')).toMatchObject({ environment: 'production', enabled: true, offVariant: 'off', version: 0 });
+    expect(effectiveStateFor(GLOBAL_SCOPE, global, 'staging').enabled).toBe(false);
+    expect(effectiveStateFor(appScope('app'), global, 'production').enabled).toBe(false);
+  });
+
+  it('treats * as production', () => {
+    expect(isProductionEnvironment({ slug: '*' })).toBe(true);
   });
 });
 

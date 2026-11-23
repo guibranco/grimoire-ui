@@ -9,10 +9,10 @@
 export type AppTab = 'config' | 'flags' | 'secrets' | 'activity' | 'compare';
 /** Tabs that list entries (and can highlight one with `?key=`). */
 export type EntryTab = 'config' | 'secrets';
-export type GlobalTab = 'config' | 'secrets';
+export type GlobalTab = 'config' | 'flags' | 'secrets';
 
 export const APP_TABS: readonly AppTab[] = ['config', 'flags', 'secrets', 'activity', 'compare'];
-export const GLOBAL_TABS: readonly GlobalTab[] = ['config', 'secrets'];
+export const GLOBAL_TABS: readonly GlobalTab[] = ['config', 'flags', 'secrets'];
 
 export const DEFAULT_APP_TAB: AppTab = 'config';
 export const DEFAULT_GLOBAL_TAB: GlobalTab = 'config';
@@ -64,6 +64,19 @@ export const flagsPath = (appSlug: string, envSlug: string, flag?: string | null
   const qs = query.toString();
   const path = `/apps/${seg(appSlug)}/${seg(envSlug)}/flags`;
   return qs ? `${path}?${qs}` : path;
+};
+
+/**
+ * `/global/flags[?env=slug][&flag=key[&view=history]]`: global flags, their targeting for an
+ * environment slug (`*`, the default, is omitted) or a flag's history.
+ */
+export const globalFlagsPath = (env?: string | null, flag?: string | null, view?: FlagView | null) => {
+  const query = new URLSearchParams();
+  if (env && env !== '*') query.set('env', env);
+  if (flag) query.set('flag', flag);
+  if (flag && view === 'history') query.set('view', 'history');
+  const qs = query.toString();
+  return qs ? `/global/flags?${qs}` : '/global/flags';
 };
 
 /** `/global[/:tab][?key=...]`. `key` highlights a config key or secret name. */

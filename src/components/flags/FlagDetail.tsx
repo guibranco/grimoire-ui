@@ -3,18 +3,21 @@ import { Link, useNavigate } from 'react-router-dom';
 import { AlertOctagon, ArrowLeft, FlaskConical, Loader2, Pencil, Trash2 } from 'lucide-react';
 import { ConfirmationModal } from '@/components/shared/ConfirmationModal';
 import { cn } from '@/lib/utils';
-import { flagsPath, type FlagView } from '@/lib/routes';
+import type { FlagView } from '@/lib/routes';
 import {
   attributeSuggestions,
   flagTypeLabel,
   isProductionEnvironment,
   savedTargetingBody,
-  stateFor,
+  effectiveStateFor,
+  followsAllEnvironments,
   targetingBody,
   targetingDraft,
   targetingText,
   validateTargeting,
   type TargetingDraft,
+  type FlagScopeRef,
+  flagPagePath,
 } from '@/lib/flags';
 import type { Environment, FeatureFlag } from '@/types/api';
 import { FlagFormModal } from './FlagFormModal';
@@ -25,23 +28,24 @@ import { TestPanel } from './TestPanel';
 import { useDeleteFlag, useFlag, useFlags, useSaveTargeting } from './useFlags';
 
 /** Targeting of one environment, with an unsaved-changes bar and a review step before saving. */
-const TargetingSection: React.FC<{ appSlug: string; flag: FeatureFlag; env: Environment; attributes: string[]; onDirtyChange: (dirty: boolean) => void }> = ({
-  appSlug,
+const TargetingSection: React.FC<{ scope: FlagScopeRef; flag: FeatureFlag; env: Environment; attributes: string[]; onDirtyChange: (dirty: boolean) => void }> = ({
+  scope,
   flag,
   env,
   attributes,
   onDirtyChange,
 }) => {
-  const state = stateFor(flag, env.slug);
+  const state = effectiveStateFor(scope, flag, env.slug);
+  const follows = followsAllEnvironments(scope, flag, env.slug);
   const [draft, setDraft] = useState<TargetingDraft>(() => targetingDraft(flag, state));
   const [showErrors, setShowErrors] = useState(false);
   const [reviewing, setReviewing] = useState(false);
-  const save = useSaveTargeting(appSlug, flag.key);
+  const save = useSaveTargeting(scope, flag.key);
 
   // A saved change (here or elsewhere), an edited flag or another environment starts a fresh draft.
   const baseline = `${env.slug}:${state.version}:${flag.updatedAt}`;
   useEffect(() => {
-    setDraft(targetingDraft(flag, stateFor(flag, env.slug)));
+    setDraft(targetingDraft(flag, effectiveStateFor(scope, flag, env.slug)));
     setShowErrors(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [baseline]);
@@ -67,6 +71,12 @@ const TargetingSection: React.FC<{ appSlug: string; flag: FeatureFlag; env: Envi
 
   return (
     <div className="space-y-4 pb-16">
+      {follows && (
+        <p role="note" className="border border-global/30 bg-global/5 px-3 py-2 text-xs text-zinc-400">
+          <span className="font-mono text-zinc-200">{env.slug}</span> follows{' '}
+          <span className="font-mono text-zinc-200">*</span>. Saving here overrides it for this environment only.
+        </p>
+      )}
       <TargetingEditor
         flag={flag}
         environment={env.slug}
@@ -123,24 +133,24 @@ const TargetingSection: React.FC<{ appSlug: string; flag: FeatureFlag; env: Envi
 };
 
 /** Flag detail: header, environment selector, targeting or history, and the test panel. */
-export const FlagDetail: React.FC<{ appSlug: string; flagKey: string; envs: Environment[]; envSlug: string; view: FlagView }> = ({
-  appSlug,
+export const FlagDetail: React.FC<{ scope: FlagScopeRef; flagKey: string; envs: Environment[]; envSlug: string; view: FlagView }> = ({
+  scope,
   flagKey,
   envs,
   envSlug,
   view,
 }) => {
   const navigate = useNavigate();
-  const { data: flag, isPending, error } = useFlag(appSlug, flagKey);
-  const { data: allFlags } = useFlags(appSlug);
-  const remove = useDeleteFlag(appSlug);
+  const { data: flag, isPending, error } = useFlag(scope, flagKey);
+  const { data: allFlags } = useFlags(scope);
+  const remove = useDeleteFlag(scope);
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [testing, setTesting] = useState(false);
   const [dirty, setDirty] = useState(false);
   const attributes = useMemo(() => attributeSuggestions(allFlags ?? (flag ? [flag] : [])), [allFlags, flag]);
   const env = envs.find((e) => e.slug === envSlug) ?? envs[0];
-  const back = flagsPath(appSlug, envSlug);
+  const back = flagPagePath(scope, envSlug);
 
   if (isPending) {
     return (
@@ -163,7 +173,7 @@ export const FlagDetail: React.FC<{ appSlug: string; flagKey: string; envs: Envi
 
   const tab = (v: FlagView, label: string) => (
     <Link
-      to={flagsPath(appSlug, envSlug, flag.key, v)}
+      to={flagPagePath(scope, envSlug, flag.key, v)}
       aria-current={view === v ? 'page' : undefined}
       className={cn(
         'px-3 h-8 inline-flex items-center text-xs font-semibold border-b-2 -mb-px',
@@ -237,7 +247,7 @@ export const FlagDetail: React.FC<{ appSlug: string; flagKey: string; envs: Envi
 
       <div className="flex flex-col xl:flex-row gap-4 items-stretch">
         <div className="flex-1 min-w-0 space-y-4">
-          {view === 'history' && <FlagHistoryPanel appSlug={appSlug} flagKey={flag.key} />}
+          {view === 'history' && <FlagHistoryPanel scope={scope} flagKey={flag.key} />}
           {view !== 'history' && !env && <p className="text-xs text-zinc-500">Add an environment to configure targeting.</p>}
           {view !== 'history' && env && (
             <>
@@ -249,7 +259,7 @@ export const FlagDetail: React.FC<{ appSlug: string; flagKey: string; envs: Envi
                     'h-7 px-3 inline-flex items-center gap-1.5 border text-xs font-mono',
                     active ? 'border-flags bg-flags/10 text-flags' : 'border-zinc-800 text-zinc-400 hover:text-zinc-200'
                   );
-                  const on = stateFor(flag, e.slug).enabled;
+                  const on = effectiveStateFor(scope, flag, e.slug).enabled;
                   const dot = <span className={cn('w-1.5 h-1.5 rounded-full', on ? 'bg-flags' : 'bg-zinc-700')} aria-hidden="true" />;
                   return active || dirty ? (
                     <span
@@ -262,23 +272,23 @@ export const FlagDetail: React.FC<{ appSlug: string; flagKey: string; envs: Envi
                       {e.slug}
                     </span>
                   ) : (
-                    <Link key={e.slug} to={flagsPath(appSlug, e.slug, flag.key)} className={pill}>
+                    <Link key={e.slug} to={flagPagePath(scope, e.slug, flag.key)} className={pill}>
                       {dot}
                       {e.slug}
                     </Link>
                   );
                 })}
               </nav>
-              <TargetingSection appSlug={appSlug} flag={flag} env={env} attributes={attributes} onDirtyChange={setDirty} />
+              <TargetingSection scope={scope} flag={flag} env={env} attributes={attributes} onDirtyChange={setDirty} />
             </>
           )}
         </div>
         {testing && env && (
-          <TestPanel appSlug={appSlug} flagKey={flag.key} environments={envs} initialEnvironment={env.slug} onClose={() => setTesting(false)} />
+          <TestPanel scope={scope} flagKey={flag.key} environments={envs} initialEnvironment={env.slug} onClose={() => setTesting(false)} />
         )}
       </div>
 
-      <FlagFormModal appSlug={appSlug} open={editing} onOpenChange={setEditing} flag={flag} />
+      <FlagFormModal scope={scope} open={editing} onOpenChange={setEditing} flag={flag} />
       <ConfirmationModal
         open={deleting}
         onOpenChange={setDeleting}

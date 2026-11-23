@@ -2,6 +2,7 @@ import React from 'react';
 import { Loader2 } from 'lucide-react';
 import { RelativeTime } from '@/components/dashboard/parts';
 import { cn } from '@/lib/utils';
+import type { FlagScopeRef } from '@/lib/flags';
 import type { FlagHistoryEntry } from '@/types/api';
 import { JsonDiff } from './ReviewChangesDialog';
 import { useFlagHistory } from './useFlags';
@@ -35,8 +36,8 @@ export function describeChange(entry: FlagHistoryEntry): string {
 }
 
 /** Every change to the flag, newest first, with an expandable before/after diff. */
-export const FlagHistoryPanel: React.FC<{ appSlug: string; flagKey: string }> = ({ appSlug, flagKey }) => {
-  const { data, isPending, error } = useFlagHistory(appSlug, flagKey);
+export const FlagHistoryPanel: React.FC<{ scope: FlagScopeRef; flagKey: string }> = ({ scope, flagKey }) => {
+  const { data, isPending, error } = useFlagHistory(scope, flagKey);
   if (isPending) {
     return (
       <div className="flex justify-center py-10" aria-busy="true" aria-label="Loading history">

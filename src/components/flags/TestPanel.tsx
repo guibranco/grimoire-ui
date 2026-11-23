@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Loader2, Play, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { apiErrorMessage } from '@/lib/errors';
-import { variantValueText } from '@/lib/flags';
+import { variantValueText, type FlagScopeRef } from '@/lib/flags';
 import type { Environment, FlagEvaluation } from '@/types/api';
 import { selectClass } from './parts';
 import { useEvaluateFlag } from './useFlags';
@@ -18,17 +18,17 @@ const SAMPLE = '{\n  "userId": "u-789",\n  "email": "gui@straccini.com",\n  "cou
 
 /** Side sheet: dry-run the saved targeting against a JSON context. The context is not stored. */
 export const TestPanel: React.FC<{
-  appSlug: string;
+  scope: FlagScopeRef;
   flagKey: string;
   environments: Environment[];
   initialEnvironment: string;
   onClose: () => void;
-}> = ({ appSlug, flagKey, environments, initialEnvironment, onClose }) => {
+}> = ({ scope, flagKey, environments, initialEnvironment, onClose }) => {
   const [environment, setEnvironment] = useState(initialEnvironment);
   const [context, setContext] = useState(SAMPLE);
   const [parseError, setParseError] = useState<string | null>(null);
   const [result, setResult] = useState<FlagEvaluation | null>(null);
-  const evaluate = useEvaluateFlag(appSlug, flagKey);
+  const evaluate = useEvaluateFlag(scope, flagKey);
 
   const run = async () => {
     let parsed: unknown;

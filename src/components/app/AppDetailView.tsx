@@ -20,6 +20,7 @@ import { EditAppModal } from '@/components/modals/EditAppModal';
 import { APIKeyRevealModal } from '@/components/modals/APIKeyRevealModal';
 import toast from 'react-hot-toast';
 import { apiErrorMessage } from '@/lib/errors';
+import { appScope } from '@/lib/flags';
 
 const isNotFound = (err: unknown) =>
   (err as { response?: { status?: number } } | null)?.response?.status === 404;
@@ -248,7 +249,7 @@ const AppDetail: React.FC<{ appSlug: string }> = ({ appSlug }) => {
             />
           </TabsContent>
           <TabsContent value="flags" className="m-0 min-h-full">
-            {activeTab === 'flags' && <FeatureFlagsTab appSlug={app.slug} envs={safeEnvs} envSlug={activeEnvSlug} />}
+            {activeTab === 'flags' && <FeatureFlagsTab scope={appScope(app.slug)} envs={safeEnvs} envSlug={activeEnvSlug} />}
           </TabsContent>
           <TabsContent value="secrets" className="m-0 min-h-full">
             <GrimoireTab

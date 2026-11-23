@@ -32,7 +32,13 @@ interface StoredFlag {
 export interface MockFlagContext {
   /** The application's environments, or `null` when the application doesn't exist. */
   environmentsOf: (appSlug: string) => { slug: string }[] | null;
+  /** Every environment slug the applications use (for global flags). */
+  globalEnvironmentSlugs?: () => string[];
 }
+
+/** Where global flags are kept: `*` can't be an application slug. */
+const GLOBAL = '*';
+const GLOBAL_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export interface MockFlagResponse {
   status: number;
@@ -168,6 +174,40 @@ function seedFlags(): Record<string, StoredFlag[]> {
           },
         },
         7
+      ),
+    ],
+    [GLOBAL]: [
+      flag(
+        {
+          key: 'maintenance-mode',
+          description: 'Show the maintenance banner and pause background jobs everywhere.',
+          type: 'boolean',
+          variants: BOOLEAN_VARIANTS,
+          defaultVariant: 'off',
+          tags: ['ops'],
+          salt: '0a1b2c3d4e5f6071',
+          states: { [GLOBAL]: state(false, {}, 3), staging: state(true, {}, 0.5) },
+        },
+        0.5
+      ),
+      flag(
+        {
+          key: 'new-telemetry-exporter',
+          description: 'Export traces with the OTLP exporter.',
+          type: 'boolean',
+          variants: BOOLEAN_VARIANTS,
+          defaultVariant: 'off',
+          tags: ['observability'],
+          salt: '7f6e5d4c3b2a1908',
+          states: {
+            [GLOBAL]: state(
+              true,
+              { fallthrough: { rollout: [{ variant: 'on', weight: 25 }, { variant: 'off', weight: 75 }], bucketBy: 'userId' } },
+              2
+            ),
+          },
+        },
+        2
       ),
     ],
   };
@@ -346,16 +386,21 @@ function routeShape(rest: string[]): Pick<FlagRoute, 'sub'> & { env: string | nu
 }
 
 /**
- * `/applications/{app}/feature-flags[/{key}[/history|/evaluate|/environments/{env}[/toggle]]]`.
+ * `/applications/{app}/feature-flags[/{key}[/history|/evaluate|/environments/{env}[/toggle]]]`,
+ * or `/global/feature-flags[…]` (as app `*`).
  * The structure is checked on the raw path first and only the variable segments are decoded, so
  * unrelated routes (even with malformed escapes) fall through to the other handlers.
  */
 function parseRoute(path: string): FlagRoute | null {
-  const [, applications, rawApp, featureFlags, rawKey, ...rest] = path.split('/');
+  const segments = path.split('/');
+  // `/global/feature-flags/…` reads as `/applications/*/feature-flags/…`.
+  if (segments[1] === 'global' && segments[2] === 'feature-flags') segments.splice(1, 1, 'applications', GLOBAL);
+  else if (segments[2] === GLOBAL) return null;
+  const [, applications, rawApp, featureFlags, rawKey, ...rest] = segments;
   if (applications !== 'applications' || featureFlags !== 'feature-flags' || !rawApp) return null;
   const shape = routeShape(rest);
   if (!shape) return null;
-  const app = decodeSegment(rawApp);
+  const app = rawApp === GLOBAL ? GLOBAL : decodeSegment(rawApp);
   const key = rawKey === undefined ? null : decodeSegment(rawKey);
   const env = shape.env === null ? null : decodeSegment(shape.env);
   if (app === null || (rawKey !== undefined && key === null) || (shape.env !== null && env === null)) return null;
@@ -408,7 +453,9 @@ function createFlag(app: string, list: StoredFlag[], envs: Envs, body: any): Moc
 function evaluate(flag: StoredFlag, envs: Envs, body: any): MockFlagResponse {
   if (!body?.environment) return invalid({ Environment: ["'Environment' must not be empty."] });
   if (!envs.some((e) => e.slug === body.environment)) return problem(404, 'Environment not found.');
-  const result = evaluateFlag(flag, flag.states[body.environment] ?? null, toContext(body.context ?? {}));
+  const own = flag.states[body.environment];
+  const effective = own ?? (envs[0]?.slug === GLOBAL ? flag.states[GLOBAL] : undefined);
+  const result = evaluateFlag(flag, effective ?? null, toContext(body.context ?? {}));
   return ok({ ...result, value: flag.variants.find((v) => v.key === result.variant)?.value ?? null });
 }
 
@@ -420,7 +467,9 @@ function changeEnvironment(
   toggle: boolean,
   body: any
 ): MockFlagResponse {
-  if (!envs.some((e) => e.slug === env)) return problem(404, 'Environment not found.');
+  if (!envs.some((e) => e.slug === env) && !(app === GLOBAL && GLOBAL_SLUG_PATTERN.test(env))) {
+    return problem(404, 'Environment not found.');
+  }
   const before = snapshotState(flag.states[env]);
   const current = flag.states[env] ?? state(false, { version: 0 });
   let next: StoredState;
@@ -436,7 +485,7 @@ function changeEnvironment(
   flag.states[env] = next;
   record(app, flag.key, toggle ? 'toggle' : 'environment', env, before, snapshotState(next));
   persist();
-  return ok(toResponse(flag, envs));
+  return ok(toResponse(flag, app === GLOBAL ? globalEnvs(envs, [flag]) : envs));
 }
 
 const usedVariants = (flag: StoredFlag) =>
@@ -484,7 +533,14 @@ function handleFlag(app: string, list: StoredFlag[], flag: StoredFlag, envs: Env
   return null;
 }
 
-/** Handles `/applications/{slug}/feature-flags…`; `null` for any other path. */
+/** Global flags' environments: `*`, then every known slug, then slugs only states use. */
+function globalEnvs(known: Envs, list: StoredFlag[]): Envs {
+  const slugs = new Set([...known.map((e) => e.slug), ...list.flatMap((f) => Object.keys(f.states))]);
+  slugs.delete(GLOBAL);
+  return [{ slug: GLOBAL }, ...[...slugs].sort((a, b) => a.localeCompare(b)).map((slug) => ({ slug }))];
+}
+
+/** Handles `/applications/{slug}/feature-flags…` and `/global/feature-flags…`; `null` for any other path. */
 export function handleFlagRequest(
   ctx: MockFlagContext,
   method: string,
@@ -494,9 +550,12 @@ export function handleFlagRequest(
 ): MockFlagResponse | null {
   const route = parseRoute(path);
   if (!route) return null;
-  const envs = ctx.environmentsOf(route.app);
-  if (!envs) return problem(404, 'Application not found.');
   const list = (flags[route.app] ??= []);
+  const envs =
+    route.app === GLOBAL
+      ? globalEnvs((ctx.globalEnvironmentSlugs?.() ?? []).map((slug) => ({ slug })), list)
+      : ctx.environmentsOf(route.app);
+  if (!envs) return problem(404, 'Application not found.');
 
   if (route.key === null) {
     if (method === 'GET') return listFlags(list, envs, query);

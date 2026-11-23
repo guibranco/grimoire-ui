@@ -15,6 +15,7 @@ import {
   validateFlagForm,
   type FieldErrors,
   type FlagFormDraft,
+  type FlagScopeRef,
 } from '@/lib/flags';
 import type { FeatureFlag, FlagType } from '@/types/api';
 import { ChipsInput, FieldError, FieldLabel, inputClass, selectClass } from './parts';
@@ -33,7 +34,7 @@ function serverErrors(err: any): FieldErrors {
 }
 
 interface Props {
-  appSlug: string;
+  scope: FlagScopeRef;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Edit this flag; create a new one when omitted. */
@@ -42,13 +43,13 @@ interface Props {
 }
 
 /** Create or edit a flag: key, description, tags, type and variants (guibranco/grimoire-ui#453). */
-export const FlagFormModal: React.FC<Props> = ({ appSlug, open, onOpenChange, flag, onCreated }) => {
+export const FlagFormModal: React.FC<Props> = ({ scope, open, onOpenChange, flag, onCreated }) => {
   const mode = flag ? 'edit' : 'create';
   const [form, setForm] = useState<FlagFormDraft>(() => (flag ? flagFormFrom(flag) : emptyFlagForm()));
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitted, setSubmitted] = useState(false);
-  const create = useCreateFlag(appSlug);
-  const update = useUpdateFlag(appSlug, flag?.key ?? '');
+  const create = useCreateFlag(scope);
+  const update = useUpdateFlag(scope, flag?.key ?? '');
   const pending = create.isPending || update.isPending;
 
   useEffect(() => {
