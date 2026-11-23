@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useStore } from '@/store/useStore';
 import { appPath, auditPath, dashboardPath, globalPath, reportsPath, rotationPath } from '@/lib/routes';
 import { useQuery } from '@tanstack/react-query';
-import { api, fetchApiVersion, getApiConnectionInfo, UI_VERSION } from '@/lib/api';
+import { api, fetchApiVersion, getApiConnectionInfo, getApiDocsUrl, UI_REPOSITORY_URL, UI_VERSION } from '@/lib/api';
 import { Application, GlobalConfiguration, Secret } from '@/types/api';
 import {
   Plus,
@@ -15,6 +15,7 @@ import {
   X,
   BarChart3,
   TimerReset,
+  ExternalLink,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -76,6 +77,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCreateApp, open = false, onC
   const formattedApiVersion = apiVersion
     ? `v${apiVersion.replace(/^v/i, '')}`
     : 'N/A';
+
+  const apiDocsUrl = getApiDocsUrl();
+  const versionLinkClass =
+    'flex items-center gap-1 w-fit max-w-full hover:text-zinc-300 hover:underline underline-offset-2 transition-colors focus-visible:outline-none focus-visible:text-zinc-300 focus-visible:underline';
 
   const close = () => onClose?.();
 
@@ -256,10 +261,30 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCreateApp, open = false, onC
             <span className="truncate">CONNECTED: {connectionInfo.label}</span>
           </div>
           <div className="pl-3.5 flex flex-col gap-0.5 text-[9px] font-mono text-zinc-500">
-            <span>UI: v{UI_VERSION}</span>
-            <span className="truncate" title={apiVersion ? `API ${formattedApiVersion}` : 'API version unavailable'}>
-              API: {apiVersionLoading ? '...' : formattedApiVersion}
-            </span>
+            <a
+              href={UI_REPOSITORY_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={versionLinkClass}
+              title="Open the Grimoire UI repository on GitHub"
+            >
+              <span className="truncate">UI: v{UI_VERSION}</span>
+              <ExternalLink className="w-2.5 h-2.5 shrink-0 opacity-60" aria-hidden="true" />
+            </a>
+            <a
+              href={apiDocsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={versionLinkClass}
+              title={
+                connectionInfo.isMock
+                  ? 'Open the Grimoire API repository on GitHub'
+                  : `Open the API docs (${apiVersion ? `API ${formattedApiVersion}` : 'API version unavailable'})`
+              }
+            >
+              <span className="truncate">API: {apiVersionLoading ? '...' : formattedApiVersion}</span>
+              <ExternalLink className="w-2.5 h-2.5 shrink-0 opacity-60" aria-hidden="true" />
+            </a>
           </div>
         </div>
         <Button

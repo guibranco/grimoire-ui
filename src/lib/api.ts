@@ -69,6 +69,24 @@ function stripManagementSuffix(url: string): string {
   return trimmed;
 }
 
+export const UI_REPOSITORY_URL = 'https://github.com/guibranco/grimoire-ui';
+export const API_REPOSITORY_URL = 'https://github.com/guibranco/grimoire-api';
+
+/**
+ * Where the sidebar's API version links to: the connected server's Swagger UI
+ * (served at `/swagger` on the API origin). The mock API has no docs of its own,
+ * so it points at the API repository instead.
+ */
+export function getApiDocsUrl(): string {
+  const info = getApiConnectionInfo();
+  if (info.isMock) {
+    return API_REPOSITORY_URL;
+  }
+  const origin = stripManagementSuffix(info.rawUrl.trim());
+  const withScheme = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(origin) ? origin : `https://${origin}`;
+  return `${withScheme}/swagger`;
+}
+
 export interface ApiConnectionInfo {
   isMock: boolean;
   label: string;
