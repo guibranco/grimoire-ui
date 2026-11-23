@@ -15,6 +15,7 @@ import {
   parseDashboard,
   sortAndFilterApps,
 } from '../src/lib/dashboard';
+import { EXPIRING_QUERY_KEY } from '../src/lib/rotation';
 import type { AttentionItem, DashboardApplication } from '../src/types/api';
 
 const NOW = new Date('2026-11-19T12:00:00.000Z');
@@ -115,8 +116,8 @@ describe('attention helpers', () => {
     expect(attentionLink(items[1])).toBe('/apps/a/prod/secrets?key=S');
     expect(attentionLink(items[2])).toBe('/apps/b/dev');
     expect(attentionLink(items[3])).toBe('/global/secrets?key=G');
-    expect(attentionLink(item({ kind: 'rotation-due', application: 'a', environment: '*', target: 'R' }))).toBe(
-      '/apps/a?key=R'
+    expect(attentionLink(item({ kind: 'secret-rotation-due', application: 'a', environment: 'prod', target: 'R' }))).toBe(
+      '/apps/a/prod/secrets?key=R'
     );
     expect(attentionLink(item({ kind: 'config-empty-value', application: null, environment: 'prod', target: 'C' }))).toBe(
       '/global/config?key=C'
@@ -125,7 +126,7 @@ describe('attention helpers', () => {
 
   it('labels every known kind and falls back for unknown ones', () => {
     expect(attentionLabel('secret-no-valid-version')).toBe('No valid secret version');
-    expect(attentionLabel('rotation-due')).toBe('Rotation due');
+    expect(attentionLabel('secret-rotation-due')).toBe('Rotation due');
     expect(attentionLabel('something-new')).toBe('Something new');
   });
 
@@ -194,7 +195,9 @@ describe('invalidateDashboardOnMutations', () => {
     expect(spy).not.toHaveBeenCalled();
     await client.put('/applications/a', {});
     await client.delete('/applications/a');
-    expect(spy).toHaveBeenCalledTimes(2);
+    // Dashboard and expiring secrets, per write.
+    expect(spy).toHaveBeenCalledTimes(4);
     expect(spy).toHaveBeenCalledWith({ queryKey: DASHBOARD_QUERY_KEY });
+    expect(spy).toHaveBeenCalledWith({ queryKey: EXPIRING_QUERY_KEY });
   });
 });

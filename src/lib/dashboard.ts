@@ -9,6 +9,7 @@ import type {
   DashboardResponse,
 } from '@/types/api';
 import { appPath, globalPath, type EntryTab } from '@/lib/routes';
+import { EXPIRING_QUERY_KEY } from '@/lib/rotation';
 import type { DashboardAppsSort } from '@/store/useStore';
 
 /** Query key for `GET /dashboard`. Invalidated after every mutation (see `App.tsx`). */
@@ -21,7 +22,7 @@ export const DEFAULT_STALE_AFTER_DAYS = 7;
 export const DASHBOARD_REFETCH_INTERVAL_MS = 60_000;
 
 /**
- * Marks the dashboard stale after every successful create/update/delete made
+ * Marks the dashboard (and the expiring-secrets list) stale after every successful create/update/delete made
  * through `client`, so it's fresh when the user comes back to it. Returns the
  * interceptor id (for `client.interceptors.response.eject`).
  */
@@ -30,6 +31,7 @@ export function invalidateDashboardOnMutations(client: AxiosInstance, queryClien
     const method = (response.config?.method ?? 'get').toLowerCase();
     if (method !== 'get' && method !== 'head' && method !== 'options' && response.status < 400) {
       void queryClient.invalidateQueries({ queryKey: DASHBOARD_QUERY_KEY });
+      void queryClient.invalidateQueries({ queryKey: EXPIRING_QUERY_KEY });
     }
     return response;
   });
@@ -154,7 +156,7 @@ const ATTENTION_LABELS: Record<string, string> = {
   'consumer-stale': 'Stale consumer',
   'consumer-never-seen': 'Never fetched',
   'config-empty-value': 'Empty configuration value',
-  'rotation-due': 'Rotation due',
+  'secret-rotation-due': 'Rotation due',
 };
 
 export const attentionLabel = (kind: string) =>
@@ -167,7 +169,7 @@ export function attentionDetail(item: AttentionItem): string | null {
       return item.dueAt ? `expires ${formatRelative(item.dueAt)}` : null;
     case 'secret-expired':
       return item.dueAt ? `expired ${formatRelative(item.dueAt)}` : null;
-    case 'rotation-due':
+    case 'secret-rotation-due':
       return item.dueAt ? `due ${formatRelative(item.dueAt)}` : null;
     case 'consumer-stale':
       return item.lastSeenAt ? `last seen ${formatRelative(item.lastSeenAt)}` : null;
@@ -179,7 +181,7 @@ export function attentionDetail(item: AttentionItem): string | null {
 }
 
 const tabForKind = (kind: string): EntryTab | null => {
-  if (kind.startsWith('secret-') || kind === 'rotation-due') return 'secrets';
+  if (kind.startsWith('secret-')) return 'secrets';
   if (kind.startsWith('config-')) return 'config';
   return null;
 };

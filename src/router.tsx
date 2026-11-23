@@ -4,6 +4,7 @@ import { DashboardHome } from './components/dashboard/DashboardHome';
 import { AppDetailView } from './components/app/AppDetailView';
 import { GlobalView } from './components/global/GlobalView';
 import { AuditView } from './components/audit/AuditView';
+import { RotationView } from './components/rotation/RotationView';
 import { NotFoundView } from './components/shared/NotFoundView';
 
 /**
@@ -19,6 +20,7 @@ export const routes: RouteObject[] = [
       { path: 'apps/:appSlug/:envSlug?/:tab?', element: <AppDetailView /> },
       { path: 'global/:tab?', element: <GlobalView /> },
       { path: 'audit', element: <AuditView /> },
+      { path: 'rotation', element: <RotationView /> },
       { path: '*', element: <NotFoundView /> },
     ],
   },

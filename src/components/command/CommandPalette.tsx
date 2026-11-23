@@ -15,9 +15,10 @@ import {
   ScrollText,
   Search,
   Settings,
+  TimerReset,
 } from 'lucide-react';
 import { api } from '@/lib/api';
-import { appPath, auditPath, dashboardPath, globalCreatePath, globalPath } from '@/lib/routes';
+import { appPath, auditPath, dashboardPath, globalCreatePath, globalPath, rotationPath } from '@/lib/routes';
 import {
   highlightSegments,
   isPaletteShortcut,
@@ -171,6 +172,13 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onOpenChan
         label: 'Go to Audit log',
         icon: <ScrollText className="w-3.5 h-3.5 text-zinc-400" aria-hidden="true" />,
         run: () => go(auditPath()),
+      },
+      {
+        id: 'cmd-rotation',
+        group: 'Commands',
+        label: 'Go to Rotation',
+        icon: <TimerReset className="w-3.5 h-3.5 text-zinc-400" aria-hidden="true" />,
+        run: () => go(rotationPath()),
       },
       {
         id: 'cmd-new-app',

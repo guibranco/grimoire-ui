@@ -44,6 +44,7 @@ import {
 import { AddSecretModal } from './AddSecretModal';
 import { EditSecretValueModal } from './EditSecretValueModal';
 import { SecretVersionsModal } from './SecretVersionsModal';
+import { EditSecretModal } from './EditSecretModal';
 import { ConfirmationModal } from '@/components/shared/ConfirmationModal';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -69,6 +70,7 @@ export const GrimoireTab: React.FC<GrimoireTabProps> = ({ appSlug, highlightedNa
     scope: 'global' | { appSlug: string };
   } | null>(null);
   const [deletingSecret, setDeletingSecret] = useState<EffectiveSecret | null>(null);
+  const [editingSecret, setEditingSecret] = useState<string | null>(null);
   const [enablingInheritance, setEnablingInheritance] = useState(false);
 
   const queryClient = useQueryClient();
@@ -430,7 +432,7 @@ export const GrimoireTab: React.FC<GrimoireTabProps> = ({ appSlug, highlightedNa
                   const isExpanded =
                     expandedSecret?.name === secret.name &&
                     expandedSecret?.source === secret.source;
-                  const resolvedMetadata: EffectiveSecret =
+                  const resolvedMetadata: EffectiveSecret & Pick<Secret, 'rotationIntervalDays'> =
                     isExpanded && expandedSecretDetail?.name === secret.name
                       ? { ...secret, ...expandedSecretDetail }
                       : secret;
@@ -573,6 +575,15 @@ export const GrimoireTab: React.FC<GrimoireTabProps> = ({ appSlug, highlightedNa
                                   {isExpanded ? 'Collapse' : 'Show Details'}
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
+                                  className="text-[10px] uppercase font-bold tracking-widest p-2 hover:bg-zinc-900 cursor-pointer"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEditingSecret(secret.name);
+                                  }}
+                                >
+                                  Edit Details
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
                                   className="text-destructive text-[10px] uppercase font-bold tracking-widest p-2 hover:bg-destructive/10 cursor-pointer"
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -612,6 +623,12 @@ export const GrimoireTab: React.FC<GrimoireTabProps> = ({ appSlug, highlightedNa
                                     <div className="col-span-2">
                                       <p className="text-[11px] font-bold text-zinc-700 uppercase mb-1">Description</p>
                                       <p className="text-sm text-zinc-400 leading-relaxed">{resolvedMetadata.description || '—'}</p>
+                                    </div>
+                                    <div className="col-span-2">
+                                      <p className="text-[11px] font-bold text-zinc-700 uppercase mb-1">Rotation</p>
+                                      <p className="font-mono text-xs text-zinc-400">
+                                        {resolvedMetadata.rotationIntervalDays ? `Every ${resolvedMetadata.rotationIntervalDays} days` : 'No schedule'}
+                                      </p>
                                     </div>
                                   </div>
                                 </div>
@@ -760,6 +777,14 @@ export const GrimoireTab: React.FC<GrimoireTabProps> = ({ appSlug, highlightedNa
         />
       )}
 
+      {editingSecret && (
+        <EditSecretModal
+          scope={{ appSlug }}
+          secretName={editingSecret}
+          open={!!editingSecret}
+          onOpenChange={(open) => !open && setEditingSecret(null)}
+        />
+      )}
       <ConfirmationModal
         open={!!deletingSecret}
         onOpenChange={(open) => !open && setDeletingSecret(null)}
