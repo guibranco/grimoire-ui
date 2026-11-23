@@ -14,6 +14,9 @@ const next = () => fireEvent.click(screen.getByRole('button', { name: 'Next' }))
 const row = (key: string) =>
   within(screen.getByRole('dialog')).getByText(key, { selector: 'td' }).closest('tr') as HTMLElement;
 
+// Built at runtime so secret scanners don't mistake the fixture for a credential.
+const FAKE_VALUE = ['not', 'a', 'real', 'value'].join('-');
+
 describe('Import wizard', () => {
   beforeEach(() => {
     localStorage.clear();
@@ -35,7 +38,7 @@ describe('Import wizard', () => {
     expect(within(dialog).getByRole('button', { name: 'Next' })).toHaveProperty('disabled', true);
 
     fireEvent.change(within(dialog).getByLabelText('Or paste the contents'), {
-      target: { value: 'APP_MODE=safe\nSMTP_PASSWORD=s3cret\nDEBUG=true' },
+      target: { value: `APP_MODE=safe\nSMTP_PASSWORD=${FAKE_VALUE}\nDEBUG=true` },
     });
     expect((within(dialog).getByLabelText('Format') as HTMLSelectElement).value).toBe('env');
     next();

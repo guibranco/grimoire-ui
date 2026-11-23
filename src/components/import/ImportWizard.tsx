@@ -247,7 +247,7 @@ const SourceStep: React.FC<{
         rows={10}
         value={draft.content}
         onChange={(e) => setContent(e.target.value)}
-        placeholder={'DB_HOST=localhost\nDB_PASSWORD="s3cret"'}
+        placeholder={'DB_HOST=localhost\nLOG_LEVEL=info'}
         className={textareaClass}
       />
       {draft.format === 'php' && (
