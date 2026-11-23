@@ -753,6 +753,43 @@ describe('Grimoire Mock API Integration Tests', () => {
     });
   });
 
+  describe('Trust policies API (guibranco/grimoire-api#75)', () => {
+    const pbase = '/applications/production-gateway/trust-policies';
+    const body = { name: 'tags', repository: 'guibranco/app', refPattern: 'refs/tags/v*', gitHubEnvironment: null, environments: ['Staging'], scopes: ['secrets'], tokenLifetimeMinutes: 30 };
+
+    it('creates, lists, updates and deletes', async () => {
+      expect((await api.get(pbase)).data.map((p: any) => p.name)).toEqual(['deploy main']);
+      const created = await api.post(pbase, body);
+      expect(created.status).toBe(201);
+      expect(created.data).toMatchObject({ name: 'tags', environments: ['staging'], tokenLifetimeMinutes: 30 });
+
+      const updated = await api.put(`${pbase}/${created.data.id}`, { ...body, name: 'release tags', environments: null });
+      expect(updated.data).toMatchObject({ name: 'release tags', environments: null, createdAt: created.data.createdAt });
+      expect((await api.get(pbase)).data.map((p: any) => p.name)).toEqual(['deploy main', 'release tags']);
+
+      expect((await api.delete(`${pbase}/${created.data.id}`)).status).toBe(204);
+      expect((await api.delete(`${pbase}/${created.data.id}`)).status).toBe(404);
+      expect((await api.get('/applications/missing/trust-policies')).status).toBe(404);
+    });
+
+    it('rejects what the API rejects', async () => {
+      expect((await api.post(pbase, { ...body, name: 'deploy main' })).status).toBe(409);
+      for (const bad of [
+        { ...body, name: '' },
+        { ...body, repository: 'nope' },
+        { ...body, refPattern: 'main' },
+        { ...body, scopes: [] },
+        { ...body, environments: ['missing'] },
+        { ...body, tokenLifetimeMinutes: 0 },
+        { ...body, tokenLifetimeMinutes: 61 },
+        { ...body, repository: ['guibranco/app'] },
+        { ...body, refPattern: 7 },
+        { ...body, gitHubEnvironment: 42 },
+      ])
+        expect((await api.post(pbase, bad)).status).toBe(400);
+    });
+  });
+
   describe('Global feature flags API (guibranco/grimoire-api#90)', () => {
     const gbase = '/global/feature-flags';
     const stateOf = (flag: any, env: string) => flag.environments.find((e: any) => e.environment === env);

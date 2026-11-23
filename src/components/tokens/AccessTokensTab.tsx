@@ -9,6 +9,7 @@ import { STATUS_LABELS, TOKEN_PREFIX, environmentsLabel, scopeLabel, sortTokens 
 import { cn } from '@/lib/utils';
 import type { AccessToken, AccessTokenStatus, Environment } from '@/types/api';
 import { CreateAccessTokenModal } from './CreateAccessTokenModal';
+import { TrustPoliciesSection } from './TrustPoliciesSection';
 import { useAccessTokens, useRevokeAccessToken } from './useAccessTokens';
 
 const STATUS_CLASSES: Record<AccessTokenStatus, string> = {
@@ -168,6 +169,8 @@ export const AccessTokensTab: React.FC<Props> = ({ appSlug, envs, onRotateKey })
           </table>
         </div>
       )}
+
+      <TrustPoliciesSection appSlug={appSlug} envs={envs} />
 
       <CreateAccessTokenModal
         appSlug={appSlug}

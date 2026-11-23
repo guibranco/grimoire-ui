@@ -130,4 +130,84 @@ describe('Access tokens', () => {
     renderAt('/apps/auth-provider-security/production/tokens');
     expect(await screen.findByText('No access tokens yet')).toBeTruthy();
   });
+
+  describe('trust policies', () => {
+    const pbase = '/applications/production-gateway/trust-policies';
+    const policiesTable = () => screen.findByRole('table', { name: 'Trust policies' });
+    const policyNamed = async (name: string) => ((await api.get(pbase)).data as any[]).find((p) => p.name === name);
+
+    it('lists the policies with what they match and grant', async () => {
+      renderAt('/apps/production-gateway/production/tokens');
+      const t = await policiesTable();
+      const row = rows(t)[0];
+      expect(row.textContent).toMatch(/deploy main/);
+      expect(row.textContent).toMatch(/guibranco\/production-gateway/);
+      expect(row.textContent).toMatch(/refs\/heads\/main · environment production/);
+      expect(row.textContent).toMatch(/Secrets, Configurations · 15 min/);
+    });
+
+    it('creates a policy, checking the fields first', async () => {
+      renderAt('/apps/production-gateway/production/tokens');
+      await policiesTable();
+      fireEvent.click(screen.getByRole('button', { name: /New policy/ }));
+      const dialog = await screen.findByRole('dialog');
+
+      fireEvent.change(within(dialog).getByLabelText('Repository'), { target: { value: 'not a repo' } });
+      fireEvent.change(within(dialog).getByLabelText('Ref'), { target: { value: 'main' } });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Create policy' }));
+      expect(within(dialog).getByText('Give the policy a name.')).toBeTruthy();
+      expect(within(dialog).getByText(/Use owner\/repo/)).toBeTruthy();
+      expect(within(dialog).getByText(/Use a full ref/)).toBeTruthy();
+      fireEvent.change(within(dialog).getByLabelText('Token lifetime (minutes)'), { target: { value: '90' } });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Create policy' }));
+      const lifetime = within(dialog).getByLabelText('Token lifetime (minutes)');
+      expect(document.getElementById(lifetime.getAttribute('aria-describedby') ?? '')?.textContent).toMatch(/1 to 60/);
+
+      fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'release tags' } });
+      fireEvent.change(within(dialog).getByLabelText('Repository'), { target: { value: 'guibranco/gateway' } });
+      fireEvent.change(within(dialog).getByLabelText('Ref'), { target: { value: 'refs/tags/v*' } });
+      fireEvent.change(within(dialog).getByLabelText('GitHub environment'), { target: { value: 'release' } });
+      fireEvent.click(within(dialog).getByLabelText('staging'));
+      fireEvent.change(within(dialog).getByLabelText('Token lifetime (minutes)'), { target: { value: '30' } });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Create policy' }));
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      expect(await policyNamed('release tags')).toMatchObject({
+        repository: 'guibranco/gateway',
+        refPattern: 'refs/tags/v*',
+        gitHubEnvironment: 'release',
+        environments: ['staging'],
+        scopes: ['secrets', 'configurations'],
+        tokenLifetimeMinutes: 30,
+      });
+      const t = await policiesTable();
+      await waitFor(() => expect(rows(t)).toHaveLength(2));
+    });
+
+    it('edits a policy', async () => {
+      renderAt('/apps/production-gateway/production/tokens');
+      await policiesTable();
+      fireEvent.click(screen.getByRole('button', { name: 'Edit deploy main' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Edit trust policy' });
+      expect((within(dialog).getByLabelText('Repository') as HTMLInputElement).value).toBe('guibranco/production-gateway');
+      fireEvent.change(within(dialog).getByLabelText('Ref'), { target: { value: '' } });
+      fireEvent.click(within(dialog).getByLabelText(/All environments/));
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Save policy' }));
+      await waitFor(async () =>
+        expect(await policyNamed('deploy main')).toMatchObject({ refPattern: null, environments: null })
+      );
+    });
+
+    it('deletes a policy after typing DELETE', async () => {
+      renderAt('/apps/production-gateway/production/tokens');
+      await policiesTable();
+      fireEvent.click(screen.getByRole('button', { name: 'Delete deploy main' }));
+      const dialog = await screen.findByRole('dialog');
+      expect(dialog.textContent).toMatch(/stop working at once/);
+      fireEvent.change(within(dialog).getByPlaceholderText('DELETE'), { target: { value: 'DELETE' } });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
+      expect(await screen.findByText(/No trust policies/)).toBeTruthy();
+      expect(await policyNamed('deploy main')).toBeUndefined();
+    });
+  });
 });

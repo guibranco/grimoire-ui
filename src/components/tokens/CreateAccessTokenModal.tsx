@@ -5,16 +5,16 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from '@/components/ui/button';
 import { apiErrorMessage } from '@/lib/errors';
 import {
-  ACCESS_TOKEN_SCOPES,
   EXPIRY_PRESETS,
   emptyTokenDraft,
   expiresAtFor,
   validateTokenDraft,
   type TokenDraft,
 } from '@/lib/accessTokens';
-import type { AccessTokenScope, CreateAccessTokenResponse, Environment } from '@/types/api';
+import type { CreateAccessTokenResponse, Environment } from '@/types/api';
 import { FieldError, FieldLabel, inputClass } from '@/components/flags/parts';
 import { useCreateAccessToken } from './useAccessTokens';
+import { EnvironmentsField, ScopesField, checkboxClass, legendClass, optionClass } from './parts';
 
 interface Props {
   appSlug: string;
@@ -26,8 +26,6 @@ interface Props {
   onCreated: (created: CreateAccessTokenResponse) => void;
 }
 
-const checkboxClass = 'h-3.5 w-3.5 accent-grimoire';
-const optionClass = 'inline-flex items-center gap-1.5 text-xs text-zinc-300 cursor-pointer';
 
 /** New access token: name, environments, scopes and expiry (guibranco/grimoire-ui#444). */
 export const CreateAccessTokenModal: React.FC<Props> = ({ appSlug, envs, takenNames, open, onOpenChange, onCreated }) => {
@@ -44,8 +42,6 @@ export const CreateAccessTokenModal: React.FC<Props> = ({ appSlug, envs, takenNa
   }, [open]);
 
   const set = (patch: Partial<TokenDraft>) => setDraft((d) => ({ ...d, ...patch }));
-  const toggle = <T extends string>(list: T[], value: T, on: boolean) =>
-    on ? [...list, value] : list.filter((v) => v !== value);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -97,63 +93,17 @@ export const CreateAccessTokenModal: React.FC<Props> = ({ appSlug, envs, takenNa
               <FieldError errors={fieldErrors} path="name" id="token-name-error" />
             </div>
 
-            <fieldset>
-              <legend className="block text-[10px] uppercase font-bold tracking-widest text-zinc-500 mb-1">
-                Environments
-              </legend>
-              <label className={optionClass}>
-                <input
-                  type="checkbox"
-                  className={checkboxClass}
-                  checked={draft.allEnvironments}
-                  onChange={(e) => set({ allEnvironments: e.target.checked })}
-                />
-                <span>All environments, including ones added later</span>
-              </label>
-              {!draft.allEnvironments && (
-                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1.5">
-                  {envs.map((env) => (
-                    <label key={env.slug} className={optionClass}>
-                      <input
-                        type="checkbox"
-                        className={checkboxClass}
-                        checked={draft.environments.includes(env.slug)}
-                        onChange={(e) => set({ environments: toggle(draft.environments, env.slug, e.target.checked) })}
-                      />
-                      <span className="font-mono">{env.slug}</span>
-                    </label>
-                  ))}
-                </div>
-              )}
-              <FieldError errors={fieldErrors} path="environments" />
-            </fieldset>
+            <EnvironmentsField
+              envs={envs}
+              all={draft.allEnvironments}
+              selected={draft.environments}
+              onChange={set}
+              errors={fieldErrors}
+            />
+            <ScopesField selected={draft.scopes} onChange={(scopes) => set({ scopes })} errors={fieldErrors} />
 
             <fieldset>
-              <legend className="block text-[10px] uppercase font-bold tracking-widest text-zinc-500 mb-1">
-                Can read
-              </legend>
-              <div className="flex flex-wrap gap-x-4 gap-y-1.5">
-                {ACCESS_TOKEN_SCOPES.map((scope) => (
-                  <label key={scope.value} className={optionClass}>
-                    <input
-                      type="checkbox"
-                      className={checkboxClass}
-                      checked={draft.scopes.includes(scope.value)}
-                      onChange={(e) =>
-                        set({ scopes: toggle<AccessTokenScope>(draft.scopes, scope.value, e.target.checked) })
-                      }
-                    />
-                    <span>{scope.label}</span>
-                  </label>
-                ))}
-              </div>
-              <FieldError errors={fieldErrors} path="scopes" />
-            </fieldset>
-
-            <fieldset>
-              <legend className="block text-[10px] uppercase font-bold tracking-widest text-zinc-500 mb-1">
-                Expires after
-              </legend>
+              <legend className={legendClass}>Expires after</legend>
               <div className="flex flex-wrap gap-x-4 gap-y-1.5">
                 {EXPIRY_PRESETS.map((preset) => (
                   <label key={preset.value} className={optionClass}>
