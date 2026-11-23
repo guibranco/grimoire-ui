@@ -596,6 +596,104 @@ describe('Grimoire Mock API Integration Tests', () => {
     });
   });
 
+  describe('Feature flags API (guibranco/grimoire-api#90)', () => {
+    const base = '/applications/production-gateway/feature-flags';
+
+    it('lists the demo flags with a state per environment, filtered by tag and state', async () => {
+      const res = await api.get(base);
+      expect(res.status).toBe(200);
+      expect(res.data.map((f: any) => f.key)).toEqual(['beta-dashboard', 'checkout-redesign', 'email-provider', 'new-pdf-parser']);
+      expect(res.data[0].environments.map((e: any) => e.environment)).toEqual(['production', 'staging', 'development']);
+      expect((await api.get(base, { params: { tag: 'q4' } })).data.map((f: any) => f.key)).toEqual(['checkout-redesign']);
+      const offInProd = await api.get(`${base}?environment=production&enabled=false`);
+      expect(offInProd.data.map((f: any) => f.key)).toEqual(['email-provider', 'new-pdf-parser']);
+      expect((await api.get(`${base}?environment=nope`)).status).toBe(404);
+      expect((await api.get('/applications/nope/feature-flags')).status).toBe(404);
+    });
+
+    it('creates, edits and deletes flags, keeping the history', async () => {
+      const created = await api.post(base, { key: 'pay-later', tags: ['b', 'a', 'b'] });
+      expect(created.status).toBe(201);
+      expect(created.data).toMatchObject({ type: 'boolean', defaultVariant: 'off', tags: ['a', 'b'] });
+      expect(created.data.environments.every((e: any) => !e.enabled && e.version === 0)).toBe(true);
+      expect((await api.post(base, { key: 'pay-later' })).status).toBe(409);
+      expect((await api.post(base, { key: 'bad key' })).status).toBe(400);
+      expect((await api.post(base, { key: 'x', type: 'multivariate', variants: [{ key: 'a', value: 1 }] })).status).toBe(400);
+      expect((await api.post(base, { key: 'x', variants: [{ key: 'a', value: 1 }, { key: 'b', value: 1 }] })).status).toBe(400);
+      expect((await api.post(base, { key: 'x', defaultVariant: 'maybe' })).status).toBe(400);
+
+      const edited = await api.put(`${base}/pay-later`, { description: 'BNPL', defaultVariant: 'on' });
+      expect(edited.data).toMatchObject({ description: 'BNPL', defaultVariant: 'on' });
+      expect((await api.put(`${base}/pay-later`, { variants: [{ key: 'a', value: 1 }, { key: 'b', value: 2 }] })).status).toBe(400);
+
+      expect((await api.delete(`${base}/pay-later`)).status).toBe(204);
+      expect((await api.get(`${base}/pay-later`)).status).toBe(404);
+      const history = (await api.get(`${base}/pay-later/history`)).data;
+      expect(history.map((h: any) => h.change)).toEqual(['delete', 'update', 'create']);
+      expect((await api.get(`${base}/never/history`)).status).toBe(404);
+    });
+
+    it('stores targeting per environment, validates it and keeps variants in use', async () => {
+      const url = `${base}/checkout-redesign/environments/staging`;
+      const good = {
+        enabled: true,
+        offVariant: 'control',
+        rules: [{ conditions: [{ attribute: 'userId', operator: 'in', values: ['u-1'] }], serve: { variant: 'treatment' } }],
+        fallthrough: { variant: 'control' },
+      };
+      const saved = await api.put(url, good);
+      const staging = saved.data.environments.find((e: any) => e.environment === 'staging');
+      expect(staging).toMatchObject({ version: 2, rules: good.rules });
+
+      expect((await api.put(url, { enabled: true, fallthrough: { rollout: [{ variant: 'control', weight: 60 }] } })).status).toBe(400);
+      expect((await api.put(url, { enabled: true, fallthrough: {} })).status).toBe(400);
+      expect((await api.put(url, { enabled: true, offVariant: 'nope' })).status).toBe(400);
+      expect((await api.put(url, { enabled: true, rules: [{ conditions: [], serve: { variant: 'control' } }] })).status).toBe(400);
+      expect(
+        (await api.put(url, { enabled: true, rules: [{ conditions: [{ attribute: 'v', operator: 'semVerGte', values: ['1.0'] }], serve: { variant: 'control' } }] })).status
+      ).toBe(400);
+      expect((await api.put(`${base}/checkout-redesign/environments/nope`, good)).status).toBe(404);
+
+      const drop = await api.put(`${base}/checkout-redesign`, { variants: [{ key: 'control', value: 1 }, { key: 'other', value: 2 }] });
+      expect(drop.status).toBe(400);
+      expect(JSON.stringify(drop.data)).toContain('treatment');
+    });
+
+    it('toggles, recording the change in the activity feed', async () => {
+      const url = `${base}/new-pdf-parser/environments/production/toggle`;
+      const on = await api.post(url);
+      expect(on.data.environments.find((e: any) => e.environment === 'production')).toMatchObject({ enabled: true, version: 1 });
+      const off = await api.post(url, { enabled: false });
+      expect(off.data.environments.find((e: any) => e.environment === 'production').enabled).toBe(false);
+      const history = (await api.get(`${base}/new-pdf-parser/history`)).data;
+      expect(history[0]).toMatchObject({ change: 'toggle', environment: 'production', before: { enabled: true }, after: { enabled: false } });
+      const audit = (await api.get('/audit', { params: { application: 'production-gateway' } })).data;
+      expect(audit.items[0]).toMatchObject({ action: 'feature-flag.toggle', target: 'new-pdf-parser', environment: 'production' });
+    });
+
+    it('evaluates with the shared-spec evaluator', async () => {
+      const url = `${base}/beta-dashboard/evaluate`;
+      const rule = await api.post(url, { environment: 'production', context: { userId: 'u-123' } });
+      expect(rule.data).toMatchObject({ variant: 'on', value: true, reason: 'RULE_MATCH', matchedRuleIndex: 0, bucket: null });
+      const semver = await api.post(url, { environment: 'production', context: { appVersion: '3.1.0' } });
+      expect(semver.data).toMatchObject({ variant: 'on', matchedRuleIndex: 2 });
+      const fallthrough = await api.post(url, { environment: 'production', context: { userId: 'u-9' } });
+      expect(fallthrough.data).toMatchObject({ variant: 'off', reason: 'FALLTHROUGH' });
+      const off = await api.post(`${base}/new-pdf-parser/evaluate`, { environment: 'production' });
+      expect(off.data).toMatchObject({ variant: 'off', reason: 'OFF', value: false });
+      expect((await api.post(url, { environment: 'nope' })).status).toBe(404);
+      expect((await api.post(url, {})).status).toBe(400);
+      expect((await api.post(`${base}/nope/evaluate`, { environment: 'production' })).status).toBe(404);
+    });
+
+    it('drops an application\'s flags with the application', async () => {
+      await api.delete('/applications/production-gateway');
+      await api.post('/applications', { name: 'Production Gateway' });
+      const list = await api.get(base);
+      expect(list.status === 404 || list.data.length === 0).toBe(true);
+    });
+  });
+
   describe('Dashboard API', () => {
     it('returns totals, per-application and per-environment counts', async () => {
       const res = await api.get('/dashboard');

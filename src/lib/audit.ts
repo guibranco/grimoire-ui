@@ -1,5 +1,5 @@
 import type { AuditEvent, AuditOutcome } from '@/types/api';
-import { appPath, globalPath, type EntryTab } from '@/lib/routes';
+import { appPath, flagsPath, globalPath, type EntryTab } from '@/lib/routes';
 
 /** Action codes recorded by the API (guibranco/grimoire-api#76), grouped for the filter. */
 export const AUDIT_ACTION_GROUPS: { label: string; prefix: string; actions: { code: string; label: string }[] }[] = [
@@ -43,6 +43,18 @@ export const AUDIT_ACTION_GROUPS: { label: string; prefix: string; actions: { co
       { code: 'configuration.delete', label: 'Deleted configuration' },
       { code: 'configuration.rollback', label: 'Rolled back configuration' },
       { code: 'configuration.read', label: 'Read configuration' },
+    ],
+  },
+  {
+    label: 'Feature flags',
+    prefix: 'feature-flag.*',
+    actions: [
+      { code: 'feature-flag.create', label: 'Created feature flag' },
+      { code: 'feature-flag.update', label: 'Updated feature flag' },
+      { code: 'feature-flag.delete', label: 'Deleted feature flag' },
+      { code: 'feature-flag.environment-update', label: 'Updated feature flag targeting' },
+      { code: 'feature-flag.toggle', label: 'Toggled feature flag' },
+      { code: 'feature-flag.read', label: 'Read feature flags' },
     ],
   },
   {
@@ -161,6 +173,11 @@ export function auditEventLink(event: AuditEvent): string | null {
   if (event.outcome !== 'success' && event.action.endsWith('.delete')) return null;
   const tab = AUDIT_TARGET_TABS[(event.targetType ?? '').toLowerCase()] ?? null;
   const env = event.environment && !event.environment.includes(',') && event.environment !== '*' ? event.environment : null;
+  if (event.targetType === 'feature-flag' && event.application) {
+    // The flag view needs an environment; flag-level changes open the application.
+    const flag = event.action.endsWith('.delete') ? null : event.target;
+    return env ? flagsPath(event.application, env, flag) : appPath(event.application);
+  }
   const key = tab && !event.action.endsWith('.delete') ? event.target : null;
   if (event.application) {
     if (event.action === 'application.delete') return null;

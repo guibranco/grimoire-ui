@@ -30,7 +30,8 @@ describe('route helpers', () => {
   it('validates tabs', () => {
     expect(isAppTab('config')).toBe(true);
     expect(isAppTab('secrets')).toBe(true);
-    expect(isAppTab('flags')).toBe(false);
+    expect(isAppTab('flags')).toBe(true);
+    expect(isAppTab('flagz')).toBe(false);
     expect(isAppTab(undefined)).toBe(false);
     expect(isGlobalTab('secrets')).toBe(true);
     expect(isGlobalTab('nope')).toBe(false);

@@ -418,3 +418,91 @@ export interface DependencyGraph {
   nodes: DependencyNode[];
   edges: DependencyEdge[];
 }
+
+// ---- Feature flags (guibranco/grimoire-api#90) ----
+
+export type FlagType = 'boolean' | 'multivariate';
+export type ConditionOperator =
+  | 'in'
+  | 'notIn'
+  | 'equals'
+  | 'contains'
+  | 'startsWith'
+  | 'endsWith'
+  | 'matches'
+  | 'semVerGte'
+  | 'semVerLt';
+
+/** A variant; `value` is any JSON value. */
+export interface FlagVariant {
+  key: string;
+  value: unknown;
+}
+
+export interface RolloutSlice {
+  variant: string;
+  /** Percentage, 0–100 with at most two decimals; a rollout sums to 100. */
+  weight: number;
+}
+
+/** A fixed `variant` or a weighted `rollout` (bucketed by `bucketBy`, default `userId`). */
+export interface FlagServe {
+  variant?: string | null;
+  rollout?: RolloutSlice[] | null;
+  bucketBy?: string | null;
+}
+
+export interface FlagCondition {
+  attribute: string;
+  operator: ConditionOperator;
+  values: string[];
+}
+
+export interface TargetingRule {
+  conditions: FlagCondition[];
+  serve: FlagServe;
+}
+
+export interface FlagEnvironmentState {
+  environment: string;
+  enabled: boolean;
+  offVariant: string | null;
+  rules: TargetingRule[];
+  fallthrough: FlagServe | null;
+  /** 0 = never configured in this environment. */
+  version: number;
+  updatedAt: string | null;
+}
+
+export interface FeatureFlag {
+  key: string;
+  description: string | null;
+  type: FlagType;
+  variants: FlagVariant[];
+  defaultVariant: string;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+  environments: FlagEnvironmentState[];
+}
+
+export type FlagEvaluationReason = 'OFF' | 'RULE_MATCH' | 'FALLTHROUGH' | 'MISSING_BUCKET_BY';
+
+export interface FlagEvaluation {
+  variant: string;
+  value: unknown;
+  reason: FlagEvaluationReason | (string & {});
+  matchedRuleIndex: number | null;
+  bucket: number | null;
+}
+
+export type FlagChange = 'create' | 'update' | 'environment' | 'toggle' | 'delete';
+
+export interface FlagHistoryEntry {
+  change: FlagChange | (string & {});
+  environment: string | null;
+  actor: string;
+  changedAt: string;
+  before: unknown;
+  after: unknown;
+}

@@ -6,12 +6,12 @@
  * so encoding and defaults stay consistent.
  */
 
-export type AppTab = 'config' | 'secrets' | 'activity' | 'compare';
+export type AppTab = 'config' | 'flags' | 'secrets' | 'activity' | 'compare';
 /** Tabs that list entries (and can highlight one with `?key=`). */
 export type EntryTab = 'config' | 'secrets';
 export type GlobalTab = 'config' | 'secrets';
 
-export const APP_TABS: readonly AppTab[] = ['config', 'secrets', 'activity', 'compare'];
+export const APP_TABS: readonly AppTab[] = ['config', 'flags', 'secrets', 'activity', 'compare'];
 export const GLOBAL_TABS: readonly GlobalTab[] = ['config', 'secrets'];
 
 export const DEFAULT_APP_TAB: AppTab = 'config';
@@ -50,6 +50,20 @@ export const appPath = (
 /** `/apps/:appSlug/:from/compare[?to=...]` — the environment comparison tab. */
 export const comparePath = (appSlug: string, from: string, to?: string | null) =>
   `/apps/${seg(appSlug)}/${seg(from)}/compare${to ? `?${new URLSearchParams({ to }).toString()}` : ''}`;
+
+export type FlagView = 'targeting' | 'history';
+
+/**
+ * `/apps/:appSlug/:envSlug/flags[?flag=key[&view=history]]` (guibranco/grimoire-ui#453). Without
+ * `flag` it is the flag list; with it, that flag's targeting in `envSlug` (or its history).
+ */
+export const flagsPath = (appSlug: string, envSlug: string, flag?: string | null, view?: FlagView | null) => {
+  const query = new URLSearchParams();
+  if (flag) query.set('flag', flag);
+  if (flag && view === 'history') query.set('view', 'history');
+  const qs = query.toString();
+  return `/apps/${seg(appSlug)}/${seg(envSlug)}/flags${qs ? `?${qs}` : ''}`;
+};
 
 /** `/global[/:tab][?key=...]`. `key` highlights a config key or secret name. */
 export const globalPath = (tab?: GlobalTab | null, key?: string | null) => {
