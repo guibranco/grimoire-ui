@@ -702,6 +702,43 @@ describe('Grimoire Mock API Integration Tests', () => {
     });
   });
 
+  describe('Global feature flags API (guibranco/grimoire-api#90)', () => {
+    const gbase = '/global/feature-flags';
+    const stateOf = (flag: any, env: string) => flag.environments.find((e: any) => e.environment === env);
+
+    it('lists global flags with * first, then every environment slug', async () => {
+      const res = await api.get(gbase);
+      expect(res.status).toBe(200);
+      expect(res.data.map((f: any) => f.key)).toEqual(['maintenance-mode', 'new-telemetry-exporter']);
+      const slugs = res.data[0].environments.map((e: any) => e.environment);
+      expect(slugs[0]).toBe('*');
+      expect(slugs).toEqual(expect.arrayContaining(['development', 'staging', 'production']));
+      expect(stateOf(res.data[0], 'production').version).toBe(0);
+      // Application flags don't leak into the global list, and `*` isn't an application.
+      expect((await api.get('/applications/*/feature-flags')).status).toBe(404);
+    });
+
+    it('creates, overrides an environment slug and evaluates with the * fallback', async () => {
+      expect((await api.post(gbase, { key: 'global-kill' })).status).toBe(201);
+      await api.put(`${gbase}/global-kill/environments/*`, { enabled: true, fallthrough: { variant: 'on' } });
+      const evalProd = await api.post(`${gbase}/global-kill/evaluate`, { environment: 'production', context: {} });
+      expect(evalProd.data).toMatchObject({ variant: 'on', reason: 'FALLTHROUGH' });
+
+      // A slug no application has yet still takes an override.
+      const toggled = await api.post(`${gbase}/global-kill/environments/eu-preview/toggle`, { enabled: false });
+      expect(toggled.status).toBe(200);
+      expect(stateOf(toggled.data, 'eu-preview')).toMatchObject({ enabled: false, version: 1 });
+      const evalPreview = await api.post(`${gbase}/global-kill/evaluate`, { environment: 'eu-preview', context: {} });
+      expect(evalPreview.data).toMatchObject({ variant: 'off', reason: 'OFF' });
+
+      expect((await api.post(`${gbase}/global-kill/environments/Not_Valid/toggle`, { enabled: true })).status).toBe(404);
+      const history = await api.get(`${gbase}/global-kill/history`);
+      expect(history.data.map((h: any) => h.change)).toEqual(['toggle', 'environment', 'create']);
+      expect((await api.delete(`${gbase}/global-kill`)).status).toBe(204);
+      expect((await api.get(`${gbase}/global-kill`)).status).toBe(404);
+    });
+  });
+
   describe('Dashboard API', () => {
     it('returns totals, per-application and per-environment counts', async () => {
       const res = await api.get('/dashboard');

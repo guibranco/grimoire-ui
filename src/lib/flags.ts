@@ -9,22 +9,41 @@ import type {
   TargetingRule,
 } from '@/types/api';
 import { DEFAULT_BUCKET_BY, parseSemVer } from '@/lib/flagEvaluator';
+import { flagsPath, globalFlagsPath, type FlagView } from '@/lib/routes';
 
 /**
  * Feature flag helpers for the UI (guibranco/grimoire-ui#453): query keys, URLs, the targeting
  * editor's draft model and the client-side validation that mirrors the API's.
  */
 
+/** Where flags live: one application, or the global flags (guibranco/grimoire-api#90). */
+export type FlagScopeRef = { kind: 'app'; appSlug: string } | { kind: 'global' };
+
+export const appScope = (appSlug: string): FlagScopeRef => ({ kind: 'app', appSlug });
+export const GLOBAL_SCOPE: FlagScopeRef = { kind: 'global' };
+export const isGlobalScope = (scope: FlagScopeRef): scope is { kind: 'global' } => scope.kind === 'global';
+
+/** `*`: a global flag's state for every environment. */
+export const ALL_ENVIRONMENTS = '*';
+
+const scopeId = (scope: FlagScopeRef) => (isGlobalScope(scope) ? '*global' : scope.appSlug);
+
 export const FLAGS_QUERY_KEY = 'feature-flags';
-export const flagsQueryKey = (appSlug: string) => [FLAGS_QUERY_KEY, appSlug] as const;
-export const flagQueryKey = (appSlug: string, key: string) => [FLAGS_QUERY_KEY, appSlug, key] as const;
-export const flagHistoryQueryKey = (appSlug: string, key: string) => [FLAGS_QUERY_KEY, appSlug, key, 'history'] as const;
+export const flagsQueryKey = (scope: FlagScopeRef) => [FLAGS_QUERY_KEY, scopeId(scope)] as const;
+export const flagQueryKey = (scope: FlagScopeRef, key: string) => [FLAGS_QUERY_KEY, scopeId(scope), key] as const;
+export const flagHistoryQueryKey = (scope: FlagScopeRef, key: string) =>
+  [FLAGS_QUERY_KEY, scopeId(scope), key, 'history'] as const;
 
 const seg = encodeURIComponent;
-export const flagsUrl = (appSlug: string) => `/applications/${seg(appSlug)}/feature-flags`;
-export const flagUrl = (appSlug: string, key: string) => `${flagsUrl(appSlug)}/${seg(key)}`;
-export const flagEnvironmentUrl = (appSlug: string, key: string, env: string) =>
-  `${flagUrl(appSlug, key)}/environments/${seg(env)}`;
+export const flagsUrl = (scope: FlagScopeRef) =>
+  isGlobalScope(scope) ? '/global/feature-flags' : `/applications/${seg(scope.appSlug)}/feature-flags`;
+export const flagUrl = (scope: FlagScopeRef, key: string) => `${flagsUrl(scope)}/${seg(key)}`;
+export const flagEnvironmentUrl = (scope: FlagScopeRef, key: string, env: string) =>
+  `${flagUrl(scope, key)}/environments/${seg(env)}`;
+
+/** The flag list (or a flag, or its history) in the UI, for either scope. */
+export const flagPagePath = (scope: FlagScopeRef, env: string, flag?: string | null, view?: FlagView | null) =>
+  isGlobalScope(scope) ? globalFlagsPath(env, flag, view) : flagsPath(scope.appSlug, env, flag, view);
 
 export const FLAG_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
 export const VARIANT_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
@@ -62,9 +81,9 @@ export function attributeSuggestions(flags: FeatureFlag[]): string[] {
   return [...seen];
 }
 
-/** Environments where a change asks for confirmation. */
+/** Environments where a change asks for confirmation (global `*` reaches production too). */
 export const isProductionEnvironment = (env: { slug: string; name?: string | null }) =>
-  /prod/i.test(env.slug) || /prod/i.test(env.name ?? '');
+  env.slug === ALL_ENVIRONMENTS || /prod/i.test(env.slug) || /prod/i.test(env.name ?? '');
 
 export const stateFor = (flag: FeatureFlag, env: string): FlagEnvironmentState =>
   flag.environments.find((e) => e.environment === env) ?? {
@@ -76,6 +95,16 @@ export const stateFor = (flag: FeatureFlag, env: string): FlagEnvironmentState =
     version: 0,
     updatedAt: null,
   };
+
+/** A global flag's environment that has no state of its own follows `*`. */
+export const followsAllEnvironments = (scope: FlagScopeRef, flag: FeatureFlag, env: string) =>
+  isGlobalScope(scope) && env !== ALL_ENVIRONMENTS && stateFor(flag, env).version === 0;
+
+/** The state that applies in an environment: its own, or `*` for a global flag that has none. */
+export const effectiveStateFor = (scope: FlagScopeRef, flag: FeatureFlag, env: string): FlagEnvironmentState =>
+  followsAllEnvironments(scope, flag, env)
+    ? { ...stateFor(flag, ALL_ENVIRONMENTS), environment: env, version: 0, updatedAt: null }
+    : stateFor(flag, env);
 
 const formatWeight = (w: number) => `${Number(w.toFixed(2))}`;
 

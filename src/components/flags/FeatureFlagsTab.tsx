@@ -4,8 +4,17 @@ import { AlertOctagon, Flag, Loader2, Plus, Search } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { ConfirmationModal } from '@/components/shared/ConfirmationModal';
 import { RelativeTime } from '@/components/dashboard/parts';
-import { flagsPath } from '@/lib/routes';
-import { flagTypeLabel, isProductionEnvironment, stateFor, targetingSummary } from '@/lib/flags';
+import { cn } from '@/lib/utils';
+import {
+  ALL_ENVIRONMENTS,
+  effectiveStateFor,
+  flagPagePath,
+  flagTypeLabel,
+  followsAllEnvironments,
+  isProductionEnvironment,
+  targetingSummary,
+  type FlagScopeRef,
+} from '@/lib/flags';
 import type { Environment, FeatureFlag } from '@/types/api';
 import { FlagDetail } from './FlagDetail';
 import { FlagFormModal } from './FlagFormModal';
@@ -19,10 +28,10 @@ interface PendingToggle {
 }
 
 /** Flags list: search, tag filter, a switch per environment and the selected environment's targeting. */
-const FlagList: React.FC<{ appSlug: string; envs: Environment[]; envSlug: string }> = ({ appSlug, envs, envSlug }) => {
+const FlagList: React.FC<{ scope: FlagScopeRef; envs: Environment[]; envSlug: string }> = ({ scope, envs, envSlug }) => {
   const navigate = useNavigate();
-  const { data, isPending, error } = useFlags(appSlug);
-  const toggle = useToggleFlag(appSlug);
+  const { data, isPending, error } = useFlags(scope);
+  const toggle = useToggleFlag(scope);
   const [query, setQuery] = useState('');
   const [tag, setTag] = useState('');
   const [targetingEnv, setTargetingEnv] = useState(envSlug);
@@ -38,7 +47,7 @@ const FlagList: React.FC<{ appSlug: string; envs: Environment[]; envSlug: string
         f.key.toLowerCase().includes(query.toLowerCase()) ||
         (f.description ?? '').toLowerCase().includes(query.toLowerCase()))
   );
-  const open = (key: string) => navigate(flagsPath(appSlug, envSlug, key));
+  const open = (key: string) => navigate(flagPagePath(scope, envSlug, key));
 
   const requestToggle = (flag: FeatureFlag, env: Environment, enabled: boolean) => {
     if (isProductionEnvironment(env)) setConfirming({ flag, env, enabled });
@@ -117,21 +126,28 @@ const FlagList: React.FC<{ appSlug: string; envs: Environment[]; envSlug: string
                 </td>
                 <td className="px-3 py-2 text-xs text-zinc-400 whitespace-nowrap">{flagTypeLabel(flag)}</td>
                 {envs.map((e) => {
-                  const on = stateFor(flag, e.slug).enabled;
+                  const on = effectiveStateFor(scope, flag, e.slug).enabled;
+                  const follows = followsAllEnvironments(scope, flag, e.slug);
                   return (
-                    <td key={e.slug} className="px-3 py-2 text-center" onClick={(ev) => ev.stopPropagation()}>
+                    <td
+                      key={e.slug}
+                      className="px-3 py-2 text-center"
+                      title={follows ? 'Follows *; switching overrides it here' : undefined}
+                      onClick={(ev) => ev.stopPropagation()}
+                    >
                       <Switch
                         size="sm"
                         checked={on}
                         onCheckedChange={(checked) => requestToggle(flag, e, checked)}
-                        aria-label={`${flag.key} in ${e.slug}`}
-                        className="data-checked:bg-flags"
+                        aria-label={follows ? `${flag.key} in ${e.slug} (follows *)` : `${flag.key} in ${e.slug}`}
+                        className={cn('data-checked:bg-flags', follows && 'opacity-40')}
                       />
                     </td>
                   );
                 })}
                 <td className="px-3 py-2 font-mono text-xs text-zinc-400 whitespace-nowrap">
-                  {selectedEnv ? targetingSummary(flag, stateFor(flag, selectedEnv.slug)) : '—'}
+                  {selectedEnv ? targetingSummary(flag, effectiveStateFor(scope, flag, selectedEnv.slug)) : '—'}
+                  {selectedEnv && followsAllEnvironments(scope, flag, selectedEnv.slug) && <span className="ml-1 text-zinc-600">(*)</span>}
                 </td>
                 <td className="px-3 py-2 hidden md:table-cell text-xs text-zinc-500 whitespace-nowrap">
                   <RelativeTime value={flag.updatedAt} />
@@ -200,12 +216,16 @@ const FlagList: React.FC<{ appSlug: string; envs: Environment[]; envSlug: string
 
       {body}
 
-      <FlagFormModal appSlug={appSlug} open={creating} onOpenChange={setCreating} onCreated={(f) => open(f.key)} />
+      <FlagFormModal scope={scope} open={creating} onOpenChange={setCreating} onCreated={(f) => open(f.key)} />
       <ConfirmationModal
         open={!!confirming}
         onOpenChange={(v) => !v && setConfirming(null)}
         title={`Turn ${confirming?.flag.key ?? ''} ${confirming?.enabled ? 'on' : 'off'} in ${confirming?.env.slug ?? ''}?`}
-        description="This changes what production users get as soon as their apps refresh flags."
+        description={
+          confirming?.env.slug === ALL_ENVIRONMENTS
+            ? 'This changes every environment that follows *, in every application that inherits global flags.'
+            : 'This changes what production users get as soon as their apps refresh flags.'
+        }
         confirmText={confirming?.enabled ? 'Turn on' : 'Turn off'}
         onConfirm={async () => {
           if (!confirming) return;
@@ -217,10 +237,10 @@ const FlagList: React.FC<{ appSlug: string; envs: Environment[]; envSlug: string
 };
 
 /**
- * Route content for `/apps/:app/:env/flags` (guibranco/grimoire-ui#453): the flag list, or a
+ * Route content for `/apps/:app/:env/flags` (guibranco/grimoire-ui#453) and `/global/flags`: the flag list, or a
  * flag's detail with `?flag=key` (`&view=history` for its history).
  */
-export const FeatureFlagsTab: React.FC<{ appSlug: string; envs: Environment[]; envSlug: string | null }> = ({ appSlug, envs, envSlug }) => {
+export const FeatureFlagsTab: React.FC<{ scope: FlagScopeRef; envs: Environment[]; envSlug: string | null }> = ({ scope, envs, envSlug }) => {
   const [searchParams] = useSearchParams();
   const flagKey = searchParams.get('flag');
   const view = searchParams.get('view') === 'history' ? 'history' : 'targeting';
@@ -229,8 +249,8 @@ export const FeatureFlagsTab: React.FC<{ appSlug: string; envs: Environment[]; e
     return <p className="p-6 text-xs text-zinc-500">Add an environment to use feature flags.</p>;
   }
   return flagKey ? (
-    <FlagDetail appSlug={appSlug} flagKey={flagKey} envs={envs} envSlug={envSlug} view={view} />
+    <FlagDetail scope={scope} flagKey={flagKey} envs={envs} envSlug={envSlug} view={view} />
   ) : (
-    <FlagList appSlug={appSlug} envs={envs} envSlug={envSlug} />
+    <FlagList scope={scope} envs={envs} envSlug={envSlug} />
   );
 };

@@ -1312,7 +1312,11 @@ function handleMockRequest(config: AxiosRequestConfig): Promise<AxiosResponse> {
 
   // Feature flags (guibranco/grimoire-api#90) live in their own module.
   const flagResponse = handleFlagRequest(
-    { environmentsOf: (slug) => (applications.some((a: any) => a.slug === slug) ? environments[slug] || [] : null) },
+    {
+      environmentsOf: (slug) => (applications.some((a: any) => a.slug === slug) ? environments[slug] || [] : null),
+      globalEnvironmentSlugs: () =>
+        Object.values(environments).flatMap((list: any) => (list || []).map((e: any) => e?.slug).filter(Boolean)),
+    },
     method,
     cleanPath,
     body,

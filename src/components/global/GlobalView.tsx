@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Flag, Globe, Lock, Settings } from 'lucide-react';
 import { GlobalConfigTab } from './GlobalConfigTab';
+import { GlobalFlagsTab } from './GlobalFlagsTab';
 import { GlobalSecretsTab } from './GlobalSecretsTab';
 
 /**
@@ -32,7 +33,7 @@ const GlobalViewContent: React.FC = () => {
 
   // `?new=1` opens the create form once; drop it so a refresh or Back doesn't reopen it.
   useEffect(() => {
-    if (startCreating) navigate(globalPath(activeTab, highlightedKey), { replace: true });
+    if (startCreating && activeTab !== 'flags') navigate(globalPath(activeTab, highlightedKey), { replace: true });
   }, [startCreating, activeTab, highlightedKey, navigate]);
 
   const { data: apps } = useQuery({
@@ -92,15 +93,11 @@ const GlobalViewContent: React.FC = () => {
               Configuration
             </TabsTrigger>
             <TabsTrigger
-              value="feature-flags"
-              disabled
-              aria-disabled="true"
-              title="Feature flags are coming soon"
-              className="px-4 md:px-6 shrink-0 h-full bg-transparent border-r border-border rounded-none font-bold uppercase tracking-tight text-[11px] gap-2 shadow-none cursor-not-allowed opacity-50"
+              value="flags"
+              className="px-4 md:px-6 shrink-0 h-full bg-transparent border-r border-border data-[state=active]:bg-global/5 data-[state=active]:border-b-2 data-[state=active]:border-b-global data-[state=active]:text-global rounded-none font-bold uppercase tracking-tight text-[11px] gap-2 transition-all shadow-none"
             >
               <Flag className="w-3.5 h-3.5" />
               Feature Flags
-              <span className="ml-1 px-1.5 py-0.5 border border-border text-[9px] font-mono tracking-widest text-zinc-500">SOON</span>
             </TabsTrigger>
             <TabsTrigger
               value="secrets"
@@ -120,6 +117,9 @@ const GlobalViewContent: React.FC = () => {
               customSlugs={customSlugs}
               onAddCustomSlug={handleAddCustomSlug}
             />
+          </TabsContent>
+          <TabsContent value="flags" className="m-0 min-h-full">
+            {activeTab === 'flags' && <GlobalFlagsTab />}
           </TabsContent>
           <TabsContent value="secrets" className="m-0 min-h-full">
             <GlobalSecretsTab

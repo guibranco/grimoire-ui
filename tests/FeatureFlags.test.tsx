@@ -298,4 +298,53 @@ describe('Feature flags', () => {
     fireEvent.click(await screen.findByRole('tab', { name: /Feature Flags/ }));
     await waitFor(() => expect(pathOf(router)).toBe('/apps/production-gateway/production/flags'));
   });
+
+  describe('global', () => {
+    const gbase = '/global/feature-flags';
+    const globalState = async (key: string, env: string) =>
+      ((await api.get(`${gbase}/${key}`)).data.environments as any[]).find((e) => e.environment === env);
+
+    it('opens from the Global view and lists * and every environment', async () => {
+      const router = renderAt('/global');
+      fireEvent.click(await screen.findByRole('tab', { name: /Feature Flags/ }));
+      await waitFor(() => expect(pathOf(router)).toBe('/global/flags'));
+      const t = await flagsTable();
+      expect(rows(t).map((r) => within(r).getAllByRole('button')[0].textContent)).toEqual(['maintenance-mode', 'new-telemetry-exporter']);
+      const headers = within(t).getAllByRole('columnheader').map((h) => h.textContent);
+      expect(headers.slice(2, 3)).toEqual(['*']);
+      expect(within(rows(t)[1]).getByRole('switch', { name: 'new-telemetry-exporter in *' }).getAttribute('aria-checked')).toBe('true');
+      // No state of its own: follows * (on), dimmed.
+      expect(within(rows(t)[1]).getByRole('switch', { name: 'new-telemetry-exporter in production (follows *)' }).getAttribute('aria-checked')).toBe('true');
+      expect(within(rows(t)[0]).getByRole('switch', { name: 'maintenance-mode in staging' }).getAttribute('aria-checked')).toBe('true');
+      expect(rows(t)[1].textContent).toMatch(/25 %/);
+    });
+
+    it('asks before toggling *, explaining the reach', async () => {
+      renderAt('/global/flags');
+      await flagsTable();
+      fireEvent.click(screen.getByRole('switch', { name: 'maintenance-mode in *' }));
+      const dialog = await screen.findByRole('dialog');
+      expect(dialog.textContent).toMatch(/every environment that follows \*/);
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Turn on' }));
+      await waitFor(async () => expect((await globalState('maintenance-mode', '*')).enabled).toBe(true));
+    });
+
+    it('overrides a following environment when its switch is used', async () => {
+      renderAt('/global/flags');
+      await flagsTable();
+      fireEvent.click(screen.getByRole('switch', { name: 'new-telemetry-exporter in development (follows *)' }));
+      await waitFor(async () => expect(await globalState('new-telemetry-exporter', 'development')).toMatchObject({ enabled: false, version: 1 }));
+      await waitFor(() => expect(screen.getByRole('switch', { name: 'new-telemetry-exporter in development' }).getAttribute('aria-checked')).toBe('false'));
+    });
+
+    it('shows * targeting for a following environment and keeps the scope in links', async () => {
+      const router = renderAt('/global/flags?env=development&flag=new-telemetry-exporter');
+      expect((await screen.findByRole('note')).textContent).toMatch(/development follows \*/);
+      expect(screen.getByRole('switch', { name: 'Enabled in development' }).getAttribute('aria-checked')).toBe('true');
+      expect(screen.queryByRole('region', { name: 'Unsaved changes' })).toBeNull();
+      fireEvent.click(screen.getByRole('link', { name: /^\*$/ }));
+      await waitFor(() => expect(pathOf(router)).toBe('/global/flags?flag=new-telemetry-exporter'));
+      expect(screen.queryByRole('note')).toBeNull();
+    });
+  });
 });

@@ -34,6 +34,7 @@ describe('route helpers', () => {
     expect(isAppTab('flagz')).toBe(false);
     expect(isAppTab(undefined)).toBe(false);
     expect(isGlobalTab('secrets')).toBe(true);
+    expect(isGlobalTab('flags')).toBe(true);
     expect(isGlobalTab('nope')).toBe(false);
   });
 
