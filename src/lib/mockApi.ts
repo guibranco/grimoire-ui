@@ -1,4 +1,4 @@
-import { forgetMockFlags, handleFlagRequest, resetMockFlags } from './mockFlags';
+import { forgetMockFlags, handleFlagRequest, mockFlagCounts, resetMockFlags } from './mockFlags';
 import { forgetMockAccessTokens, handleAccessTokenRequest, handleTrustPolicyRequest, resetMockAccessTokens } from './mockAccessTokens';
 import { AxiosResponse, AxiosRequestConfig } from 'axios';
 import { parseArrayItems } from './configValue';
@@ -632,8 +632,7 @@ function buildDashboard(expiringWithinDays: number, staleAfterDays: number) {
         ...Object.values(globalSecretVersions).flat().map((v: any) => v.createdAt)
       ),
     },
-    // Feature flags aren't in the mock yet (guibranco/grimoire-api#90).
-    featureFlags: null,
+    featureFlags: mockFlagCounts(),
     recentActivity: activityLog
       .filter((e) => !e.code.endsWith('.read') && e.code !== 'auth.failed')
       .slice(0, 20)

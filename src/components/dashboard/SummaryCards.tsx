@@ -98,7 +98,7 @@ export const GlobalCard: React.FC<{ global: DashboardGlobal }> = ({ global }) =>
   </Link>
 );
 
-/** Placeholder until feature flags land (#453, guibranco/grimoire-api#90). */
+/** Flag counts across applications and Global; the "soon" placeholder only shows for an API that reports none. */
 export const FeatureFlagsCard: React.FC<{ featureFlags: DashboardFeatureFlags | null }> = ({ featureFlags }) => (
   <div className="flex flex-col gap-3 p-4 border border-border bg-card/60">
     <span className="flex items-center justify-between">
