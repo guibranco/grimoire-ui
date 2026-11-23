@@ -168,16 +168,22 @@ export const hasActiveFilters = (filters: AuditFilters, ignore: (keyof AuditFilt
 
 const AUDIT_TARGET_TABS: Record<string, EntryTab> = { secret: 'secrets', configuration: 'config' };
 
+/** A single, concrete environment slug of the event, if any. */
+const singleEnvironment = (event: AuditEvent) =>
+  event.environment && !event.environment.includes(',') && event.environment !== '*' ? event.environment : null;
+
+/** The flag view needs an environment; flag-level changes open the application. */
+function flagEventLink(event: AuditEvent, application: string, env: string | null): string {
+  const flag = event.action.endsWith('.delete') ? null : event.target;
+  return env ? flagsPath(application, env, flag) : appPath(application);
+}
+
 /** Where an audit event's entry lives, if it still can be opened. */
 export function auditEventLink(event: AuditEvent): string | null {
   if (event.outcome !== 'success' && event.action.endsWith('.delete')) return null;
+  const env = singleEnvironment(event);
+  if (event.targetType === 'feature-flag' && event.application) return flagEventLink(event, event.application, env);
   const tab = AUDIT_TARGET_TABS[(event.targetType ?? '').toLowerCase()] ?? null;
-  const env = event.environment && !event.environment.includes(',') && event.environment !== '*' ? event.environment : null;
-  if (event.targetType === 'feature-flag' && event.application) {
-    // The flag view needs an environment; flag-level changes open the application.
-    const flag = event.action.endsWith('.delete') ? null : event.target;
-    return env ? flagsPath(event.application, env, flag) : appPath(event.application);
-  }
   const key = tab && !event.action.endsWith('.delete') ? event.target : null;
   if (event.application) {
     if (event.action === 'application.delete') return null;
@@ -186,8 +192,7 @@ export function auditEventLink(event: AuditEvent): string | null {
     const appKey = env || tab === 'config' ? key : null;
     return appPath(event.application, env, tab, appKey);
   }
-  if (tab) return globalPath(tab, key);
-  return null;
+  return tab ? globalPath(tab, key) : null;
 }
 
 export const outcomeLabel = (outcome: string) =>

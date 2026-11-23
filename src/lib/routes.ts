@@ -62,7 +62,8 @@ export const flagsPath = (appSlug: string, envSlug: string, flag?: string | null
   if (flag) query.set('flag', flag);
   if (flag && view === 'history') query.set('view', 'history');
   const qs = query.toString();
-  return `/apps/${seg(appSlug)}/${seg(envSlug)}/flags${qs ? `?${qs}` : ''}`;
+  const path = `/apps/${seg(appSlug)}/${seg(envSlug)}/flags`;
+  return qs ? `${path}?${qs}` : path;
 };
 
 /** `/global[/:tab][?key=...]`. `key` highlights a config key or secret name. */

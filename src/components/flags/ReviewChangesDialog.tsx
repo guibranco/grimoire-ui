@@ -2,8 +2,19 @@ import React from 'react';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { lineDiff } from '@/lib/history';
+import { lineDiff, type DiffLine } from '@/lib/history';
 import { cn } from '@/lib/utils';
+
+/** Diff lines with keys that stay stable while the text doesn't change (kind, text, occurrence). */
+function keyedLines(lines: DiffLine[]): (DiffLine & { key: string })[] {
+  const seen = new Map<string, number>();
+  return lines.map((line) => {
+    const base = `${line.kind}:${line.text}`;
+    const n = (seen.get(base) ?? 0) + 1;
+    seen.set(base, n);
+    return { ...line, key: `${base}#${n}` };
+  });
+}
 
 /** Line diff of two JSON texts, shared by the review dialog and the history panel. */
 export const JsonDiff: React.FC<{ before: string | null; after: string | null; label: string }> = ({ before, after, label }) => (
@@ -11,9 +22,9 @@ export const JsonDiff: React.FC<{ before: string | null; after: string | null; l
     aria-label={label}
     className="font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-all bg-black/40 border border-zinc-900 p-2 max-h-[50vh] overflow-auto"
   >
-    {lineDiff(before, after).map((line, i) => (
+    {keyedLines(lineDiff(before, after)).map((line) => (
       <span
-        key={i}
+        key={line.key}
         className={cn(
           'block',
           line.kind === 'added' && 'bg-emerald-500/10 text-emerald-300',

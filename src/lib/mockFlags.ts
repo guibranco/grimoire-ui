@@ -1,6 +1,5 @@
-import { evaluateFlag, toContext } from '@/lib/flagEvaluator';
+import { evaluateFlag, parseSemVer, toContext } from '@/lib/flagEvaluator';
 import { FLAG_KEY_PATTERN, VARIANT_KEY_PATTERN, isSemVerOperator } from '@/lib/flags';
-import { parseSemVer } from '@/lib/flagEvaluator';
 
 /**
  * Demo implementation of the feature flag endpoints (guibranco/grimoire-api#90) for the mock API.
@@ -312,15 +311,158 @@ function validateState(body: any, variants: Set<string>): Record<string, string[
   return errors;
 }
 
+/** 16 hex characters, like the API's salt. */
 const randomSalt = () =>
-  Array.from({ length: 16 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+  Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => b.toString(16).padStart(2, '0')).join('');
 
 const sortTags = (tags: unknown): string[] =>
   Array.isArray(tags)
     ? [...new Set(tags.filter((t): t is string => typeof t === 'string').map((t) => t.trim()))].sort((a, b) => a.localeCompare(b))
     : [];
 
-const FLAGS_PATH = /^\/applications\/([^/]+)\/feature-flags(?:\/([^/]+)(?:\/(history|evaluate|environments\/([^/]+)(\/toggle)?))?)?$/;
+interface FlagRoute {
+  app: string;
+  key: string | null;
+  /** `history`, `evaluate`, `environment` or `toggle` (for `environments/{env}[/toggle]`). */
+  sub: 'history' | 'evaluate' | 'environment' | 'toggle' | null;
+  env: string | null;
+}
+
+/** `/applications/{app}/feature-flags[/{key}[/history|/evaluate|/environments/{env}[/toggle]]]`. */
+function parseRoute(path: string): FlagRoute | null {
+  const parts = path.split('/').slice(1).map(decodeURIComponent);
+  if (parts[0] !== 'applications' || parts[2] !== 'feature-flags' || !parts[1]) return null;
+  const [, app, , key = null, ...rest] = parts;
+  if (rest.length === 0) return { app, key, sub: null, env: null };
+  if (rest.length === 1 && (rest[0] === 'history' || rest[0] === 'evaluate')) return { app, key, sub: rest[0], env: null };
+  if (rest[0] === 'environments' && rest[1] && rest.length <= 3) {
+    if (rest.length === 2) return { app, key, sub: 'environment', env: rest[1] };
+    if (rest[2] === 'toggle') return { app, key, sub: 'toggle', env: rest[1] };
+  }
+  return null;
+}
+
+type Envs = { slug: string }[];
+
+function listFlags(list: StoredFlag[], envs: Envs, query: URLSearchParams): MockFlagResponse {
+  const tag = query.get('tag');
+  const env = query.get('environment');
+  const enabled = query.get('enabled');
+  if (env && !envs.some((e) => e.slug === env)) return problem(404, 'Environment not found.');
+  return ok(
+    list
+      .filter((f) => !tag || f.tags.includes(tag))
+      .filter((f) => !env || enabled === null || (f.states[env]?.enabled ?? false) === (enabled === 'true'))
+      .sort((a, b) => a.key.localeCompare(b.key))
+      .map((f) => toResponse(f, envs))
+  );
+}
+
+function createFlag(app: string, list: StoredFlag[], envs: Envs, body: any): MockFlagResponse {
+  const errors = validateCreate(body);
+  if (Object.keys(errors).length) return invalid(errors);
+  if (list.some((f) => f.key === body.key)) return problem(409, 'A feature flag with this key already exists.');
+  const type = body.type ?? 'boolean';
+  const variants = type === 'boolean' ? BOOLEAN_VARIANTS : body.variants.map((v: any) => ({ key: v.key, value: v.value }));
+  const defaultVariant = body.defaultVariant ?? (type === 'boolean' ? 'off' : variants[0].key);
+  if (!variants.some((v: any) => v.key === defaultVariant)) return invalid({ DefaultVariant: [`Unknown variant '${defaultVariant}'.`] });
+  const now = new Date().toISOString();
+  const created: StoredFlag = {
+    key: body.key,
+    description: body.description ?? null,
+    type,
+    variants,
+    defaultVariant,
+    tags: sortTags(body.tags),
+    salt: randomSalt(),
+    createdAt: now,
+    updatedAt: now,
+    states: {},
+  };
+  list.push(created);
+  record(app, created.key, 'create', null, null, snapshotFlag(created));
+  persist();
+  return ok(toResponse(created, envs), 201);
+}
+
+function evaluate(flag: StoredFlag, envs: Envs, body: any): MockFlagResponse {
+  if (!body?.environment) return invalid({ Environment: ["'Environment' must not be empty."] });
+  if (!envs.some((e) => e.slug === body.environment)) return problem(404, 'Environment not found.');
+  const result = evaluateFlag(flag, flag.states[body.environment] ?? null, toContext(body.context ?? {}));
+  return ok({ ...result, value: flag.variants.find((v) => v.key === result.variant)?.value ?? null });
+}
+
+function changeEnvironment(
+  app: string,
+  flag: StoredFlag,
+  envs: Envs,
+  env: string,
+  toggle: boolean,
+  body: any
+): MockFlagResponse {
+  if (!envs.some((e) => e.slug === env)) return problem(404, 'Environment not found.');
+  const before = snapshotState(flag.states[env]);
+  const current = flag.states[env] ?? state(false, { version: 0 });
+  let next: StoredState;
+  if (toggle) {
+    next = { ...current, enabled: typeof body?.enabled === 'boolean' ? body.enabled : !current.enabled };
+  } else {
+    const errors = validateState(body, new Set(flag.variants.map((v) => v.key)));
+    if (Object.keys(errors).length) return invalid(errors);
+    next = { ...current, enabled: !!body.enabled, offVariant: body.offVariant ?? null, rules: body.rules ?? [], fallthrough: body.fallthrough ?? null };
+  }
+  next.version = current.version + 1;
+  next.updatedAt = new Date().toISOString();
+  flag.states[env] = next;
+  record(app, flag.key, toggle ? 'toggle' : 'environment', env, before, snapshotState(next));
+  persist();
+  return ok(toResponse(flag, envs));
+}
+
+const usedVariants = (flag: StoredFlag) =>
+  Object.values(flag.states).flatMap((s) => [s.offVariant, ...serveVariants(s.fallthrough), ...s.rules.flatMap((r: any) => serveVariants(r.serve))]);
+
+function updateFlag(app: string, flag: StoredFlag, envs: Envs, body: any): MockFlagResponse {
+  if (flag.type === 'boolean' && body?.variants) return invalid({ Variants: ["Boolean flags have the fixed variants 'on' and 'off'."] });
+  const variantErrors = body?.variants ? validateVariants(body.variants) : {};
+  if (Object.keys(variantErrors).length) return invalid(variantErrors);
+  const variants = body?.variants ?? flag.variants;
+  const keys = new Set(variants.map((v: any) => v.key));
+  const defaultVariant = body?.defaultVariant ?? flag.defaultVariant;
+  if (!keys.has(defaultVariant)) return invalid({ DefaultVariant: [`Unknown variant '${defaultVariant}'.`] });
+  const inUse = usedVariants(flag).filter((v): v is string => typeof v === 'string' && !keys.has(v));
+  if (inUse.length) return invalid({ Variants: [`Variants still used by environment targeting: ${[...new Set(inUse)].join(', ')}.`] });
+  const before = snapshotFlag(flag);
+  Object.assign(flag, {
+    description: body?.description ?? null,
+    variants,
+    defaultVariant,
+    tags: sortTags(body?.tags),
+    updatedAt: new Date().toISOString(),
+  });
+  record(app, flag.key, 'update', null, before, snapshotFlag(flag));
+  persist();
+  return ok(toResponse(flag, envs));
+}
+
+function deleteFlag(app: string, list: StoredFlag[], flag: StoredFlag): MockFlagResponse {
+  flags[app] = list.filter((f) => f !== flag);
+  record(app, flag.key, 'delete', null, snapshotFlag(flag), null);
+  persist();
+  return ok(null, 204);
+}
+
+/** Requests on one flag (`/{key}…`), once the flag is known to exist. */
+function handleFlag(app: string, list: StoredFlag[], flag: StoredFlag, envs: Envs, route: FlagRoute, method: string, body: any) {
+  if (route.sub === 'evaluate' && method === 'POST') return evaluate(flag, envs, body);
+  if (route.sub === 'toggle' && method === 'POST') return changeEnvironment(app, flag, envs, route.env!, true, body);
+  if (route.sub === 'environment' && method === 'PUT') return changeEnvironment(app, flag, envs, route.env!, false, body);
+  if (route.sub !== null) return null;
+  if (method === 'GET') return ok(toResponse(flag, envs));
+  if (method === 'PUT') return updateFlag(app, flag, envs, body);
+  if (method === 'DELETE') return deleteFlag(app, list, flag);
+  return null;
+}
 
 /** Handles `/applications/{slug}/feature-flags…`; `null` for any other path. */
 export function handleFlagRequest(
@@ -330,134 +472,21 @@ export function handleFlagRequest(
   body: any,
   query: URLSearchParams
 ): MockFlagResponse | null {
-  const m = FLAGS_PATH.exec(path);
-  if (!m) return null;
-  const app = decodeURIComponent(m[1]);
-  const key = m[2] ? decodeURIComponent(m[2]) : null;
-  const sub = m[3] ?? null;
-  const envSlug = m[4] ? decodeURIComponent(m[4]) : null;
-  const toggle = !!m[5];
-
-  const envs = ctx.environmentsOf(app);
+  const route = parseRoute(path);
+  if (!route) return null;
+  const envs = ctx.environmentsOf(route.app);
   if (!envs) return problem(404, 'Application not found.');
-  const list = (flags[app] ??= []);
-  const flag = key ? list.find((f) => f.key === key) : undefined;
+  const list = (flags[route.app] ??= []);
 
-  if (!key) {
-    if (method === 'GET') {
-      const tag = query.get('tag');
-      const env = query.get('environment');
-      const enabled = query.get('enabled');
-      if (env && !envs.some((e) => e.slug === env)) return problem(404, 'Environment not found.');
-      return ok(
-        list
-          .filter((f) => !tag || f.tags.includes(tag))
-          .filter((f) => !env || enabled === null || (f.states[env]?.enabled ?? false) === (enabled === 'true'))
-          .sort((a, b) => a.key.localeCompare(b.key))
-          .map((f) => toResponse(f, envs))
-      );
-    }
-    if (method === 'POST') {
-      const errors = validateCreate(body);
-      if (Object.keys(errors).length) return invalid(errors);
-      if (list.some((f) => f.key === body.key)) return problem(409, 'A feature flag with this key already exists.');
-      const type = body.type ?? 'boolean';
-      const variants = type === 'boolean' ? BOOLEAN_VARIANTS : body.variants.map((v: any) => ({ key: v.key, value: v.value }));
-      const defaultVariant = body.defaultVariant ?? (type === 'boolean' ? 'off' : variants[0].key);
-      if (!variants.some((v: any) => v.key === defaultVariant)) return invalid({ DefaultVariant: [`Unknown variant '${defaultVariant}'.`] });
-      const now = new Date().toISOString();
-      const created: StoredFlag = {
-        key: body.key,
-        description: body.description ?? null,
-        type,
-        variants,
-        defaultVariant,
-        tags: sortTags(body.tags),
-        salt: randomSalt(),
-        createdAt: now,
-        updatedAt: now,
-        states: {},
-      };
-      list.push(created);
-      record(app, created.key, 'create', null, null, snapshotFlag(created));
-      persist();
-      return ok(toResponse(created, envs), 201);
-    }
-    return null;
+  if (route.key === null) {
+    if (method === 'GET') return listFlags(list, envs, query);
+    return method === 'POST' ? createFlag(route.app, list, envs, body) : null;
   }
-
-  if (sub === 'history' && method === 'GET') {
-    const entries = history[`${app}/${key}`];
+  if (route.sub === 'history' && method === 'GET') {
+    const entries = history[`${route.app}/${route.key}`];
     return entries?.length ? ok(entries) : problem(404, 'Feature flag not found.');
   }
+  const flag = list.find((f) => f.key === route.key);
   if (!flag) return problem(404, 'Feature flag not found.');
-
-  if (sub === 'evaluate' && method === 'POST') {
-    if (!body?.environment) return invalid({ Environment: ["'Environment' must not be empty."] });
-    if (!envs.some((e) => e.slug === body.environment)) return problem(404, 'Environment not found.');
-    const result = evaluateFlag(flag, flag.states[body.environment] ?? null, toContext(body.context ?? {}));
-    return ok({ ...result, value: flag.variants.find((v) => v.key === result.variant)?.value ?? null });
-  }
-
-  if (envSlug !== null) {
-    if (!envs.some((e) => e.slug === envSlug)) return problem(404, 'Environment not found.');
-    const before = snapshotState(flag.states[envSlug]);
-    const current = flag.states[envSlug] ?? state(false, { version: 0 });
-    let next: StoredState;
-    if (toggle && method === 'POST') {
-      next = { ...current, enabled: typeof body?.enabled === 'boolean' ? body.enabled : !current.enabled };
-    } else if (!toggle && method === 'PUT') {
-      const errors = validateState(body, new Set(flag.variants.map((v) => v.key)));
-      if (Object.keys(errors).length) return invalid(errors);
-      next = {
-        ...current,
-        enabled: !!body.enabled,
-        offVariant: body.offVariant ?? null,
-        rules: body.rules ?? [],
-        fallthrough: body.fallthrough ?? null,
-      };
-    } else return null;
-    next.version = current.version + 1;
-    next.updatedAt = new Date().toISOString();
-    flag.states[envSlug] = next;
-    record(app, flag.key, toggle ? 'toggle' : 'environment', envSlug, before, snapshotState(next));
-    persist();
-    return ok(toResponse(flag, envs));
-  }
-
-  if (sub !== null) return null;
-  if (method === 'GET') return ok(toResponse(flag, envs));
-  if (method === 'DELETE') {
-    flags[app] = list.filter((f) => f !== flag);
-    record(app, flag.key, 'delete', null, snapshotFlag(flag), null);
-    persist();
-    return ok(null, 204);
-  }
-  if (method === 'PUT') {
-    if (flag.type === 'boolean' && body?.variants) return invalid({ Variants: ["Boolean flags have the fixed variants 'on' and 'off'."] });
-    if (body?.variants) {
-      const errors = validateVariants(body.variants);
-      if (Object.keys(errors).length) return invalid(errors);
-    }
-    const variants = body?.variants ?? flag.variants;
-    const keys = new Set(variants.map((v: any) => v.key));
-    const defaultVariant = body?.defaultVariant ?? flag.defaultVariant;
-    if (!keys.has(defaultVariant)) return invalid({ DefaultVariant: [`Unknown variant '${defaultVariant}'.`] });
-    const inUse = Object.values(flag.states)
-      .flatMap((s) => [s.offVariant, ...serveVariants(s.fallthrough), ...s.rules.flatMap((r: any) => serveVariants(r.serve))])
-      .filter((v): v is string => typeof v === 'string' && !keys.has(v));
-    if (inUse.length) return invalid({ Variants: [`Variants still used by environment targeting: ${[...new Set(inUse)].join(', ')}.`] });
-    const before = snapshotFlag(flag);
-    Object.assign(flag, {
-      description: body?.description ?? null,
-      variants,
-      defaultVariant,
-      tags: sortTags(body?.tags),
-      updatedAt: new Date().toISOString(),
-    });
-    record(app, flag.key, 'update', null, before, snapshotFlag(flag));
-    persist();
-    return ok(toResponse(flag, envs));
-  }
-  return null;
+  return handleFlag(route.app, list, flag, envs, route, method, body);
 }

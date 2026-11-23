@@ -11,6 +11,7 @@ import {
   emptyFlagForm,
   flagFormBody,
   flagFormFrom,
+  newVariantId,
   validateFlagForm,
   type FieldErrors,
   type FlagFormDraft,
@@ -124,7 +125,6 @@ export const FlagFormModal: React.FC<Props> = ({ appSlug, open, onOpenChange, fl
                   placeholder="checkout-redesign"
                   aria-invalid={!!errors.key || undefined}
                   className={cn(inputClass, 'font-mono')}
-                  autoFocus
                 />
                 <FieldError errors={errors} path="key" />
               </div>
@@ -182,7 +182,7 @@ export const FlagFormModal: React.FC<Props> = ({ appSlug, open, onOpenChange, fl
                     <span className="sr-only">Remove</span>
                   </div>
                   {form.variants.map((v, i) => (
-                    <div key={i} className="grid grid-cols-[1fr_1.5fr_auto] gap-2 items-start">
+                    <div key={v.id} className="grid grid-cols-[1fr_1.5fr_auto] gap-2 items-start">
                       <div>
                         <input
                           aria-label={`Variant ${i + 1} key`}
@@ -222,7 +222,7 @@ export const FlagFormModal: React.FC<Props> = ({ appSlug, open, onOpenChange, fl
                   ))}
                   <button
                     type="button"
-                    onClick={() => set({ variants: [...form.variants, { key: `variant-${form.variants.length + 1}`, value: 'null' }] })}
+                    onClick={() => set({ variants: [...form.variants, { id: newVariantId(), key: `variant-${form.variants.length + 1}`, value: 'null' }] })}
                     disabled={form.variants.length >= MAX_VARIANTS}
                     className="inline-flex items-center gap-1 text-xs text-flags hover:underline disabled:opacity-40"
                   >

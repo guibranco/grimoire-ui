@@ -60,7 +60,7 @@ export const TestPanel: React.FC<{
         </button>
       </header>
       <label className="block text-xs text-zinc-400">
-        Environment
+        <span>Environment</span>
         <select value={environment} onChange={(e) => setEnvironment(e.target.value)} className={cn(selectClass, 'w-full mt-1')}>
           {environments.map((e) => (
             <option key={e.slug} value={e.slug}>
@@ -70,7 +70,7 @@ export const TestPanel: React.FC<{
         </select>
       </label>
       <label className="block text-xs text-zinc-400">
-        Context (JSON)
+        <span>Context (JSON)</span>
         <textarea
           value={context}
           onChange={(e) => setContext(e.target.value)}
