@@ -31,6 +31,7 @@ secret.delete | Deleted secret
 secret.version-update | Updated secret version
 secret.rollback | Rolled back secret
 secret.read | Read secret
+secret.list | Listed secrets
 # Configuration | configuration.*
 configuration.create | Created configuration
 configuration.update | Updated configuration
@@ -57,6 +58,7 @@ global-configuration.delete | Deleted global configuration
 global-configuration.rollback | Rolled back global configuration
 # Other | 
 import.apply | Imported values
+export.read | Exported values
 backup.create | Created backup
 rotation.remind | Sent rotation reminders
 auth.failed | Rejected unauthenticated request
