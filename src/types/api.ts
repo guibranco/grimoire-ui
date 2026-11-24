@@ -142,6 +142,24 @@ export interface EffectiveConfiguration {
   overridesGlobal: boolean;
 }
 
+// ── Publishing (guibranco/grimoire-api#95) ─────────────────────────────────
+
+/**
+ * Where an environment (or the global layer) stands with publishing. Clients reload when the
+ * sentinel key changes: on every change while `autoPublish` is on, otherwise on publish.
+ */
+export interface PublishingStatus {
+  autoPublish: boolean;
+  /** `Sentinel` (environment) or `Global:Sentinel` (globals). */
+  sentinelKey: string;
+  /** `null` before the first publish. */
+  sentinelValue: string | null;
+  lastPublishedAt: string | null;
+  /** First change clients haven't been told about; `null` when up to date. */
+  pendingChangesSince: string | null;
+  hasPendingChanges: boolean;
+}
+
 // ── Configuration history (guibranco/grimoire-api#77) ──────────────────────
 
 export type ConfigurationChange = 'baseline' | 'create' | 'update' | 'delete' | 'rollback';

@@ -38,6 +38,9 @@ configuration.update | Updated configuration
 configuration.delete | Deleted configuration
 configuration.rollback | Rolled back configuration
 configuration.read | Read configuration
+# Publishing | publishing.*
+publishing.update | Changed auto-publish
+publishing.publish | Published configuration
 # Feature flags | feature-flag.*
 feature-flag.create | Created feature flag
 feature-flag.update | Updated feature flag
@@ -56,6 +59,8 @@ global-configuration.create | Created global configuration
 global-configuration.update | Updated global configuration
 global-configuration.delete | Deleted global configuration
 global-configuration.rollback | Rolled back global configuration
+global-publishing.update | Changed global auto-publish
+global-publishing.publish | Published global configuration
 # Other | 
 import.apply | Imported values
 export.read | Exported values

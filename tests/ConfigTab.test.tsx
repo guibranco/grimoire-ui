@@ -170,6 +170,24 @@ describe('ConfigTab', () => {
       });
     });
   });
+  it('shows sentinel keys as read-only system entries', async () => {
+    mockApp([
+      { key: 'Sentinel', value: '1795540053290', source: 'application', overridesGlobal: false },
+      { key: 'Global:Sentinel', value: '1795540000000', source: 'global', globalEnvironmentSlug: '*', overridesGlobal: false },
+      { key: 'Mode', value: 'fast', source: 'application', overridesGlobal: false },
+    ]);
+
+    renderTab();
+
+    await waitFor(() => expect(screen.getByText('Sentinel')).toBeDefined());
+    expect(screen.getAllByText('System')).toHaveLength(2);
+    expect(screen.queryByRole('button', { name: 'Edit Sentinel' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Delete Sentinel' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'History of Sentinel' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Edit Mode' })).toBeDefined();
+    // A global sentinel can't be overridden either.
+    expect(screen.queryAllByRole('button', { name: /Override/ })).toHaveLength(0);
+  });
 });
 
 describe('ConfigTab import', () => {
