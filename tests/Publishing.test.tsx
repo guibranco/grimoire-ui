@@ -57,10 +57,10 @@ describe('publishing helpers', () => {
     expect(timeAgo('2026-11-21T12:00:00Z', now)).toBe('3 d ago');
     expect(describePublishing(status(), now)).toBe('Every change is published straight away.');
     expect(describePublishing(status({ autoPublish: false, lastPublishedAt: '2026-11-24T11:55:00Z' }), now))
-      .toBe('Up to date: clients have every change. Last published 5 min ago.');
+      .toBe('Up to date: running clients have every change. Last published 5 min ago.');
     expect(
       describePublishing(status({ autoPublish: false, hasPendingChanges: true, pendingChangesSince: '2026-11-24T09:00:00Z' }), now)
-    ).toBe('Unpublished changes since 3 h ago. Clients still use the last published values.');
+    ).toBe('Unpublished changes since 3 h ago. Running clients reload when you publish.');
   });
 });
 
@@ -89,7 +89,7 @@ describe('Publish bar', () => {
     expect(dialog.textContent).toMatch(/Bumps Sentinel for production-gateway \/ production/);
     fireEvent.click(within(dialog).getByRole('button', { name: 'Publish' }));
 
-    await waitFor(() => expect(publishBar.textContent).toMatch(/Up to date: clients have every change/));
+    await waitFor(() => expect(publishBar.textContent).toMatch(/Up to date: running clients have every change/));
     expect(within(publishBar).queryByRole('button', { name: /Publish changes/ })).toBeNull();
     expect((await api.get(STAGED)).data).toMatchObject({ hasPendingChanges: false });
   });
