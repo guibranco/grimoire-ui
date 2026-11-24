@@ -56,10 +56,10 @@ export function timeAgo(iso: string, now: Date = new Date()): string {
 /** One-line summary of the status for the publish bar. */
 export function describePublishing(status: PublishingStatus, now: Date = new Date()): string {
   if (status.hasPendingChanges && status.pendingChangesSince)
-    return `Unpublished changes since ${timeAgo(status.pendingChangesSince, now)}. Clients still use the last published values.`;
-  if (status.hasPendingChanges) return 'Unpublished changes. Clients still use the last published values.';
+    return `Unpublished changes since ${timeAgo(status.pendingChangesSince, now)}. Running clients reload when you publish.`;
+  if (status.hasPendingChanges) return 'Unpublished changes. Running clients reload when you publish.';
   const last = status.lastPublishedAt ? ` Last published ${timeAgo(status.lastPublishedAt, now)}.` : '';
   return status.autoPublish
     ? `Every change is published straight away.${last}`
-    : `Up to date: clients have every change.${last}`;
+    : `Up to date: running clients have every change.${last}`;
 }

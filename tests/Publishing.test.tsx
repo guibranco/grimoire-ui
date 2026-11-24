@@ -57,10 +57,10 @@ describe('publishing helpers', () => {
     expect(timeAgo('2026-11-21T12:00:00Z', now)).toBe('3 d ago');
     expect(describePublishing(status(), now)).toBe('Every change is published straight away.');
     expect(describePublishing(status({ autoPublish: false, lastPublishedAt: '2026-11-24T11:55:00Z' }), now))
-      .toBe('Up to date: clients have every change. Last published 5 min ago.');
+      .toBe('Up to date: running clients have every change. Last published 5 min ago.');
     expect(
       describePublishing(status({ autoPublish: false, hasPendingChanges: true, pendingChangesSince: '2026-11-24T09:00:00Z' }), now)
-    ).toBe('Unpublished changes since 3 h ago. Clients still use the last published values.');
+    ).toBe('Unpublished changes since 3 h ago. Running clients reload when you publish.');
   });
 });
 
