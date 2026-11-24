@@ -1,5 +1,6 @@
 import { forgetMockFlags, handleFlagRequest, mockFlagCounts, resetMockFlags } from './mockFlags';
 import { forgetMockAccessTokens, handleAccessTokenRequest, handleTrustPolicyRequest, resetMockAccessTokens } from './mockAccessTokens';
+import { forgetMockPublishing, handlePublishingRequest, noteMockPublishingChange, resetMockPublishing } from './mockPublishing';
 import { AxiosResponse, AxiosRequestConfig } from 'axios';
 import { parseArrayItems } from './configValue';
 import { AUDIT_ACTION_LABELS } from './audit';
@@ -354,6 +355,7 @@ export function resetMockDatabase() {
   configRevisions = {};
   resetMockFlags();
   resetMockAccessTokens();
+  resetMockPublishing();
   activityLog = seedActivity();
   if (isBrowser) {
     localStorage.removeItem('grm_mock_applications');
@@ -462,6 +464,10 @@ const MUTATION_RULES: MutationRule[] = [
   { methods: ['PATCH'], pattern: /^\/global\/secrets\/([^/]+)\/versions\/([^/]+)\/\d+$/, describe: (m) => entry('Updated global secret version', null, decode(m[2]), decode(m[1]), 'secret') },
   { methods: ['PATCH'], pattern: /^\/applications\/([^/]+)\/secrets\/([^/]+)$/, describe: (m) => entry('Updated secret', decode(m[1]), null, decode(m[2]), 'secret') },
   { methods: ['PATCH'], pattern: /^\/global\/secrets\/([^/]+)$/, describe: (m) => entry('Updated global secret', null, null, decode(m[1]), 'secret') },
+  { methods: ['PUT'], pattern: /^\/applications\/([^/]+)\/environments\/([^/]+)\/publishing$/, describe: (m) => entry('Changed auto-publish', decode(m[1]), decode(m[2]), null, null) },
+  { methods: ['POST'], pattern: /^\/applications\/([^/]+)\/environments\/([^/]+)\/publish$/, describe: (m) => entry('Published configuration', decode(m[1]), decode(m[2]), null, null) },
+  { methods: ['PUT'], pattern: /^\/global\/publishing$/, describe: () => entry('Changed global auto-publish', null, null, null, null) },
+  { methods: ['POST'], pattern: /^\/global\/publish$/, describe: () => entry('Published global configuration', null, null, null, null) },
   { methods: ['POST'], pattern: /^\/secrets\/expiring\/notify$/, describe: () => entry('Sent rotation reminders', null, null, null, null) },
   { methods: ['POST'], pattern: /^\/applications\/([^/]+)\/configurations\/([^/]+)\/([^/]+)\/rollback\/\d+$/, describe: (m) => entry('Rolled back configuration', decode(m[1]), decode(m[2]), decode(m[3]), 'configuration') },
   { methods: ['POST'], pattern: /^\/global\/configurations\/([^/]+)\/([^/]+)\/rollback\/\d+$/, describe: (m) => entry('Rolled back global configuration', null, decode(m[1]), decode(m[2]), 'configuration') },
@@ -500,6 +506,7 @@ function describeMutation(method: string, path: string, body: any): MutationEntr
 function recordActivity(method: string, path: string, body: any) {
   const entry = describeMutation(method, path, body);
   if (!entry) return;
+  noteMockPublishingChange(entry);
   const statusCode = ({ POST: 201, DELETE: 204 } as Record<string, number>)[method] ?? 200;
   activityLog.unshift(
     withAuditFields({ occurredAt: new Date().toISOString(), actor: MOCK_ACTOR, statusCode, ...entry }, `act-${++activitySeq}`)
@@ -1413,6 +1420,7 @@ function mockImport(body: any, envSlug: string, dryRun: boolean, store: MockImpo
       if (item.kind === 'secret') store.addSecretVersion(item.key);
       else store.setConfiguration(item.key, item.value ?? '', item.type);
     }
+    noteMockPublishingChange({ application: store.application, environment: envSlug, targetType: 'import' });
     activityLog.unshift(
       withAuditFields(
         { occurredAt: new Date().toISOString(), actor: MOCK_ACTOR, action: 'Imported values', application: store.application, environment: envSlug, target: body.format, targetType: 'import' },
@@ -1631,6 +1639,7 @@ const ROUTES: MockRoute[] = [
       delete configurations[slug];
       forgetMockFlags(slug);
       forgetMockAccessTokens(slug);
+      forgetMockPublishing(slug);
 
       saveStored('environments', environments);
       saveStored('secrets', secrets);
@@ -1690,6 +1699,7 @@ const ROUTES: MockRoute[] = [
       }
       appEnvs.splice(index, 1);
       saveStored('environments', environments);
+      forgetMockPublishing(appSlug, envSlug);
 
       if (configurations[appSlug]) {
         configurations[appSlug] = configurations[appSlug].filter((c: any) => c.environmentSlug !== envSlug);
@@ -2419,7 +2429,8 @@ function handleModuleRequest(method: string, cleanPath: string, body: any, param
       params
     ) ??
     handleAccessTokenRequest({ environmentsOf }, method, cleanPath, body) ??
-    handleTrustPolicyRequest({ environmentsOf }, method, cleanPath, body)
+    handleTrustPolicyRequest({ environmentsOf }, method, cleanPath, body) ??
+    handlePublishingRequest({ environmentsOf }, method, cleanPath, body)
   );
 }
 

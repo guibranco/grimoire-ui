@@ -45,6 +45,8 @@ import { InheritGlobalsBanner } from '@/components/shared/InheritGlobalsBanner';
 import toast from 'react-hot-toast';
 import { apiErrorMessage } from '@/lib/errors';
 import { ConfigHistoryModal } from '@/components/history/ConfigHistoryModal';
+import { PublishBar } from '@/components/publishing/PublishBar';
+import { isSentinelKey } from '@/lib/publishing';
 
 interface ConfigTabProps {
   appSlug: string;
@@ -99,7 +101,7 @@ export const ConfigTab: React.FC<ConfigTabProps> = ({
   const selectedEnv = safeEnvs.find(e => e.slug === selectedEnvironmentSlug) || safeEnvs[0];
   const activeEnvironmentSlug = selectedEnv?.slug || null;
 
-  const { data: effectiveConfigs, isLoading: configsLoading } = useQuery({
+  const { data: effectiveConfigs, isLoading: configsLoading, dataUpdatedAt: configsUpdatedAt } = useQuery({
     queryKey: ['effective-configurations', appSlug, activeEnvironmentSlug],
     queryFn: async () => {
       const res = await api.get<EffectiveConfiguration[]>(
@@ -325,6 +327,13 @@ export const ConfigTab: React.FC<ConfigTabProps> = ({
       </div>
 
       {appSlug && <InheritGlobalsBanner appSlug={appSlug} />}
+      {appSlug && activeEnvironmentSlug && (
+        <PublishBar
+          key={activeEnvironmentSlug}
+          scope={{ appSlug, envSlug: activeEnvironmentSlug }}
+          refreshKey={configsUpdatedAt}
+        />
+      )}
 
       <div className="flex-1 overflow-auto scroll-area">
         {placeholder ?? (activeEnvironmentSlug && (
@@ -364,7 +373,8 @@ export const ConfigTab: React.FC<ConfigTabProps> = ({
                 ) : (
                   filteredConfigs.map((config) => {
                     const isGlobal = config.source === 'global';
-                    if (!isGlobal && editingKey === config.key) {
+                    const isSentinel = isSentinelKey(config.key);
+                    if (!isGlobal && !isSentinel && editingKey === config.key) {
                       return (
                         <ConfigRow
                           key={`${config.source}:::${config.key}`}
@@ -423,6 +433,15 @@ export const ConfigTab: React.FC<ConfigTabProps> = ({
                                 )}
                               </>
                             )}
+                            {isSentinel && (
+                              <Badge
+                                variant="outline"
+                                title="Managed by Grimoire: changes when configuration is published, so clients know to reload"
+                                className="border-zinc-700 bg-zinc-900 text-zinc-400 text-[9px] font-bold uppercase tracking-widest cursor-help"
+                              >
+                                System
+                              </Badge>
+                            )}
                             {!isGlobal && config.overridesGlobal && (
                               <Badge
                                 variant="outline"
@@ -443,6 +462,7 @@ export const ConfigTab: React.FC<ConfigTabProps> = ({
                         <TableCell className="text-right pr-6">
                           {isGlobal ? (
                             <div className="flex justify-end items-center gap-2">
+                              {!isSentinel && (
                               <button
                                 type="button"
                                 onClick={() => {
@@ -460,6 +480,7 @@ export const ConfigTab: React.FC<ConfigTabProps> = ({
                                 <ArrowUpRight className="w-3 h-3" />
                                 Override
                               </button>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => navigate(globalPath('config', config.key))}
@@ -483,6 +504,8 @@ export const ConfigTab: React.FC<ConfigTabProps> = ({
                               >
                                 <History className="w-3.5 h-3.5" />
                               </button>
+                              {!isSentinel && (
+                              <>
                               <button
                                 type="button"
                                 aria-label={`Edit ${config.key}`}
@@ -499,6 +522,8 @@ export const ConfigTab: React.FC<ConfigTabProps> = ({
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
+                              </>
+                              )}
                             </div>
                           )}
                         </TableCell>

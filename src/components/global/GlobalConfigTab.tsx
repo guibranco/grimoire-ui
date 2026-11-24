@@ -32,6 +32,8 @@ import { GlobalEnvFilter, useCustomSlugs } from '@/components/global/GlobalEnvFi
 import toast from 'react-hot-toast';
 import { apiErrorMessage } from '@/lib/errors';
 import { ConfigHistoryModal } from '@/components/history/ConfigHistoryModal';
+import { PublishBar } from '@/components/publishing/PublishBar';
+import { isSentinelKey } from '@/lib/publishing';
 
 interface GlobalConfigTabProps {
   highlightedKey?: string | null;
@@ -83,7 +85,7 @@ export const GlobalConfigTab: React.FC<GlobalConfigTabProps> = ({
     },
   });
 
-  const { data: configs, isLoading: configsLoading } = useQuery({
+  const { data: configs, isLoading: configsLoading, dataUpdatedAt: configsUpdatedAt } = useQuery({
     queryKey: ['global-configurations', selectedEnvFilter ?? 'all'],
     queryFn: async () => {
       const url = selectedEnvFilter
@@ -268,6 +270,8 @@ export const GlobalConfigTab: React.FC<GlobalConfigTabProps> = ({
         </div>
       </div>
 
+      <PublishBar scope={{ global: true }} refreshKey={configsUpdatedAt} />
+
       <div className="flex-1 overflow-auto scroll-area">
         {configsLoading ? (
           <div className="p-12 flex flex-col items-center justify-center gap-4 text-muted-foreground">
@@ -308,8 +312,9 @@ export const GlobalConfigTab: React.FC<GlobalConfigTabProps> = ({
                     editingItem?.environmentSlug === config.environmentSlug &&
                     editingItem?.key === config.key;
                   const isHighlighted = !!highlightedKey && config.key === highlightedKey;
+                  const isSentinel = isSentinelKey(config.key);
 
-                  if (isEditing) {
+                  if (isEditing && !isSentinel) {
                     return (
                       <GlobalConfigRow
                         key={`${config.environmentSlug}:::${config.key}`}
@@ -334,7 +339,20 @@ export const GlobalConfigTab: React.FC<GlobalConfigTabProps> = ({
                       <TableCell className="pl-6">
                         <EnvSlugBadge slug={config.environmentSlug} />
                       </TableCell>
-                      <TableCell className="font-mono text-[13px] font-bold text-global tracking-tight">{config.key}</TableCell>
+                      <TableCell className="font-mono text-[13px] font-bold text-global tracking-tight">
+                        <span className="inline-flex items-center gap-2 flex-wrap">
+                          {config.key}
+                          {isSentinel && (
+                            <Badge
+                              variant="outline"
+                              title="Managed by Grimoire: changes when global configuration is published, so clients know to reload"
+                              className="border-zinc-700 bg-zinc-900 text-zinc-400 text-[9px] font-sans font-bold uppercase tracking-widest cursor-help"
+                            >
+                              System
+                            </Badge>
+                          )}
+                        </span>
+                      </TableCell>
                       <TableCell className="font-mono text-xs text-zinc-300">
                         <ConfigValueCell type={valueTypeOf(config)} value={config.value} />
                       </TableCell>
@@ -353,6 +371,8 @@ export const GlobalConfigTab: React.FC<GlobalConfigTabProps> = ({
                           >
                             <History className="w-3.5 h-3.5" />
                           </button>
+                          {!isSentinel && (
+                          <>
                           <button
                             type="button"
                             aria-label={`Edit ${config.key}`}
@@ -369,6 +389,8 @@ export const GlobalConfigTab: React.FC<GlobalConfigTabProps> = ({
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
+                          </>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
