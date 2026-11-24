@@ -844,7 +844,18 @@ describe('Grimoire Mock API Integration Tests', () => {
       expect(prod.lastSeenAt).not.toBeNull();
       expect(d.global.configurationCount).toBe(4);
       expect(d.global.secretCount).toBe(1);
-      expect(d.featureFlags).toBeNull();
+      expect(d.featureFlags.total).toBeGreaterThan(0);
+      expect(d.featureFlags.enabled).toBeLessThanOrEqual(d.featureFlags.total);
+    });
+
+    it('counts application and global flags, and those on somewhere', async () => {
+      const before = (await api.get('/dashboard')).data.featureFlags;
+      await api.post('/applications/production-gateway/feature-flags', { key: 'dash-off' });
+      await api.post('/global/feature-flags', { key: 'dash-global' });
+      await api.post('/global/feature-flags/dash-global/environments/*/toggle', { enabled: true });
+
+      const after = (await api.get('/dashboard')).data.featureFlags;
+      expect(after).toEqual({ total: before.total + 2, enabled: before.enabled + 1 });
     });
 
     it('includes every attention kind with its severity', async () => {

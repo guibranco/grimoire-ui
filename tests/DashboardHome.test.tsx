@@ -46,7 +46,7 @@ describe('Dashboard home', () => {
 
     const totals = screen.getByRole('region', { name: 'Totals' });
     expect(within(totals).getByText('Applications')).toBeDefined();
-    expect(within(totals).queryByText('Feature flags')).toBeNull();
+    expect(within(totals).getByText('Feature flags')).toBeDefined();
 
     expect(screen.getByRole('list', { name: 'Errors' })).toBeDefined();
     expect(screen.getByRole('list', { name: 'Warnings' })).toBeDefined();
@@ -54,7 +54,8 @@ describe('Dashboard home', () => {
 
     const globalCard = screen.getAllByRole('link', { name: /global/i }).find((a) => /configs/.test(a.textContent ?? ''));
     expect(globalCard?.getAttribute('href')).toBe('/global');
-    expect(screen.getByText('SOON')).toBeDefined();
+    expect(screen.queryByText('SOON')).toBeNull();
+    expect(screen.getAllByText('enabled').length).toBeGreaterThan(0);
     expect(screen.getByRole('list', { name: 'Recent activity' })).toBeDefined();
     // App description comes from /applications.
     expect(await within(list).findByText(/Primary configuration container/)).toBeDefined();

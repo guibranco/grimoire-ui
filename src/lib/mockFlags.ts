@@ -245,6 +245,15 @@ export function resetMockFlags() {
   }
 }
 
+/** The dashboard's flag counts: every flag (application and global), and those on in at least one environment. */
+export function mockFlagCounts(): { total: number; enabled: number } {
+  const all = Object.values(flags).flat();
+  return {
+    total: all.length,
+    enabled: all.filter((f) => Object.values(f.states).some((st) => st.enabled)).length,
+  };
+}
+
 /** Drops an application's flags (when the demo deletes the application). */
 export function forgetMockFlags(appSlug: string) {
   delete flags[appSlug];
