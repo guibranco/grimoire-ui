@@ -89,7 +89,7 @@ describe('Publish bar', () => {
     expect(dialog.textContent).toMatch(/Bumps Sentinel for production-gateway \/ production/);
     fireEvent.click(within(dialog).getByRole('button', { name: 'Publish' }));
 
-    await waitFor(() => expect(publishBar.textContent).toMatch(/Up to date: clients have every change/));
+    await waitFor(() => expect(publishBar.textContent).toMatch(/Up to date: running clients have every change/));
     expect(within(publishBar).queryByRole('button', { name: /Publish changes/ })).toBeNull();
     expect((await api.get(STAGED)).data).toMatchObject({ hasPendingChanges: false });
   });
