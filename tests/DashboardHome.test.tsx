@@ -122,6 +122,14 @@ describe('Dashboard home', () => {
     await waitFor(() => expect(pathOf(router)).toBe('/global/secrets'));
   });
 
+  it('opens global feature flags with the create form from the quick actions', async () => {
+    const router = renderDashboard();
+    await appsList();
+    fireEvent.click(screen.getByRole('link', { name: /new global flag/i }));
+    expect(await screen.findByRole('dialog')).toBeDefined();
+    await waitFor(() => expect(pathOf(router)).toBe('/global/flags'));
+  });
+
   it('opens the create application modal from the header', async () => {
     renderDashboard();
     await appsList();

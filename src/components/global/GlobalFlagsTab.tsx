@@ -11,7 +11,7 @@ import { useFlags } from '@/components/flags/useFlags';
  * Global feature flags (guibranco/grimoire-ui#453): `*` applies to every environment, and an
  * environment slug overrides it there, in every application that inherits globals.
  */
-export const GlobalFlagsTab: React.FC = () => {
+export const GlobalFlagsTab: React.FC<{ startCreating?: boolean }> = ({ startCreating = false }) => {
   const [searchParams] = useSearchParams();
   const { data: globalEnvs } = useQuery({
     queryKey: ['global-environments'],
@@ -33,5 +33,5 @@ export const GlobalFlagsTab: React.FC = () => {
 
   const requested = searchParams.get('env');
   const envSlug = requested && envs.some((e) => e.slug === requested) ? requested : ALL_ENVIRONMENTS;
-  return <FeatureFlagsTab scope={GLOBAL_SCOPE} envs={envs} envSlug={envSlug} />;
+  return <FeatureFlagsTab scope={GLOBAL_SCOPE} envs={envs} envSlug={envSlug} startCreating={startCreating} />;
 };

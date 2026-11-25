@@ -319,6 +319,12 @@ describe('Feature flags', () => {
       expect(rows(t)[1].textContent).toMatch(/25 %/);
     });
 
+    it('opens the create form with ?new=1 and drops it from the URL', async () => {
+      const router = renderAt('/global/flags?new=1');
+      expect(await screen.findByRole('dialog')).toBeDefined();
+      await waitFor(() => expect(pathOf(router)).toBe('/global/flags'));
+    });
+
     it('asks before toggling *, explaining the reach', async () => {
       renderAt('/global/flags');
       await flagsTable();
