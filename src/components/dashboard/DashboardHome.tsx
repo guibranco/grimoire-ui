@@ -1,7 +1,7 @@
 import React, { useContext, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { AlertOctagon, ArrowRight, Lock, Plus, RefreshCw, Search, Settings } from 'lucide-react';
+import { AlertOctagon, ArrowRight, Flag, Lock, Plus, RefreshCw, Search, Settings } from 'lucide-react';
 import { api } from '@/lib/api';
 import { appPath, globalCreatePath } from '@/lib/routes';
 import {
@@ -109,6 +109,13 @@ const Header: React.FC<{
       >
         <Lock className="w-3 h-3" aria-hidden="true" />
         New global secret
+      </Link>
+      <Link
+        to={globalCreatePath('flags')}
+        className={cn(quickAction, 'border-zinc-800 text-zinc-300 hover:border-flags/60 hover:text-flags')}
+      >
+        <Flag className="w-3 h-3" aria-hidden="true" />
+        New global flag
       </Link>
       <button
         type="button"

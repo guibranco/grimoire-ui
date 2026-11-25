@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AlertOctagon, Flag, Loader2, Plus, Search } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
@@ -28,14 +28,22 @@ interface PendingToggle {
 }
 
 /** Flags list: search, tag filter, a switch per environment and the selected environment's targeting. */
-const FlagList: React.FC<{ scope: FlagScopeRef; envs: Environment[]; envSlug: string }> = ({ scope, envs, envSlug }) => {
+const FlagList: React.FC<{ scope: FlagScopeRef; envs: Environment[]; envSlug: string; startCreating?: boolean }> = ({
+  scope,
+  envs,
+  envSlug,
+  startCreating = false,
+}) => {
   const navigate = useNavigate();
   const { data, isPending, error } = useFlags(scope);
   const toggle = useToggleFlag(scope);
   const [query, setQuery] = useState('');
   const [tag, setTag] = useState('');
   const [targetingEnv, setTargetingEnv] = useState(envSlug);
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState(startCreating);
+  useEffect(() => {
+    if (startCreating) setCreating(true);
+  }, [startCreating]);
   const [confirming, setConfirming] = useState<PendingToggle | null>(null);
 
   const flags = data ?? [];
@@ -238,9 +246,14 @@ const FlagList: React.FC<{ scope: FlagScopeRef; envs: Environment[]; envSlug: st
 
 /**
  * Route content for `/apps/:app/:env/flags` (guibranco/grimoire-ui#453) and `/global/flags`: the flag list, or a
- * flag's detail with `?flag=key` (`&view=history` for its history).
+ * flag's detail with `?flag=key` (`&view=history` for its history). `startCreating` opens the create form.
  */
-export const FeatureFlagsTab: React.FC<{ scope: FlagScopeRef; envs: Environment[]; envSlug: string | null }> = ({ scope, envs, envSlug }) => {
+export const FeatureFlagsTab: React.FC<{
+  scope: FlagScopeRef;
+  envs: Environment[];
+  envSlug: string | null;
+  startCreating?: boolean;
+}> = ({ scope, envs, envSlug, startCreating = false }) => {
   const [searchParams] = useSearchParams();
   const flagKey = searchParams.get('flag');
   const view = searchParams.get('view') === 'history' ? 'history' : 'targeting';
@@ -251,6 +264,6 @@ export const FeatureFlagsTab: React.FC<{ scope: FlagScopeRef; envs: Environment[
   return flagKey ? (
     <FlagDetail scope={scope} flagKey={flagKey} envs={envs} envSlug={envSlug} view={view} />
   ) : (
-    <FlagList scope={scope} envs={envs} envSlug={envSlug} />
+    <FlagList scope={scope} envs={envs} envSlug={envSlug} startCreating={startCreating} />
   );
 };

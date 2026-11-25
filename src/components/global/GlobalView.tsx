@@ -35,7 +35,7 @@ const GlobalViewContent: React.FC = () => {
 
   // `?new=1` opens the create form once; drop it so a refresh or Back doesn't reopen it.
   useEffect(() => {
-    if (startCreating && activeTab !== 'flags') navigate(globalPath(activeTab, highlightedKey), { replace: true });
+    if (startCreating) navigate(globalPath(activeTab, highlightedKey), { replace: true });
   }, [startCreating, activeTab, highlightedKey, navigate]);
 
   const { data: apps } = useQuery({
@@ -151,7 +151,7 @@ const GlobalViewContent: React.FC = () => {
             />
           </TabsContent>
           <TabsContent value="flags" className="m-0 min-h-full">
-            {activeTab === 'flags' && <GlobalFlagsTab />}
+            {activeTab === 'flags' && <GlobalFlagsTab startCreating={startCreating} />}
           </TabsContent>
           <TabsContent value="secrets" className="m-0 min-h-full">
             <GlobalSecretsTab
