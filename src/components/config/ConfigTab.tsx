@@ -46,7 +46,8 @@ import toast from 'react-hot-toast';
 import { apiErrorMessage } from '@/lib/errors';
 import { ConfigHistoryModal } from '@/components/history/ConfigHistoryModal';
 import { PublishBar } from '@/components/publishing/PublishBar';
-import { isSentinelKey } from '@/lib/publishing';
+import { isSentinelKey, partitionSentinels } from '@/lib/publishing';
+import { SystemKeysDivider } from '@/components/publishing/SystemKeysDivider';
 
 interface ConfigTabProps {
   appSlug: string;
@@ -125,11 +126,13 @@ export const ConfigTab: React.FC<ConfigTabProps> = ({
     String(c.value ?? '').toLowerCase().includes(searchLower) ||
     (c.description || '').toLowerCase().includes(searchLower)
   );
+  // Sentinels get their own section below the user's entries so they never mix with real data.
+  const { regular: regularConfigs, sentinels: sentinelConfigs } = partitionSentinels(filteredConfigs);
 
   const handleExport = () => {
     if (!activeEnvironmentSlug) return;
-    // Export app-level entries only
-    const appEntries = safeConfigs.filter(c => c.source === 'application');
+    // Export app-level entries only; sentinels are managed by Grimoire, not part of the data.
+    const appEntries = safeConfigs.filter(c => c.source === 'application' && !isSentinelKey(c.key));
     const exportData = appEntries.reduce(
       (acc, curr) => ({ ...acc, [curr.key]: exportValue(valueTypeOf(curr), curr.value) }),
       {}
@@ -153,7 +156,10 @@ export const ConfigTab: React.FC<ConfigTabProps> = ({
       const content = await file.text();
       const data = JSON.parse(content);
 
-      const promises = Object.entries(data).map(([key, raw]) =>
+      const entries = Object.entries(data);
+      const importable = entries.filter(([key]) => !isSentinelKey(key));
+      const skipped = entries.length - importable.length;
+      const promises = importable.map(([key, raw]) =>
         api.post(`/applications/${appSlug}/configurations`, {
           environmentSlug: activeEnvironmentSlug,
           key,
@@ -165,7 +171,11 @@ export const ConfigTab: React.FC<ConfigTabProps> = ({
       await Promise.all(promises);
       await queryClient.invalidateQueries({ queryKey: ['effective-configurations', appSlug] });
       await queryClient.invalidateQueries({ queryKey: ['configurations', appSlug] });
-      toast.success(`Imported ${promises.length} configurations`);
+      toast.success(
+        skipped
+          ? `Imported ${promises.length} configurations (skipped ${skipped} system key${skipped === 1 ? '' : 's'})`
+          : `Imported ${promises.length} configurations`
+      );
     } catch (err) {
       toast.error(apiErrorMessage(err, 'Failed to import JSON. Ensure it is a flat key-value object.'));
     }
@@ -204,6 +214,158 @@ export const ConfigTab: React.FC<ConfigTabProps> = ({
     }
   };
 
+
+  const renderRow = (config: EffectiveConfiguration) => {
+    if (!activeEnvironmentSlug) return null;
+    const isGlobal = config.source === 'global';
+    const isSentinel = isSentinelKey(config.key);
+    if (!isGlobal && !isSentinel && editingKey === config.key) {
+      return (
+        <ConfigRow
+          key={`${config.source}:::${config.key}`}
+          appSlug={appSlug}
+          envSlug={activeEnvironmentSlug}
+          initialData={{
+            key: config.key,
+            value: config.value,
+            description: config.description,
+            valueType: valueTypeOf(config),
+          }}
+          onCancel={() => setEditingKey(null)}
+          onSave={() => setEditingKey(null)}
+        />
+      );
+    }
+
+    const isHighlighted = !!highlightedKey && config.key === highlightedKey;
+
+    return (
+      <TableRow
+        key={`${config.source}:::${config.key}`}
+        data-highlighted={isHighlighted || undefined}
+        className={cn(
+          "group border-zinc-900/50 h-12 transition-colors",
+          isGlobal ? "bg-global/[0.03] hover:bg-global/[0.06]" : "hover:bg-zinc-900/20",
+          isHighlighted && "bg-config/10 border-l-2 border-l-config"
+        )}
+      >
+        <TableCell className="pl-6">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span
+              className={cn(
+                "font-mono text-[13px] font-bold tracking-tight",
+                isGlobal || isSentinel ? "text-zinc-400" : "text-config"
+              )}
+            >
+              {config.key}
+            </span>
+            {isGlobal && (
+              <>
+                <Badge
+                  variant="outline"
+                  className="border-global/40 bg-global/10 text-global text-[9px] font-bold uppercase tracking-widest gap-1"
+                >
+                  <Globe className="w-2.5 h-2.5" />
+                  Global
+                </Badge>
+                {config.globalEnvironmentSlug && config.globalEnvironmentSlug !== '*' && (
+                  <Badge
+                    variant="outline"
+                    className="border-zinc-700 bg-zinc-900 text-zinc-400 text-[9px] font-mono"
+                  >
+                    {config.globalEnvironmentSlug}
+                  </Badge>
+                )}
+              </>
+            )}
+            {!isGlobal && config.overridesGlobal && (
+              <Badge
+                variant="outline"
+                title="Application value takes precedence over the inherited global value"
+                className="border-global/30 bg-global/5 text-global text-[9px] font-mono cursor-help"
+              >
+                overrides global
+              </Badge>
+            )}
+          </div>
+        </TableCell>
+        <TableCell className={cn("font-mono text-xs", isGlobal ? "text-zinc-400" : "text-zinc-300")}>
+          <ConfigValueCell type={valueTypeOf(config)} value={config.value} />
+        </TableCell>
+        <TableCell className="text-xs text-zinc-500 hidden lg:table-cell font-sans">
+          {config.description || '—'}
+        </TableCell>
+        <TableCell className="text-right pr-6">
+          {isGlobal ? (
+            <div className="flex justify-end items-center gap-2">
+              {!isSentinel && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingKey(null);
+                  setOverridePrefill({
+                    key: config.key,
+                    value: config.value,
+                    description: config.description || '',
+                    valueType: valueTypeOf(config),
+                  });
+                  setIsAdding(true);
+                }}
+                className="px-2 py-0.5 border border-config/30 text-[10px] font-bold uppercase tracking-widest text-config hover:bg-config/10 transition-colors inline-flex items-center gap-1"
+              >
+                <ArrowUpRight className="w-3 h-3" />
+                Override
+              </button>
+              )}
+              <button
+                type="button"
+                onClick={() => navigate(globalPath('config', config.key))}
+                className="px-2 py-0.5 border border-global/30 text-[10px] font-bold uppercase tracking-widest text-global hover:bg-global/10 transition-colors inline-flex items-center gap-1"
+              >
+                <ExternalLink className="w-3 h-3" />
+                View in Global
+              </button>
+            </div>
+          ) : (
+            <div
+              // Hide-until-hover only on devices that can hover; touch screens always show the actions.
+              className="flex justify-end gap-2 pr-1 transition-opacity [@media(hover:hover)]:opacity-0 group-hover:opacity-100 focus-within:opacity-100"
+            >
+              <button
+                type="button"
+                aria-label={`History of ${config.key}`}
+                title="History"
+                className="text-zinc-500 hover:text-config transition-colors"
+                onClick={() => setHistoryKey(config.key)}
+              >
+                <History className="w-3.5 h-3.5" />
+              </button>
+              {!isSentinel && (
+              <>
+              <button
+                type="button"
+                aria-label={`Edit ${config.key}`}
+                className="text-zinc-500 hover:text-config transition-colors"
+                onClick={() => setEditingKey(config.key)}
+              >
+                <Edit2 className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                aria-label={`Delete ${config.key}`}
+                className="text-zinc-700 hover:text-destructive transition-colors"
+                onClick={() => activeEnvironmentSlug && setDeletingConfig({ config, envSlug: activeEnvironmentSlug })}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+              </>
+              )}
+            </div>
+          )}
+        </TableCell>
+      </TableRow>
+    );
+  };
 
   let placeholder: React.ReactNode = null;
   if (!activeEnvironmentSlug) {
@@ -363,7 +525,7 @@ export const ConfigTab: React.FC<ConfigTabProps> = ({
                     }}
                   />
                 )}
-                {filteredConfigs.length === 0 && !isAdding ? (
+                {regularConfigs.length === 0 && !isAdding ? (
                   <TableRow className="border-border hover:bg-transparent">
                     <TableCell colSpan={4} className="p-12 text-center text-muted-foreground">
                       <FileJson className="w-8 h-8 mx-auto mb-2 opacity-20" />
@@ -371,165 +533,13 @@ export const ConfigTab: React.FC<ConfigTabProps> = ({
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredConfigs.map((config) => {
-                    const isGlobal = config.source === 'global';
-                    const isSentinel = isSentinelKey(config.key);
-                    if (!isGlobal && !isSentinel && editingKey === config.key) {
-                      return (
-                        <ConfigRow
-                          key={`${config.source}:::${config.key}`}
-                          appSlug={appSlug}
-                          envSlug={activeEnvironmentSlug}
-                          initialData={{
-                            key: config.key,
-                            value: config.value,
-                            description: config.description,
-                            valueType: valueTypeOf(config),
-                          }}
-                          onCancel={() => setEditingKey(null)}
-                          onSave={() => setEditingKey(null)}
-                        />
-                      );
-                    }
-
-                    const isHighlighted = !!highlightedKey && config.key === highlightedKey;
-
-                    return (
-                      <TableRow
-                        key={`${config.source}:::${config.key}`}
-                        data-highlighted={isHighlighted || undefined}
-                        className={cn(
-                          "group border-zinc-900/50 h-12 transition-colors",
-                          isGlobal ? "bg-global/[0.03] hover:bg-global/[0.06]" : "hover:bg-zinc-900/20",
-                          isHighlighted && "bg-config/10 border-l-2 border-l-config"
-                        )}
-                      >
-                        <TableCell className="pl-6">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span
-                              className={cn(
-                                "font-mono text-[13px] font-bold tracking-tight",
-                                isGlobal ? "text-zinc-400" : "text-config"
-                              )}
-                            >
-                              {config.key}
-                            </span>
-                            {isGlobal && (
-                              <>
-                                <Badge
-                                  variant="outline"
-                                  className="border-global/40 bg-global/10 text-global text-[9px] font-bold uppercase tracking-widest gap-1"
-                                >
-                                  <Globe className="w-2.5 h-2.5" />
-                                  Global
-                                </Badge>
-                                {config.globalEnvironmentSlug && config.globalEnvironmentSlug !== '*' && (
-                                  <Badge
-                                    variant="outline"
-                                    className="border-zinc-700 bg-zinc-900 text-zinc-400 text-[9px] font-mono"
-                                  >
-                                    {config.globalEnvironmentSlug}
-                                  </Badge>
-                                )}
-                              </>
-                            )}
-                            {isSentinel && (
-                              <Badge
-                                variant="outline"
-                                title="Managed by Grimoire: changes when configuration is published, so clients know to reload"
-                                className="border-zinc-700 bg-zinc-900 text-zinc-400 text-[9px] font-bold uppercase tracking-widest cursor-help"
-                              >
-                                System
-                              </Badge>
-                            )}
-                            {!isGlobal && config.overridesGlobal && (
-                              <Badge
-                                variant="outline"
-                                title="Application value takes precedence over the inherited global value"
-                                className="border-global/30 bg-global/5 text-global text-[9px] font-mono cursor-help"
-                              >
-                                overrides global
-                              </Badge>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className={cn("font-mono text-xs", isGlobal ? "text-zinc-400" : "text-zinc-300")}>
-                          <ConfigValueCell type={valueTypeOf(config)} value={config.value} />
-                        </TableCell>
-                        <TableCell className="text-xs text-zinc-500 hidden lg:table-cell font-sans">
-                          {config.description || '—'}
-                        </TableCell>
-                        <TableCell className="text-right pr-6">
-                          {isGlobal ? (
-                            <div className="flex justify-end items-center gap-2">
-                              {!isSentinel && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setEditingKey(null);
-                                  setOverridePrefill({
-                                    key: config.key,
-                                    value: config.value,
-                                    description: config.description || '',
-                                    valueType: valueTypeOf(config),
-                                  });
-                                  setIsAdding(true);
-                                }}
-                                className="px-2 py-0.5 border border-config/30 text-[10px] font-bold uppercase tracking-widest text-config hover:bg-config/10 transition-colors inline-flex items-center gap-1"
-                              >
-                                <ArrowUpRight className="w-3 h-3" />
-                                Override
-                              </button>
-                              )}
-                              <button
-                                type="button"
-                                onClick={() => navigate(globalPath('config', config.key))}
-                                className="px-2 py-0.5 border border-global/30 text-[10px] font-bold uppercase tracking-widest text-global hover:bg-global/10 transition-colors inline-flex items-center gap-1"
-                              >
-                                <ExternalLink className="w-3 h-3" />
-                                View in Global
-                              </button>
-                            </div>
-                          ) : (
-                            <div
-                              // Hide-until-hover only on devices that can hover; touch screens always show the actions.
-                              className="flex justify-end gap-2 pr-1 transition-opacity [@media(hover:hover)]:opacity-0 group-hover:opacity-100 focus-within:opacity-100"
-                            >
-                              <button
-                                type="button"
-                                aria-label={`History of ${config.key}`}
-                                title="History"
-                                className="text-zinc-500 hover:text-config transition-colors"
-                                onClick={() => setHistoryKey(config.key)}
-                              >
-                                <History className="w-3.5 h-3.5" />
-                              </button>
-                              {!isSentinel && (
-                              <>
-                              <button
-                                type="button"
-                                aria-label={`Edit ${config.key}`}
-                                className="text-zinc-500 hover:text-config transition-colors"
-                                onClick={() => setEditingKey(config.key)}
-                              >
-                                <Edit2 className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                aria-label={`Delete ${config.key}`}
-                                className="text-zinc-700 hover:text-destructive transition-colors"
-                                onClick={() => activeEnvironmentSlug && setDeletingConfig({ config, envSlug: activeEnvironmentSlug })}
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                              </>
-                              )}
-                            </div>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
+                  regularConfigs.map(renderRow)
+                )}
+                {sentinelConfigs.length > 0 && (
+                  <>
+                    <SystemKeysDivider colSpan={4} />
+                    {sentinelConfigs.map(renderRow)}
+                  </>
                 )}
               </TableBody>
             </Table>

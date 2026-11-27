@@ -12,6 +12,17 @@ export const GLOBAL_SENTINEL_KEY = 'Global:Sentinel';
 /** Sentinels are managed by Grimoire: shown read-only, never edited inline. */
 export const isSentinelKey = (key: string) => key === SENTINEL_KEY || key === GLOBAL_SENTINEL_KEY;
 
+/**
+ * Splits entries into the user's own configuration and the sentinel keys, so the UI can list
+ * sentinels in their own section and keep them out of exports and imports. Order is preserved.
+ */
+export function partitionSentinels<T extends { key: string }>(items: T[]): { regular: T[]; sentinels: T[] } {
+  const regular: T[] = [];
+  const sentinels: T[] = [];
+  items.forEach((item) => (isSentinelKey(item.key) ? sentinels : regular).push(item));
+  return { regular, sentinels };
+}
+
 /** An application environment, or the global layer. */
 export type PublishingScope = { appSlug: string; envSlug: string } | { global: true };
 

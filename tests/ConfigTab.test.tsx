@@ -180,13 +180,40 @@ describe('ConfigTab', () => {
     renderTab();
 
     await waitFor(() => expect(screen.getByText('Sentinel')).toBeDefined());
-    expect(screen.getAllByText('System')).toHaveLength(2);
+    // Both sentinels sit in their own section, after the user's entries.
+    const divider = screen.getByTestId('system-keys-divider');
+    expect(divider.textContent).toMatch(/System keys/);
+    const rows = screen.getAllByRole('row');
+    const at = (text: string) => rows.findIndex((r) => r.textContent?.includes(text));
+    const dividerAt = rows.indexOf(divider as HTMLTableRowElement);
+    expect(at('Mode')).toBeLessThan(dividerAt);
+    expect(rows.findIndex((r, i) => i > dividerAt && r.textContent?.startsWith('Sentinel'))).toBeGreaterThan(dividerAt);
+    expect(rows.findIndex((r, i) => i > dividerAt && r.textContent?.startsWith('Global:Sentinel'))).toBeGreaterThan(dividerAt);
     expect(screen.queryByRole('button', { name: 'Edit Sentinel' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Delete Sentinel' })).toBeNull();
     expect(screen.getByRole('button', { name: 'History of Sentinel' })).toBeDefined();
     expect(screen.getByRole('button', { name: 'Edit Mode' })).toBeDefined();
     // A global sentinel can't be overridden either.
     expect(screen.queryAllByRole('button', { name: /Override/ })).toHaveLength(0);
+  });
+
+  it('shows no system section when there are no sentinels', async () => {
+    mockApp([{ key: 'Mode', value: 'fast', source: 'application', overridesGlobal: false }]);
+
+    renderTab();
+
+    await waitFor(() => expect(screen.getByText('Mode')).toBeDefined());
+    expect(screen.queryByTestId('system-keys-divider')).toBeNull();
+  });
+
+  it('shows the empty state for user entries even when only sentinels exist', async () => {
+    mockApp([{ key: 'Sentinel', value: '1', source: 'application', overridesGlobal: false }]);
+
+    renderTab();
+
+    await waitFor(() => expect(screen.getByText('Sentinel')).toBeDefined());
+    expect(screen.getByText('Empty Environment Configuration')).toBeDefined();
+    expect(screen.getByTestId('system-keys-divider')).toBeDefined();
   });
 });
 

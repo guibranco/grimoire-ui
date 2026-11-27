@@ -4,7 +4,7 @@ import { renderAt } from './helpers';
 import { api } from '../src/lib/api';
 import { resetMockDatabase } from '../src/lib/mockApi';
 import { useStore } from '../src/store/useStore';
-import { asPublishingStatus, describePublishing, isSentinelKey, publishUrl, publishingUrl, timeAgo } from '../src/lib/publishing';
+import { asPublishingStatus, describePublishing, isSentinelKey, partitionSentinels, publishUrl, publishingUrl, timeAgo } from '../src/lib/publishing';
 import type { PublishingStatus } from '../src/types/api';
 
 vi.mock('../src/lib/api', async (importOriginal) => {
@@ -17,6 +17,14 @@ const LIVE = '/applications/production-gateway/environments/staging/publishing';
 const bar = () => screen.findByTestId('publish-bar');
 
 describe('publishing helpers', () => {
+  it('splits sentinels from regular entries, keeping order', () => {
+    const items = [{ key: 'A' }, { key: 'Sentinel' }, { key: 'B' }, { key: 'Global:Sentinel' }];
+    expect(partitionSentinels(items)).toEqual({
+      regular: [{ key: 'A' }, { key: 'B' }],
+      sentinels: [{ key: 'Sentinel' }, { key: 'Global:Sentinel' }],
+    });
+  });
+
   const status = (overrides: Partial<PublishingStatus> = {}): PublishingStatus => ({
     autoPublish: true,
     sentinelKey: 'Sentinel',
