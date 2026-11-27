@@ -33,7 +33,8 @@ import toast from 'react-hot-toast';
 import { apiErrorMessage } from '@/lib/errors';
 import { ConfigHistoryModal } from '@/components/history/ConfigHistoryModal';
 import { PublishBar } from '@/components/publishing/PublishBar';
-import { isSentinelKey } from '@/lib/publishing';
+import { isSentinelKey, partitionSentinels } from '@/lib/publishing';
+import { SystemKeysDivider } from '@/components/publishing/SystemKeysDivider';
 
 interface GlobalConfigTabProps {
   highlightedKey?: string | null;
@@ -133,6 +134,8 @@ export const GlobalConfigTab: React.FC<GlobalConfigTabProps> = ({
     String(c.value ?? '').toLowerCase().includes(searchLower) ||
     (c.description || '').toLowerCase().includes(searchLower)
   );
+  // Sentinels get their own section below the user's entries so they never mix with real data.
+  const { regular: regularConfigs, sentinels: sentinelConfigs } = partitionSentinels(filteredConfigs);
 
   const formatTimestamp = (ts?: string | null) => {
     if (!ts) return '—';
@@ -145,7 +148,8 @@ export const GlobalConfigTab: React.FC<GlobalConfigTabProps> = ({
       const res = await api.get<GlobalConfiguration[]>('/global/configurations');
       const all = Array.isArray(res.data) ? res.data : safeConfigs;
       const exportData: Record<string, Record<string, unknown>> = {};
-      all.forEach((item) => {
+      // Sentinels are managed by Grimoire, not part of the data.
+      all.filter((item) => !isSentinelKey(item.key)).forEach((item) => {
         const envKey = item.environmentSlug || '*';
         if (!exportData[envKey]) {
           exportData[envKey] = {};
@@ -178,9 +182,14 @@ export const GlobalConfigTab: React.FC<GlobalConfigTabProps> = ({
       }
 
       const requests: Promise<any>[] = [];
+      let skipped = 0;
       Object.entries(data).forEach(([envSlug, entries]) => {
         if (!entries || typeof entries !== 'object' || Array.isArray(entries)) return;
         Object.entries(entries).forEach(([key, raw]) => {
+          if (isSentinelKey(key)) {
+            skipped++;
+            return;
+          }
           requests.push(
             api.post('/global/configurations', {
               environmentSlug: envSlug,
@@ -195,7 +204,11 @@ export const GlobalConfigTab: React.FC<GlobalConfigTabProps> = ({
       await Promise.all(requests);
       await queryClient.invalidateQueries({ queryKey: ['global-configurations'] });
       await queryClient.invalidateQueries({ queryKey: ['effective-configurations'] });
-      toast.success(`Imported ${requests.length} global configurations`);
+      toast.success(
+        skipped
+          ? `Imported ${requests.length} global configurations (skipped ${skipped} system key${skipped === 1 ? '' : 's'})`
+          : `Imported ${requests.length} global configurations`
+      );
     } catch (err) {
       toast.error(apiErrorMessage(err, 'Failed to import JSON. Expected format: { "<envSlug>": { "key": "value" } }.'));
     }
@@ -217,6 +230,90 @@ export const GlobalConfigTab: React.FC<GlobalConfigTabProps> = ({
     } catch (err) {
       toast.error(apiErrorMessage(err, 'Failed to delete global configuration'));
     }
+  };
+
+  const renderRow = (config: GlobalConfiguration) => {
+    const isEditing =
+      editingItem?.environmentSlug === config.environmentSlug &&
+      editingItem?.key === config.key;
+    const isHighlighted = !!highlightedKey && config.key === highlightedKey;
+    const isSentinel = isSentinelKey(config.key);
+
+    if (isEditing && !isSentinel) {
+      return (
+        <GlobalConfigRow
+          key={`${config.environmentSlug}:::${config.key}`}
+          defaultEnvSlug={config.environmentSlug}
+          envOptions={envOptions}
+          initialData={config}
+          onCancel={() => setEditingItem(null)}
+          onSave={() => setEditingItem(null)}
+        />
+      );
+    }
+
+    return (
+      <TableRow
+        key={`${config.environmentSlug}:::${config.key}`}
+        data-highlighted={isHighlighted || undefined}
+        className={cn(
+          "group border-zinc-900/50 hover:bg-zinc-900/20 h-12 transition-colors",
+          isHighlighted && "bg-global/10 border-l-2 border-l-global"
+        )}
+      >
+        <TableCell className="pl-6">
+          <EnvSlugBadge slug={config.environmentSlug} />
+        </TableCell>
+        <TableCell
+          className={cn(
+            "font-mono text-[13px] font-bold tracking-tight",
+            isSentinel ? "text-zinc-400" : "text-global"
+          )}
+        >
+          {config.key}
+        </TableCell>
+        <TableCell className="font-mono text-xs text-zinc-300">
+          <ConfigValueCell type={valueTypeOf(config)} value={config.value} />
+        </TableCell>
+        <TableCell className="text-xs text-zinc-500 hidden lg:table-cell font-sans">{config.description || '—'}</TableCell>
+        <TableCell className="text-[9px] font-mono text-zinc-600 hidden xl:table-cell">
+          {formatTimestamp(config.updatedAt || config.createdAt)}
+        </TableCell>
+        <TableCell className="text-right pr-6">
+          <div className="flex justify-end gap-2 pr-1 opacity-80 group-hover:opacity-100 transition-opacity">
+            <button
+              type="button"
+              aria-label={`History of ${config.key}`}
+              title="History"
+              className="text-zinc-500 hover:text-global transition-colors"
+              onClick={() => setHistoryItem({ environmentSlug: config.environmentSlug, key: config.key })}
+            >
+              <History className="w-3.5 h-3.5" />
+            </button>
+            {!isSentinel && (
+            <>
+            <button
+              type="button"
+              aria-label={`Edit ${config.key}`}
+              className="text-zinc-500 hover:text-global transition-colors"
+              onClick={() => setEditingItem({ environmentSlug: config.environmentSlug, key: config.key })}
+            >
+              <Edit2 className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              aria-label={`Delete ${config.key}`}
+              className="text-zinc-700 hover:text-destructive transition-colors"
+              onClick={() => setDeletingItem(config)}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+            </>
+            )}
+          </div>
+        </TableCell>
+      </TableRow>
+    );
   };
 
   return (
@@ -299,7 +396,7 @@ export const GlobalConfigTab: React.FC<GlobalConfigTabProps> = ({
                   onSave={() => setIsAdding(false)}
                 />
               )}
-              {filteredConfigs.length === 0 && !isAdding ? (
+              {regularConfigs.length === 0 && !isAdding ? (
                 <TableRow className="border-border hover:bg-transparent">
                   <TableCell colSpan={6} className="p-12 text-center text-muted-foreground">
                     <FileJson className="w-8 h-8 mx-auto mb-2 opacity-20" />
@@ -307,95 +404,13 @@ export const GlobalConfigTab: React.FC<GlobalConfigTabProps> = ({
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredConfigs.map((config) => {
-                  const isEditing =
-                    editingItem?.environmentSlug === config.environmentSlug &&
-                    editingItem?.key === config.key;
-                  const isHighlighted = !!highlightedKey && config.key === highlightedKey;
-                  const isSentinel = isSentinelKey(config.key);
-
-                  if (isEditing && !isSentinel) {
-                    return (
-                      <GlobalConfigRow
-                        key={`${config.environmentSlug}:::${config.key}`}
-                        defaultEnvSlug={config.environmentSlug}
-                        envOptions={envOptions}
-                        initialData={config}
-                        onCancel={() => setEditingItem(null)}
-                        onSave={() => setEditingItem(null)}
-                      />
-                    );
-                  }
-
-                  return (
-                    <TableRow
-                      key={`${config.environmentSlug}:::${config.key}`}
-                      data-highlighted={isHighlighted || undefined}
-                      className={cn(
-                        "group border-zinc-900/50 hover:bg-zinc-900/20 h-12 transition-colors",
-                        isHighlighted && "bg-global/10 border-l-2 border-l-global"
-                      )}
-                    >
-                      <TableCell className="pl-6">
-                        <EnvSlugBadge slug={config.environmentSlug} />
-                      </TableCell>
-                      <TableCell className="font-mono text-[13px] font-bold text-global tracking-tight">
-                        <span className="inline-flex items-center gap-2 flex-wrap">
-                          {config.key}
-                          {isSentinel && (
-                            <Badge
-                              variant="outline"
-                              title="Managed by Grimoire: changes when global configuration is published, so clients know to reload"
-                              className="border-zinc-700 bg-zinc-900 text-zinc-400 text-[9px] font-sans font-bold uppercase tracking-widest cursor-help"
-                            >
-                              System
-                            </Badge>
-                          )}
-                        </span>
-                      </TableCell>
-                      <TableCell className="font-mono text-xs text-zinc-300">
-                        <ConfigValueCell type={valueTypeOf(config)} value={config.value} />
-                      </TableCell>
-                      <TableCell className="text-xs text-zinc-500 hidden lg:table-cell font-sans">{config.description || '—'}</TableCell>
-                      <TableCell className="text-[9px] font-mono text-zinc-600 hidden xl:table-cell">
-                        {formatTimestamp(config.updatedAt || config.createdAt)}
-                      </TableCell>
-                      <TableCell className="text-right pr-6">
-                        <div className="flex justify-end gap-2 pr-1 opacity-80 group-hover:opacity-100 transition-opacity">
-                          <button
-                            type="button"
-                            aria-label={`History of ${config.key}`}
-                            title="History"
-                            className="text-zinc-500 hover:text-global transition-colors"
-                            onClick={() => setHistoryItem({ environmentSlug: config.environmentSlug, key: config.key })}
-                          >
-                            <History className="w-3.5 h-3.5" />
-                          </button>
-                          {!isSentinel && (
-                          <>
-                          <button
-                            type="button"
-                            aria-label={`Edit ${config.key}`}
-                            className="text-zinc-500 hover:text-global transition-colors"
-                            onClick={() => setEditingItem({ environmentSlug: config.environmentSlug, key: config.key })}
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            aria-label={`Delete ${config.key}`}
-                            className="text-zinc-700 hover:text-destructive transition-colors"
-                            onClick={() => setDeletingItem(config)}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                          </>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
+                regularConfigs.map(renderRow)
+              )}
+              {sentinelConfigs.length > 0 && (
+                <>
+                  <SystemKeysDivider colSpan={6} global />
+                  {sentinelConfigs.map(renderRow)}
+                </>
               )}
             </TableBody>
           </Table>

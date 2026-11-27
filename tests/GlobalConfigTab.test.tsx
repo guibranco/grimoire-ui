@@ -155,6 +155,52 @@ describe('GlobalConfigTab', () => {
     );
   });
 
+  it('lists Global:Sentinel in its own system section after the user entries', async () => {
+    const mockGet = api.get as ReturnType<typeof vi.fn>;
+    mockGet.mockImplementation((url: string) =>
+      Promise.resolve({
+        data: url.startsWith('/global/configurations')
+          ? [
+              { environmentSlug: '*', key: 'Global:Sentinel', value: '1795540000000' },
+              { environmentSlug: '*', key: 'Region', value: 'eu' },
+            ]
+          : [],
+      })
+    );
+    render(
+      <QueryClientProvider client={client.current}>
+        <GlobalConfigTab />
+      </QueryClientProvider>
+    );
+    await waitFor(() => expect(screen.getByText('Global:Sentinel')).toBeDefined());
+
+    const rows = screen.getAllByRole('row');
+    const divider = screen.getByTestId('system-keys-divider') as HTMLTableRowElement;
+    const dividerAt = rows.indexOf(divider);
+    expect(rows.findIndex((r) => r.textContent?.includes('Region'))).toBeLessThan(dividerAt);
+    expect(rows.findIndex((r) => r.textContent?.includes('Global:Sentinel') && r !== divider)).toBeGreaterThan(dividerAt);
+    expect(screen.queryByLabelText('Edit Global:Sentinel')).toBeNull();
+    expect(screen.getByLabelText('Edit Region')).toBeDefined();
+  });
+
+  it('skips sentinel keys when importing', async () => {
+    setupDefaultMocks();
+    const mockPost = api.post as ReturnType<typeof vi.fn>;
+    mockPost.mockResolvedValue({ status: 201, data: {} });
+    const { container } = render(
+      <QueryClientProvider client={client.current}>
+        <GlobalConfigTab />
+      </QueryClientProvider>
+    );
+    await waitFor(() => expect(screen.getByText('LogStream:Url')).toBeDefined());
+
+    const file = new File([JSON.stringify({ '*': { Region: 'eu', 'Global:Sentinel': '123' } })], 'globals.json');
+    fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [file] } });
+
+    await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
+    expect(mockPost).toHaveBeenCalledWith('/global/configurations', expect.objectContaining({ key: 'Region' }));
+  });
+
   it('rejects a file that is not an object of environments', async () => {
     setupDefaultMocks();
     const { container } = render(
